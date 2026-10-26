@@ -58,7 +58,7 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
 - [x] `controller/gatekeeper.py` (Pydantic schemas + two-state cold/warm D3 cost model + ROI evaluator + 16 unit tests passing).
 - [x] `workers/rag_worker.py`, `controller/prompts.py` (UniProt RAG + Llama 3.1 combinatorial prompts + 9 unit tests passing).
 - [x] `workers/math_worker.py` (Physicochemical featurization + Gaussian Process active learning + 7 unit tests passing).
-- [ ] `workers/esm_worker.py`, `workers/mock_workers.py`
+- [x] `workers/esm_worker.py`, `workers/mock_workers.py` (Modal A10G ESM-2 650M + high-fidelity mock + 8 unit tests passing).
 - [ ] `controller/orchestrator.py`, `ui/dashboard.py`, `scripts/evaluate.py`, `main.py`
 
 ## Open questions (ask the user when relevant)

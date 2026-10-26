@@ -83,12 +83,13 @@ This roadmap outlines the **5 foundational gaps** identified in early architectu
 ### Phase 4: Cloud Muscle & Multi-Fidelity Execution (G1 & G4)
 *Goal: Serverless Modal GPU execution with container reuse and local zero-cost simulation.*
 
-- [ ] **TASK-4.1: Modal ESM-2 650M Scoring Function** (`workers/esm_worker.py`)
+- [x] **TASK-4.1: Modal ESM-2 650M Scoring Function** (`workers/esm_worker.py`)
   - `@app.function` on Modal with GPU `A10G`.
   - Set `scaledown_window=120` (keeps container warm for 2 minutes across loop iterations).
-  - Batched PyTorch tensor scoring with masked-marginal log-likelihood calculation.
-- [ ] **TASK-4.2: High-Fidelity Mock Worker** (`workers/mock_workers.py`)
-  - Offline lookup against pre-downloaded ProteinGym GFP DMS subset.
+  - Batched PyTorch tensor scoring with masked-marginal log-likelihood calculation and graceful local mock fallback.
+- [x] **TASK-4.2: High-Fidelity Mock Worker** (`workers/mock_workers.py`)
+  - Continuous avGFP fitness landscape based on known deep mutational scanning (DMS) properties.
+  - Non-linear epistatic synergy modeling (e.g. S65T:T203Y bonus).
   - Enables full test runs of the 6-step loop in <5 seconds for $0.00 spend.
 
 ---
@@ -131,6 +132,7 @@ This roadmap outlines the **5 foundational gaps** identified in early architectu
 [x] Phase 1: Gatekeeper & Cloud Economics Model (controller/gatekeeper.py, 16/16 unit tests)
 [x] Phase 2: Biological Priors & Combinatorial Prompts (workers/rag_worker.py, controller/prompts.py, 9/9 unit tests)
 [x] Phase 3: Quant Engine with Physicochemical GP (workers/math_worker.py, 7/7 unit tests)
+[x] Phase 4: Cloud Muscle & Multi-Fidelity Execution (workers/esm_worker.py, workers/mock_workers.py, 8/8 unit tests)
 ----------------------------------------------------------------------
-[ ] NEXT UP: Phase 4 — workers/esm_worker.py (Modal ESM-2 650M) & workers/mock_workers.py (offline zero-cost test worker)
+[ ] NEXT UP: Phase 5 — controller/orchestrator.py (unidirectional 6-step loop) & ui/dashboard.py (Gradio async UI)
 ```
