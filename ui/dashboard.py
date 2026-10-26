@@ -1,23 +1,24 @@
 """
-ui/dashboard.py — DOMAIN: Frontend.
+ui/dashboard.py — Real-Time Telemetry & Economics Dashboard.
 
 Purpose:
-    Real-time Gradio dashboard for VeritasBio.
+    High-end Gradio frontend for VeritasBio.
     Provides non-blocking telemetry monitoring, budget controls, live audit trails,
-    and protein fitness progression tracking.
+    empirical benchmark Pareto visualization, and protein fitness progression tracking.
 
 Constraints (ARCHITECTURE.md §7.2, §7.3; INNOVATION_ROADMAP Phase 5):
     1. UI Asynchrony: Uses generator `yield` streaming. Never blocks the main thread
        waiting on Modal or model forward passes.
     2. Read-Only Ledger View: Displays immutable data from the SQLite database;
        never bypasses `authorize_spend()`.
-    3. Visual Excellence: Sleek dark theme with glowing metric cards, live status pulses,
-       and real-time audit tables.
+    3. Rich Aesthetics: Glassmorphism, tailored HSL color tokens, dark mode with neon
+       accents, and interactive Pareto curve visualization.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
@@ -27,6 +28,8 @@ from controller.orchestrator import Orchestrator, OrchestratorConfig, Orchestrat
 from ledger import database as ledger_db
 
 logger = logging.getLogger(__name__)
+
+BENCHMARK_PLOT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "benchmark_results.png"
 
 
 def format_jobs_table(jobs: List[Dict[str, Any]]) -> List[List[Any]]:
@@ -47,10 +50,10 @@ def format_evidence_table(evidence: List[Dict[str, Any]]) -> List[List[Any]]:
     """Formats top evidence for the Gradio Dataframe."""
     sorted_ev = sorted(evidence, key=lambda e: float(e["computed_score"]), reverse=True)
     rows = []
-    for rank, ev in enumerate(sorted_ev[:25], 1):
+    for rank, ev in enumerate(sorted_ev[:30], 1):
         seq = ev.get("variant_sequence", "")
-        # Truncate sequence display if full string
-        display_seq = f"{seq[:16]}...{seq[-8:]}" if len(seq) > 28 else seq
+        # Truncate sequence display if full string for readability
+        display_seq = f"{seq[:14]}...{seq[-8:]}" if len(seq) > 26 else seq
         rows.append([
             rank,
             display_seq,
@@ -65,121 +68,295 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
     """Builds and returns the complete Gradio Blocks application."""
 
     custom_css = """
-    .gradio-container {
-        background-color: #07090e !important;
-        font-family: 'Inter', sans-serif !important;
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Outfit:wght@600;700;800&display=swap');
+
+    :root {
+        --bg-main: #060910;
+        --bg-panel: rgba(13, 19, 33, 0.82);
+        --bg-card: rgba(20, 29, 48, 0.65);
+        --border-glass: rgba(255, 255, 255, 0.08);
+        --border-hover: rgba(0, 240, 255, 0.3);
+        --neon-cyan: #00f0ff;
+        --neon-violet: #8b5cf6;
+        --neon-emerald: #10b981;
+        --neon-amber: #f59e0b;
+        --neon-rose: #f43f5e;
+        --text-white: #ffffff;
+        --text-dim: #94a3b8;
     }
-    .metric-card {
-        background: rgba(18, 23, 37, 0.75) !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        border-radius: 12px !important;
-        padding: 1.25rem !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+
+    body, .gradio-container {
+        background-color: var(--bg-main) !important;
+        background-image: 
+            radial-gradient(circle at 10% 20%, rgba(0, 240, 255, 0.04) 0%, transparent 40%),
+            radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 40%) !important;
+        font-family: 'Inter', -apple-system, sans-serif !important;
+        color: #f1f5f9 !important;
+    }
+
+    /* Brand Header */
+    .brand-container {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        padding: 0.5rem 0 1rem 0;
+    }
+    .brand-logo-mark {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--neon-cyan), var(--neon-violet));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Outfit', sans-serif;
+        font-weight: 800;
+        font-size: 1.6rem;
+        color: #04070d;
+        box-shadow: 0 0 25px rgba(0, 240, 255, 0.35);
     }
     .brand-title {
         font-family: 'Outfit', sans-serif;
-        font-size: 1.8rem;
-        font-weight: 700;
+        font-size: 2.1rem;
+        font-weight: 800;
         color: #ffffff;
-        letter-spacing: -0.02em;
+        letter-spacing: -0.03em;
+        line-height: 1.1;
     }
-    .brand-sub {
+    .brand-title span {
+        background: linear-gradient(90deg, #00f0ff, #c084fc);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .brand-subtitle {
         color: #94a3b8;
         font-size: 0.95rem;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        margin-top: 0.2rem;
+    }
+
+    /* Glass Panels */
+    .glass-panel {
+        background: var(--bg-panel) !important;
+        backdrop-filter: blur(16px) !important;
+        border: 1px solid var(--border-glass) !important;
+        border-radius: 14px !important;
+        padding: 1.25rem !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37) !important;
+    }
+
+    /* Primary Launch Button */
+    .btn-launch {
+        background: linear-gradient(135deg, #00f0ff, #8b5cf6) !important;
+        color: #04070d !important;
+        font-family: 'Outfit', sans-serif !important;
+        font-weight: 800 !important;
+        font-size: 1.05rem !important;
+        letter-spacing: 0.02em !important;
+        border: none !important;
+        border-radius: 10px !important;
+        padding: 0.85rem !important;
+        box-shadow: 0 4px 20px rgba(0, 240, 255, 0.35) !important;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        cursor: pointer !important;
+    }
+    .btn-launch:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 28px rgba(0, 240, 255, 0.5) !important;
+    }
+
+    /* Terminal Event Stream */
+    .terminal-container {
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: #04070e;
+    }
+    .terminal-header {
+        background: #0c1220;
+        padding: 6px 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .terminal-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .terminal-title {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-left: 8px;
+    }
+
+    /* Form Components */
+    input, select, textarea {
+        background-color: rgba(10, 15, 26, 0.9) !important;
+        border-color: rgba(255, 255, 255, 0.12) !important;
+        color: #f8fafc !important;
+        font-family: 'Inter', sans-serif !important;
     }
     """
 
     with gr.Blocks(title="VeritasBio — Cloud Economics Engine") as demo:
         gr.HTML(f"<style>{custom_css}</style>")
 
-        # Header Section
+        # Top Navigation & Header
         with gr.Row():
             with gr.Column(scale=8):
                 gr.HTML("""
-                <div style="display:flex; align-items:center; gap:1rem; margin-bottom: 0.5rem;">
-                    <div style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg, #00f0ff, #8b5cf6); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:1.3rem; color:#05070c;">V</div>
+                <div class="brand-container">
+                    <div class="brand-logo-mark">V</div>
                     <div>
-                        <div class="brand-title">VeritasBio</div>
-                        <div class="brand-sub">Deterministic Cloud Economics Engine for Computational Biology (v3.1)</div>
+                        <div class="brand-title">Veritas<span>Bio</span></div>
+                        <div class="brand-subtitle">Deterministic Cloud Economics Engine for Computational Biology (v3.1)</div>
                     </div>
                 </div>
                 """)
             with gr.Column(scale=4):
                 status_box = gr.Textbox(
                     label="Engine State",
-                    value="Ready to initialize",
+                    value="● Ready to initialize",
                     interactive=False,
                 )
 
-        # High-Level Metric Tiles
+        # High-Level KPI Stat Cards
         with gr.Row():
             with gr.Column(scale=4):
-                metric_rem_budget = gr.Number(label="Remaining Budget ($)", value=5.00, precision=4)
-            with gr.Column(scale=4):
-                metric_spent = gr.Number(label="Cumulative Spent ($)", value=0.00, precision=4)
-            with gr.Column(scale=4):
-                metric_top_fitness = gr.Number(label="Top Discovered Fitness", value=0.00, precision=4)
-
-        # Main Workspace
-        with gr.Row():
-            # Left Panel: Controls & Telemetry
-            with gr.Column(scale=4):
-                gr.Markdown("### Run Configuration")
-                input_protein = gr.Textbox(label="Target Accession", value="P42212 (avGFP)", interactive=False)
-                input_budget = gr.Slider(label="Budget (USD)", minimum=0.05, maximum=50.0, step=0.05, value=1.00)
-                input_iterations = gr.Slider(label="Max Iterations (Cap)", minimum=1, maximum=20, step=1, value=5)
-                input_batch_size = gr.Slider(label="Micro-Batch Size", minimum=10, maximum=100, step=10, value=50)
-                input_model = gr.Dropdown(
-                    label="Target Foundation Model",
-                    choices=["mock_esm", "esm2_650m", "esm2_150m"],
-                    value="mock_esm",
+                metric_rem_budget = gr.Number(
+                    label="Remaining Capital ($ USD)",
+                    value=5.00,
+                    precision=4,
+                    interactive=False,
                 )
-
-                btn_start = gr.Button("Launch Optimization Loop", variant="primary")
-                btn_refresh = gr.Button("Refresh Ledger Telemetry")
-
-                log_output = gr.Textbox(
-                    label="Real-Time Event Stream",
-                    lines=8,
-                    max_lines=12,
+            with gr.Column(scale=4):
+                metric_spent = gr.Number(
+                    label="Cumulative Cloud Spend ($ USD)",
+                    value=0.00,
+                    precision=4,
+                    interactive=False,
+                )
+            with gr.Column(scale=4):
+                metric_top_fitness = gr.Number(
+                    label="Top Discovered Fitness Score",
+                    value=0.00,
+                    precision=4,
                     interactive=False,
                 )
 
-            # Right Panel: Tables & Telemetry
+        # Main Workspace: Controls vs Tabs
+        with gr.Row():
+            # Left Panel: Run Configuration & Terminal
+            with gr.Column(scale=4):
+                with gr.Group():
+                    gr.Markdown("### Autonomous Optimization Controls")
+                    input_protein = gr.Textbox(
+                        label="Target Protein Accession",
+                        value="P42212 (Aequorea victoria avGFP)",
+                        interactive=False,
+                    )
+                    input_budget = gr.Slider(
+                        label="Compute Budget Allocation ($ USD)",
+                        minimum=0.05,
+                        maximum=50.0,
+                        step=0.05,
+                        value=1.00,
+                    )
+                    input_iterations = gr.Slider(
+                        label="Maximum Active Learning Iterations",
+                        minimum=1,
+                        maximum=20,
+                        step=1,
+                        value=5,
+                    )
+                    input_batch_size = gr.Slider(
+                        label="Micro-Batch Size (Variants per Loop)",
+                        minimum=10,
+                        maximum=100,
+                        step=10,
+                        value=50,
+                    )
+                    input_model = gr.Dropdown(
+                        label="Foundation Inference Model",
+                        choices=["mock_esm", "esm2_650m", "esm2_150m"],
+                        value="mock_esm",
+                    )
+
+                    btn_start = gr.Button("Launch Active Learning Loop", variant="primary", elem_classes=["btn-launch"])
+                    btn_refresh = gr.Button("Sync Ledger State")
+
+                # Terminal Event Stream Box
+                with gr.Group():
+                    gr.HTML("""
+                    <div class="terminal-container">
+                        <div class="terminal-header">
+                            <span class="terminal-dot" style="background:#ef4444;"></span>
+                            <span class="terminal-dot" style="background:#f59e0b;"></span>
+                            <span class="terminal-dot" style="background:#10b981;"></span>
+                            <span class="terminal-title">veritasbio-kernel :: live-event-stream.log</span>
+                        </div>
+                    </div>
+                    """)
+                    log_output = gr.Textbox(
+                        label="Real-Time Event Stream",
+                        lines=10,
+                        max_lines=14,
+                        interactive=False,
+                        elem_classes=["monospace-log"],
+                    )
+
+            # Right Panel: Telemetry, Tabs, and Pareto Plots
             with gr.Column(scale=8):
                 with gr.Tabs():
-                    with gr.TabItem("Top Variants (Evidence)"):
+                    with gr.TabItem("Top Discovered Variants"):
                         table_variants = gr.Dataframe(
                             headers=["Rank", "Variant Sequence", "Fitness Score", "Job ID", "Timestamp"],
                             datatype=["number", "str", "str", "str", "str"],
                             interactive=False,
+                            wrap=True,
                         )
 
-                    with gr.TabItem("Ledger Audit Trail (Jobs)"):
+                    with gr.TabItem("Ledger Audit Trail (Spend & Authorization)"):
                         table_jobs = gr.Dataframe(
                             headers=["Job ID", "Model", "Variant Count", "Estimated Cost", "Status"],
                             datatype=["str", "str", "number", "str", "str"],
+                            interactive=False,
+                            wrap=True,
+                        )
+
+                    with gr.TabItem("Pareto Frontier & Cloud Savings"):
+                        plot_preview = gr.Image(
+                            value=str(BENCHMARK_PLOT_PATH) if BENCHMARK_PLOT_PATH.is_file() else None,
+                            label="Empirical Benchmark & Cloud Valuation (Sarkisyan 2016 Nature avGFP)",
+                            type="filepath",
                             interactive=False,
                         )
 
         # ---------------------------------------------------------------------
         # Event Handlers & Streaming Generator
         # ---------------------------------------------------------------------
-        def on_refresh() -> Tuple[float, float, float, str, List[List[Any]], List[List[Any]]]:
+        def on_refresh() -> Tuple[float, float, float, str, List[List[Any]], List[List[Any]], Optional[str]]:
             rem = ledger_db.get_remaining_budget(db_path=db_path)
             jobs = ledger_db.list_jobs(db_path=db_path)
             evidence = ledger_db.get_evidence(db_path=db_path)
 
             spent = sum(float(j["estimated_cost"]) for j in jobs if j["status"] in ("APPROVED", "COMPLETED", "FAILED"))
             top_fit = max([float(e["computed_score"]) for e in evidence], default=0.0)
+            plot_file = str(BENCHMARK_PLOT_PATH) if BENCHMARK_PLOT_PATH.is_file() else None
 
             return (
-                rem,
-                spent,
-                top_fit,
+                round(rem, 4),
+                round(spent, 4),
+                round(top_fit, 4),
                 f"Ledger synced: {len(jobs)} jobs, {len(evidence)} evidence entries.",
                 format_evidence_table(evidence),
                 format_jobs_table(jobs),
+                plot_file,
             )
 
         def stream_orchestrator(
@@ -187,7 +364,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             iter_cap: int,
             batch_sz: int,
             target_mdl: str,
-        ) -> Iterator[Tuple[float, float, float, str, str, List[List[Any]], List[List[Any]]]]:
+        ) -> Iterator[Tuple[float, float, float, str, str, List[List[Any]], List[List[Any]], Optional[str]]]:
             """Streams live events using Python generator yields."""
             config = OrchestratorConfig(
                 target_accession="P42212",
@@ -201,10 +378,11 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
 
             orchestrator = Orchestrator(config)
             accumulated_logs: List[str] = []
+            plot_file = str(BENCHMARK_PLOT_PATH) if BENCHMARK_PLOT_PATH.is_file() else None
 
             for event in orchestrator.run_stream():
-                accumulated_logs.append(f"[{event.step.upper()}] {event.message}")
-                log_str = "\n".join(accumulated_logs[-12:])
+                accumulated_logs.append(f"[{event.step.upper():12s}] {event.message}")
+                log_str = "\n".join(accumulated_logs[-14:])
 
                 jobs = ledger_db.list_jobs(db_path=db_path)
                 evidence = ledger_db.get_evidence(db_path=db_path)
@@ -214,10 +392,11 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                     round(event.remaining_budget_usd, 4),
                     round(event.cumulative_spent_usd, 4),
                     round(top_fit, 4),
-                    f"Round {event.iteration} — {event.step.capitalize()}",
+                    f"● Round {event.iteration} — {event.step.upper()}",
                     log_str,
                     format_evidence_table(evidence),
                     format_jobs_table(jobs),
+                    plot_file,
                 )
 
         btn_refresh.click(
@@ -229,6 +408,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 status_box,
                 table_variants,
                 table_jobs,
+                plot_preview,
             ],
         )
 
@@ -243,6 +423,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 log_output,
                 table_variants,
                 table_jobs,
+                plot_preview,
             ],
         )
 
