@@ -348,20 +348,47 @@ def select_next_micro_batch(
     # Step 5: Compute Expected Improvement
     ei_scores = compute_expected_improvement(means, stds, f_best=f_best, xi=exploration_xi)
 
-    # Rank by Expected Improvement (descending)
-    top_indices = np.argsort(ei_scores)[::-1][:batch_size]
+    # Rank all candidates by Expected Improvement (descending)
+    sorted_candidate_indices = np.argsort(ei_scores)[::-1]
 
-    selected_variants = [novel_candidates[i] for i in top_indices]
-    selected_eis = [round(float(ei_scores[i]), 6) for i in top_indices]
-    selected_means = [round(float(means[i]), 4) for i in top_indices]
-    selected_stds = [round(float(stds[i]), 4) for i in top_indices]
+    # Enforce Batch Acquisition Diversity:
+    # Caps the maximum representation of any single residue in a single batch to avoid cluster collapse
+    max_per_position = max(2, batch_size // 4)
+    position_counts: Dict[int, int] = {}
+    selected_indices: List[int] = []
+
+    for idx in sorted_candidate_indices:
+        cand = novel_candidates[idx]
+        cand_positions = [m.position for m in cand.mutations]
+        # Check if adding this variant satisfies the positional diversity cap
+        if all(position_counts.get(p, 0) < max_per_position for p in cand_positions):
+            selected_indices.append(idx)
+            for p in cand_positions:
+                position_counts[p] = position_counts.get(p, 0) + 1
+            if len(selected_indices) >= batch_size:
+                break
+
+    # If diversity cap leaves slots unfilled, backfill with remaining highest EI candidates
+    if len(selected_indices) < batch_size:
+        already_picked = set(selected_indices)
+        for idx in sorted_candidate_indices:
+            if idx not in already_picked:
+                selected_indices.append(idx)
+                if len(selected_indices) >= batch_size:
+                    break
+
+    selected_variants = [novel_candidates[i] for i in selected_indices]
+    selected_eis = [round(float(ei_scores[i]), 6) for i in selected_indices]
+    selected_means = [round(float(means[i]), 4) for i in selected_indices]
+    selected_stds = [round(float(stds[i]), 4) for i in selected_indices]
 
     logger.info(
-        "Quant Engine selected %d variants (Max EI: %.4f, Mean predicted: %.4f, f_best: %.4f)",
+        "Quant Engine selected %d variants (Max EI: %.4f, Mean predicted: %.4f, f_best: %.4f, Diversity Spread: %d positions)",
         len(selected_variants),
         selected_eis[0] if selected_eis else 0.0,
         float(np.mean(selected_means)) if selected_means else 0.0,
         f_best,
+        len(position_counts),
     )
 
     return SelectedBatch(

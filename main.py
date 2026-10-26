@@ -21,8 +21,15 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 from controller.orchestrator import Orchestrator, OrchestratorConfig, OrchestratorEvent
 from ledger import database as ledger_db
@@ -82,6 +89,12 @@ def main() -> None:
         default=7860,
         help="Port for Gradio web UI (default: 7860)",
     )
+    parser.add_argument(
+        "--live-llm",
+        action="store_true",
+        default=False,
+        help="Explicitly enable live Meta Model API (default: False, prevents credit burn)",
+    )
 
     args = parser.parse_args()
 
@@ -91,8 +104,8 @@ def main() -> None:
 
     if args.cli:
         logger.info(
-            "Starting Headless Orchestrator (Budget: $%.2f, Max Iterations: %d, Model: %s)...",
-            args.budget, args.iterations, args.model,
+            "Starting Headless Orchestrator (Budget: $%.2f, Max Iterations: %d, Model: %s, Live LLM: %s)...",
+            args.budget, args.iterations, args.model, args.live_llm,
         )
         config = OrchestratorConfig(
             target_accession="P42212",
@@ -101,7 +114,8 @@ def main() -> None:
             batch_size=args.batch_size,
             target_model=args.model,
             db_path=args.db,
-            use_mock_llm=(args.model == "mock_esm"),
+            use_mock_llm=not args.live_llm,
+            enable_live_llm=args.live_llm,
         )
         orchestrator = Orchestrator(config)
 

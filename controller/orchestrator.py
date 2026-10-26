@@ -29,6 +29,12 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from pydantic import BaseModel, Field
 
 from controller.gatekeeper import (
@@ -63,7 +69,8 @@ class OrchestratorConfig(BaseModel):
     batch_size: int = Field(default=50, ge=1, le=500, description="Variants per micro-batch")
     target_model: str = Field(default="esm2_650m", description="esm2_650m, esm2_150m, or mock_esm")
     db_path: Optional[str] = Field(default=None, description="Path to ledger SQLite file")
-    use_mock_llm: bool = Field(default=False, description="Force mock LLM even if API key exists")
+    use_mock_llm: bool = Field(default=True, description="Default True to prevent accidental credit burning")
+    enable_live_llm: bool = Field(default=False, description="Explicit opt-in required to invoke live Meta API")
 
 
 class OrchestratorEvent(BaseModel):
@@ -105,15 +112,22 @@ class Orchestrator:
         self.gatekeeper = Gatekeeper(db_path=self.db_path)
         self.mock_llm = MockLLMWorker()
 
-    def _call_llama_api(self, system_prompt: str, user_prompt: str) -> str:
-        """Invokes Meta Llama API via HTTP POST in strict JSON mode."""
-        api_key = os.getenv("LLAMA_API_KEY")
+    def _call_llama_api(self, system_prompt: str, user_prompt: str, max_retries: int = 3) -> str:
+        """Invokes Meta Model API via HTTP POST in strict JSON mode with exponential backoff."""
+        api_key = os.getenv("LLAMA_API_KEY") or os.getenv("META_API_KEY")
         if not api_key:
             raise RuntimeError("LLAMA_API_KEY environment variable is not set")
 
-        url = "https://api.llama.com/v1/chat/completions"
+        # Automatically route between Meta Model API (api.meta.ai) and Llama API (api.llama.com)
+        if api_key.startswith("LLM_"):
+            url = os.getenv("META_API_URL", "https://api.meta.ai/v1/chat/completions")
+            model = os.getenv("META_MODEL_ID", "muse-spark-1.3")
+        else:
+            url = os.getenv("META_API_URL", "https://api.llama.com/compat/v1/chat/completions")
+            model = os.getenv("META_MODEL_ID", "Llama-3.3-70B-Instruct")
+
         payload = {
-            "model": "llama-3.1-70b-instruct",
+            "model": model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -122,18 +136,30 @@ class Orchestrator:
             "temperature": 0.2,
         }
 
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
-        )
+        last_exc: Optional[Exception] = None
+        for attempt in range(max_retries):
+            try:
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {api_key}",
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=60.0) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    return data["choices"][0]["message"]["content"]
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                last_exc = exc
+                wait_time = 2.0 ** attempt
+                logger.warning(
+                    "Meta Model API request failed (attempt %d/%d: %s). Backing off for %.1fs...",
+                    attempt + 1, max_retries, exc, wait_time,
+                )
+                time.sleep(wait_time)
 
-        with urllib.request.urlopen(req, timeout=30.0) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return data["choices"][0]["message"]["content"]
+        raise RuntimeError(f"Meta Model API failed after {max_retries} attempts: {last_exc}") from last_exc
 
     def _generate_strategy(
         self,
@@ -141,10 +167,15 @@ class Orchestrator:
         round_number: int,
         top_evidence: Optional[List[Dict[str, Any]]],
     ) -> SearchStrategy:
-        """Step 2: Obtains SearchStrategy JSON from Llama 3.1 or fallback Mock."""
-        if not self.config.use_mock_llm and os.getenv("LLAMA_API_KEY"):
+        """Step 2: Obtains SearchStrategy JSON from Meta Model API or fallback Mock."""
+        live_opt_in = self.config.enable_live_llm or (os.getenv("ENABLE_LIVE_LLM", "").lower() in ("true", "1"))
+        api_key = os.getenv("LLAMA_API_KEY") or os.getenv("META_API_KEY")
+
+        # Strict credit protection: Only call live API if explicitly opted in and mock is not forced
+        if live_opt_in and not self.config.use_mock_llm and api_key:
             try:
-                logger.info("Querying Meta Llama 3.1 API for Round %d strategy...", round_number)
+                model_name = "muse-spark-1.3" if api_key.startswith("LLM_") else "Llama 3.1/3.3"
+                logger.info("Querying Meta Model API (%s) for Round %d strategy...", model_name, round_number)
                 sys_prompt = get_strategy_system_prompt()
                 user_prompt = build_strategy_user_prompt(
                     protein_summary=metadata.to_llm_summary(),
@@ -155,11 +186,11 @@ class Orchestrator:
                 return parse_strategy_response(raw_json, sequence_length=metadata.length)
             except Exception as exc:
                 logger.warning(
-                    "Meta Llama API call failed (%s). Falling back to MockLLMWorker for Round %d.",
+                    "Meta Model API call failed (%s). Falling back to MockLLMWorker for Round %d.",
                     exc, round_number,
                 )
 
-        # Fallback / mock mode
+        # Default fallback: Mock worker (zero credit burn)
         return self.mock_llm.generate_strategy(metadata, round_number=round_number, top_evidence=top_evidence)
 
     def run_stream(self) -> Iterator[OrchestratorEvent]:

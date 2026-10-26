@@ -23,6 +23,12 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import gradio as gr
 
 from controller.orchestrator import Orchestrator, OrchestratorConfig, OrchestratorEvent
@@ -331,6 +337,11 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                         choices=["mock_esm", "esm2_650m", "esm2_150m"],
                         value="mock_esm",
                     )
+                    check_live_llm = gr.Checkbox(
+                        label="Enable Live Meta AI Strategic Planner (Calls Meta API)",
+                        value=False,
+                        interactive=True,
+                    )
 
                     btn_start = gr.Button("Launch Active Learning Loop", variant="primary", elem_classes=["btn-launch"])
                     btn_refresh = gr.Button("Sync Ledger State")
@@ -409,6 +420,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             iter_cap: int,
             batch_sz: int,
             target_mdl: str,
+            enable_live_llm_val: bool = False,
         ) -> Iterator[Tuple[float, float, float, str, str, List[List[Any]], List[List[Any]], Optional[str]]]:
             """Streams live events using Python generator yields."""
             config = OrchestratorConfig(
@@ -418,7 +430,8 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 batch_size=batch_sz,
                 target_model=target_mdl,
                 db_path=db_path,
-                use_mock_llm=(target_mdl == "mock_esm"),
+                use_mock_llm=not enable_live_llm_val,
+                enable_live_llm=enable_live_llm_val,
             )
 
             orchestrator = Orchestrator(config)
@@ -459,7 +472,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
 
         btn_start.click(
             fn=stream_orchestrator,
-            inputs=[input_budget, input_iterations, input_batch_size, input_model],
+            inputs=[input_budget, input_iterations, input_batch_size, input_model, check_live_llm],
             outputs=[
                 metric_rem_budget,
                 metric_spent,

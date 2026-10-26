@@ -73,6 +73,7 @@ def sequence_to_mutation_str(wt_seq: str, mut_seq: str) -> str:
     """
     Diffs a candidate sequence against wildtype to return canonical mutation string.
     Example: 'S65T' or 'S65T:T203Y', or 'WT' if identical.
+    Mutations are sorted by residue position to match ProteinGym conventions.
     """
     if wt_seq == mut_seq:
         return "WT"
@@ -83,26 +84,48 @@ def sequence_to_mutation_str(wt_seq: str, mut_seq: str) -> str:
     for i, (wt_char, mut_char) in enumerate(zip(wt_seq, mut_seq)):
         if wt_char != mut_char:
             pos = i + 1
-            mutations.append(f"{wt_char}{pos}{mut_char}")
+            mutations.append((pos, f"{wt_char}{pos}{mut_char}"))
 
-    return ":".join(mutations) if mutations else "WT"
+    if not mutations:
+        return "WT"
+
+    # Sort mutations by residue position
+    mutations.sort(key=lambda item: item[0])
+    return ":".join(m_str for _, m_str in mutations)
 
 
 def load_ground_truth_benchmark(benchmark_path: Optional[str] = None) -> Dict[str, float]:
-    """Loads mutation string -> DMS fitness score dictionary from benchmark JSON."""
+    """
+    Loads mutation string -> DMS fitness score dictionary from benchmark JSON or ProteinGym CSV.
+    Supports both curated JSON benchmarks and authentic full-scale ProteinGym DMS CSV files.
+    """
     path = Path(benchmark_path) if benchmark_path else DEFAULT_BENCHMARK_PATH
     if not path.is_file():
         raise FileNotFoundError(f"Benchmark file not found: {path}")
 
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
     bench_map: Dict[str, float] = {}
-    for item in data.get("variants", []):
-        mut = item.get("mutation")
-        score = item.get("dms_score")
-        if mut is not None and score is not None:
-            bench_map[mut.strip()] = float(score)
+
+    if path.suffix.lower() == ".csv":
+        import csv
+        with open(path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                mut = row.get("mutant") or row.get("mutation")
+                score = row.get("DMS_score") or row.get("dms_score")
+                if mut and score:
+                    try:
+                        bench_map[mut.strip()] = float(score)
+                    except ValueError:
+                        continue
+    else:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        for item in data.get("variants", []):
+            mut = item.get("mutation")
+            score = item.get("dms_score")
+            if mut is not None and score is not None:
+                bench_map[mut.strip()] = float(score)
 
     return bench_map
 

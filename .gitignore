@@ -224,3 +224,8 @@ __marimo__/
 *.db-journal
 *.db-wal
 *.db-shm
+
+# VeritasBio environment secrets
+.env
+.env.*
+!.env.example

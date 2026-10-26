@@ -60,9 +60,11 @@ def score_variants_remote(
     wt_sequence: str,
     variant_sequences: List[str],
     hf_model_id: str = "facebook/esm2_t33_650M_UR50D",
+    batch_size: int = 32,
 ) -> List[float]:
     """
     Remote Modal GPU function: executes batched masked-marginal log-likelihood scoring.
+    Batches sequences into tensor mini-batches for maximum A10G throughput.
 
     For each variant, computes:
         Score = sum_{i in mut_pos} [ log P(mut_token_i | seq) - log P(wt_token_i | seq) ]
@@ -85,37 +87,41 @@ def score_variants_remote(
 
     scores: List[float] = []
 
-    for v_seq in variant_sequences:
-        if v_seq == wt_sequence:
-            scores.append(0.0)
-            continue
+    # Process variants in tensor mini-batches
+    for b_start in range(0, len(variant_sequences), batch_size):
+        b_seqs = variant_sequences[b_start : b_start + batch_size]
 
-        # Identify mutated residue indices
-        mut_indices = [
-            i for i, (wc, vc) in enumerate(zip(wt_sequence, v_seq)) if wc != vc
-        ]
+        b_indices = []
+        b_mut_indices = []
+        for i, v_seq in enumerate(b_seqs):
+            if v_seq == wt_sequence:
+                continue
+            mut_idx = [j for j, (wc, vc) in enumerate(zip(wt_sequence, v_seq)) if wc != vc]
+            if mut_idx:
+                b_indices.append(i)
+                b_mut_indices.append(mut_idx)
 
-        if not mut_indices:
-            scores.append(0.0)
-            continue
+        b_scores = [0.0] * len(b_seqs)
+        if b_indices:
+            eval_seqs = [b_seqs[i] for i in b_indices]
+            b_tokens = tokenizer(eval_seqs, padding=True, return_tensors="pt").to(device)
+            with torch.no_grad():
+                b_logits = model(**b_tokens).logits  # [B, L, Vocab]
+                b_log_probs = torch.log_softmax(b_logits, dim=-1)
 
-        v_tokens = tokenizer(v_seq, return_tensors="pt").to(device)
-        with torch.no_grad():
-            v_logits = model(**v_tokens).logits[0]  # [L, Vocab]
-            v_log_probs = torch.log_softmax(v_logits, dim=-1)
+            for slot_idx, orig_i in enumerate(b_indices):
+                mut_idx = b_mut_indices[slot_idx]
+                delta_logp = 0.0
+                for idx in mut_idx:
+                    token_idx = idx + 1
+                    wt_tok_id = wt_tokens.input_ids[0, token_idx]
+                    mut_tok_id = b_tokens.input_ids[slot_idx, token_idx]
+                    wt_logp = wt_log_probs[token_idx, wt_tok_id].item()
+                    mut_logp = b_log_probs[slot_idx, token_idx, mut_tok_id].item()
+                    delta_logp += (mut_logp - wt_logp)
+                b_scores[orig_i] = round(delta_logp, 4)
 
-        variant_delta_logp = 0.0
-        for idx in mut_indices:
-            # Tokenizer adds special token BOS at index 0, so sequence index i corresponds to token index i+1
-            token_idx = idx + 1
-            wt_tok_id = wt_tokens.input_ids[0, token_idx]
-            mut_tok_id = v_tokens.input_ids[0, token_idx]
-
-            wt_logp = wt_log_probs[token_idx, wt_tok_id].item()
-            mut_logp = v_log_probs[token_idx, mut_tok_id].item()
-            variant_delta_logp += (mut_logp - wt_logp)
-
-        scores.append(round(variant_delta_logp, 4))
+        scores.extend(b_scores)
 
     return scores
 
