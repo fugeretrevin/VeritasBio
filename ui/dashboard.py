@@ -135,8 +135,8 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                     value="mock_esm",
                 )
 
-                btn_start = gr.Button("🚀 Launch Optimization Loop", variant="primary")
-                btn_refresh = gr.Button("🔄 Refresh Ledger Telemetry")
+                btn_start = gr.Button("Launch Optimization Loop", variant="primary")
+                btn_refresh = gr.Button("Refresh Ledger Telemetry")
 
                 log_output = gr.Textbox(
                     label="Real-Time Event Stream",
@@ -148,14 +148,14 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             # Right Panel: Tables & Telemetry
             with gr.Column(scale=8):
                 with gr.Tabs():
-                    with gr.TabItem("🏆 Top Variants (Evidence)"):
+                    with gr.TabItem("Top Variants (Evidence)"):
                         table_variants = gr.Dataframe(
                             headers=["Rank", "Variant Sequence", "Fitness Score", "Job ID", "Timestamp"],
                             datatype=["number", "str", "str", "str", "str"],
                             interactive=False,
                         )
 
-                    with gr.TabItem("🏛️ Ledger Audit Trail (Jobs)"):
+                    with gr.TabItem("Ledger Audit Trail (Jobs)"):
                         table_jobs = gr.Dataframe(
                             headers=["Job ID", "Model", "Variant Count", "Estimated Cost", "Status"],
                             datatype=["str", "str", "number", "str", "str"],
