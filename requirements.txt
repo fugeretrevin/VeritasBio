@@ -1,0 +1,8 @@
+# requirements.txt — Python dependencies for VeritasBio (ARCHITECTURE.md §5).
+# Versions are intentionally unpinned until the toolchain is confirmed.
+modal
+gradio
+pydantic
+torch
+scikit-learn
+requests

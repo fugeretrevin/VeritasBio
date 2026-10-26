@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# VeritasBio local SQLite ledger
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
