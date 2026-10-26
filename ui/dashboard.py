@@ -2,7 +2,7 @@
 ui/dashboard.py — Real-Time Telemetry & Economics Dashboard.
 
 Purpose:
-    High-end Gradio frontend for VeritasBio.
+    Enterprise Gradio frontend for VeritasBio.
     Provides non-blocking telemetry monitoring, budget controls, live audit trails,
     empirical benchmark Pareto visualization, and protein fitness progression tracking.
 
@@ -11,8 +11,9 @@ Constraints (ARCHITECTURE.md §7.2, §7.3; INNOVATION_ROADMAP Phase 5):
        waiting on Modal or model forward passes.
     2. Read-Only Ledger View: Displays immutable data from the SQLite database;
        never bypasses `authorize_spend()`.
-    3. Rich Aesthetics: Glassmorphism, tailored HSL color tokens, dark mode with neon
-       accents, and interactive Pareto curve visualization.
+    3. High-Contrast Enterprise Aesthetics: Clean modern canvas (#f8fafc), crisp white
+       panels (#ffffff), high-contrast slate typography (#0f172a), high-tech dark terminal
+       event stream, and interactive Pareto curve visualization.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ def format_evidence_table(evidence: List[Dict[str, Any]]) -> List[List[Any]]:
     """Formats top evidence for the Gradio Dataframe."""
     sorted_ev = sorted(evidence, key=lambda e: float(e["computed_score"]), reverse=True)
     rows = []
-    for rank, ev in enumerate(sorted_ev[:30], 1):
+    for rank, ev in enumerate(sorted_ev[:35], 1):
         seq = ev.get("variant_sequence", "")
         # Truncate sequence display if full string for readability
         display_seq = f"{seq[:14]}...{seq[-8:]}" if len(seq) > 26 else seq
@@ -68,30 +69,26 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
     """Builds and returns the complete Gradio Blocks application."""
 
     custom_css = """
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Outfit:wght@600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Outfit:wght@600;700;800;900&display=swap');
 
     :root {
-        --bg-main: #060910;
-        --bg-panel: rgba(13, 19, 33, 0.82);
-        --bg-card: rgba(20, 29, 48, 0.65);
-        --border-glass: rgba(255, 255, 255, 0.08);
-        --border-hover: rgba(0, 240, 255, 0.3);
-        --neon-cyan: #00f0ff;
-        --neon-violet: #8b5cf6;
-        --neon-emerald: #10b981;
-        --neon-amber: #f59e0b;
-        --neon-rose: #f43f5e;
-        --text-white: #ffffff;
-        --text-dim: #94a3b8;
+        --canvas-bg: #f8fafc;
+        --card-bg: #ffffff;
+        --border-subtle: #e2e8f0;
+        --border-accent: #cbd5e1;
+        --text-primary: #0f172a;
+        --text-secondary: #334155;
+        --text-muted: #64748b;
+        --brand-blue: #0284c7;
+        --brand-purple: #7c3aed;
+        --brand-emerald: #059669;
+        --brand-amber: #d97706;
     }
 
     body, .gradio-container {
-        background-color: var(--bg-main) !important;
-        background-image: 
-            radial-gradient(circle at 10% 20%, rgba(0, 240, 255, 0.04) 0%, transparent 40%),
-            radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 40%) !important;
+        background-color: var(--canvas-bg) !important;
         font-family: 'Inter', -apple-system, sans-serif !important;
-        color: #f1f5f9 !important;
+        color: var(--text-primary) !important;
     }
 
     /* Brand Header */
@@ -99,87 +96,92 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
         display: flex;
         align-items: center;
         gap: 1.25rem;
-        padding: 0.5rem 0 1rem 0;
+        padding: 0.75rem 0 1.25rem 0;
+        border-bottom: 2px solid #e2e8f0;
+        margin-bottom: 1.5rem;
     }
     .brand-logo-mark {
         width: 48px;
         height: 48px;
         border-radius: 12px;
-        background: linear-gradient(135deg, var(--neon-cyan), var(--neon-violet));
+        background: linear-gradient(135deg, #0284c7, #7c3aed);
         display: flex;
         align-items: center;
         justify-content: center;
         font-family: 'Outfit', sans-serif;
         font-weight: 800;
         font-size: 1.6rem;
-        color: #04070d;
-        box-shadow: 0 0 25px rgba(0, 240, 255, 0.35);
+        color: #ffffff;
+        box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
     }
     .brand-title {
         font-family: 'Outfit', sans-serif;
         font-size: 2.1rem;
         font-weight: 800;
-        color: #ffffff;
+        color: #0f172a !important;
         letter-spacing: -0.03em;
         line-height: 1.1;
     }
     .brand-title span {
-        background: linear-gradient(90deg, #00f0ff, #c084fc);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: #0284c7 !important;
     }
     .brand-subtitle {
-        color: #94a3b8;
+        color: #475569 !important;
         font-size: 0.95rem;
         font-weight: 500;
         letter-spacing: -0.01em;
         margin-top: 0.2rem;
     }
 
-    /* Glass Panels */
-    .glass-panel {
-        background: var(--bg-panel) !important;
-        backdrop-filter: blur(16px) !important;
-        border: 1px solid var(--border-glass) !important;
-        border-radius: 14px !important;
-        padding: 1.25rem !important;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37) !important;
+    /* High-Level Stat Cards */
+    .stat-card-wrap {
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05) !important;
+        padding: 1rem 1.25rem !important;
+        transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+    }
+    .stat-card-wrap:hover {
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08) !important;
+        transform: translateY(-1px) !important;
     }
 
-    /* Primary Launch Button */
+    /* High-Impact Launch Button */
     .btn-launch {
-        background: linear-gradient(135deg, #00f0ff, #8b5cf6) !important;
-        color: #04070d !important;
+        background: linear-gradient(135deg, #0284c7, #6366f1) !important;
+        color: #ffffff !important;
         font-family: 'Outfit', sans-serif !important;
-        font-weight: 800 !important;
+        font-weight: 700 !important;
         font-size: 1.05rem !important;
-        letter-spacing: 0.02em !important;
+        letter-spacing: 0.01em !important;
         border: none !important;
         border-radius: 10px !important;
         padding: 0.85rem !important;
-        box-shadow: 0 4px 20px rgba(0, 240, 255, 0.35) !important;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35) !important;
+        transition: all 0.2s ease !important;
         cursor: pointer !important;
     }
     .btn-launch:hover {
+        box-shadow: 0 6px 20px rgba(2, 132, 199, 0.5) !important;
         transform: translateY(-2px) !important;
-        box-shadow: 0 6px 28px rgba(0, 240, 255, 0.5) !important;
     }
 
-    /* Terminal Event Stream */
+    /* Terminal Console for Events */
     .terminal-container {
         border-radius: 10px;
         overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: #04070e;
+        border: 1px solid #1e293b;
+        background: #090d16;
+        margin-top: 1rem;
     }
     .terminal-header {
-        background: #0c1220;
-        padding: 6px 12px;
+        background: #0f172a;
+        padding: 8px 14px;
         display: flex;
         align-items: center;
         gap: 6px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
     .terminal-dot {
         width: 10px;
@@ -189,24 +191,67 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
     }
     .terminal-title {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 0.75rem;
-        color: #64748b;
+        font-size: 0.78rem;
+        color: #94a3b8;
         margin-left: 8px;
+        font-weight: 600;
     }
 
-    /* Form Components */
-    input, select, textarea {
-        background-color: rgba(10, 15, 26, 0.9) !important;
-        border-color: rgba(255, 255, 255, 0.12) !important;
-        color: #f8fafc !important;
-        font-family: 'Inter', sans-serif !important;
+    /* Event Stream Logbox */
+    .monospace-log textarea {
+        background: #090d16 !important;
+        color: #38bdf8 !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.86rem !important;
+        line-height: 1.55 !important;
+        border: 1px solid #1e293b !important;
+        border-radius: 0 0 10px 10px !important;
+    }
+
+    /* Form and Panel Inputs */
+    label, .label-wrap {
+        color: #1e293b !important;
+        font-weight: 600 !important;
+        font-size: 0.92rem !important;
+    }
+    input, select, .gr-input {
+        background-color: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        color: #0f172a !important;
+        border-radius: 8px !important;
+        font-weight: 500 !important;
+    }
+    input:focus, select:focus {
+        border-color: #0284c7 !important;
+        box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2) !important;
+    }
+
+    /* Tables & Dataframes */
+    table, .table-wrap {
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 8px !important;
+        color: #0f172a !important;
+    }
+    th {
+        background: #f1f5f9 !important;
+        color: #0f172a !important;
+        font-weight: 700 !important;
+        border-bottom: 2px solid #cbd5e1 !important;
+    }
+    td {
+        border-bottom: 1px solid #f1f5f9 !important;
+        color: #1e293b !important;
+    }
+    tr:nth-child(even) td {
+        background: #f8fafc !important;
     }
     """
 
     with gr.Blocks(title="VeritasBio — Cloud Economics Engine") as demo:
         gr.HTML(f"<style>{custom_css}</style>")
 
-        # Top Navigation & Header
+        # Top Navigation Header
         with gr.Row():
             with gr.Column(scale=8):
                 gr.HTML("""
@@ -220,28 +265,28 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 """)
             with gr.Column(scale=4):
                 status_box = gr.Textbox(
-                    label="Engine State",
+                    label="Active Engine Status",
                     value="● Ready to initialize",
                     interactive=False,
                 )
 
-        # High-Level KPI Stat Cards
+        # High-Contrast KPI Stat Cards
         with gr.Row():
-            with gr.Column(scale=4):
+            with gr.Column(scale=4, elem_classes=["stat-card-wrap"]):
                 metric_rem_budget = gr.Number(
                     label="Remaining Capital ($ USD)",
                     value=5.00,
                     precision=4,
                     interactive=False,
                 )
-            with gr.Column(scale=4):
+            with gr.Column(scale=4, elem_classes=["stat-card-wrap"]):
                 metric_spent = gr.Number(
                     label="Cumulative Cloud Spend ($ USD)",
                     value=0.00,
                     precision=4,
                     interactive=False,
                 )
-            with gr.Column(scale=4):
+            with gr.Column(scale=4, elem_classes=["stat-card-wrap"]):
                 metric_top_fitness = gr.Number(
                     label="Top Discovered Fitness Score",
                     value=0.00,
@@ -254,7 +299,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             # Left Panel: Run Configuration & Terminal
             with gr.Column(scale=4):
                 with gr.Group():
-                    gr.Markdown("### Autonomous Optimization Controls")
+                    gr.Markdown("### Autonomous Search Controls")
                     input_protein = gr.Textbox(
                         label="Target Protein Accession",
                         value="P42212 (Aequorea victoria avGFP)",

@@ -142,9 +142,9 @@ def compute_expected_improvement(
 
 def build_gp_model(random_state: int = 42) -> GaussianProcessRegressor:
     """Constructs a Gaussian Process with a composite Matern 5/2 + noise kernel."""
-    kernel = ConstantKernel(1.0, (1e-3, 1e3)) * Matern(
+    kernel = ConstantKernel(1.0, (1e-4, 1e4)) * Matern(
         length_scale=1.0, length_scale_bounds=(1e-2, 1e2), nu=2.5
-    ) + WhiteKernel(noise_level=1e-2, noise_level_bounds=(1e-5, 1e1))
+    ) + WhiteKernel(noise_level=1e-3, noise_level_bounds=(1e-6, 1e2))
     return GaussianProcessRegressor(
         kernel=kernel,
         n_restarts_optimizer=2,
@@ -171,13 +171,13 @@ def generate_candidate_variants(
     diverse_amino_acids: Optional[Sequence[str]] = None,
 ) -> List[Variant]:
     """
-    Generates combinatorial candidate variants across the target clusters.
-    To avoid combinatorial explosion while ensuring diverse physicochemical exploration,
-    samples substitutions across representative amino acid classes.
+    Generates combinatorial candidate variants across and between target clusters.
+    Prioritizes high-impact physicochemical substitutions (T, Y, L, K, A, R)
+    to discover synergistic epistatic multi-point improvements.
     """
-    # Representative subset of amino acids spanning charge, size, and hydrophobicity
+    # Prioritize functionally impactful amino acid substitutions across size, polarity, and charge
     target_aas = list(diverse_amino_acids) if diverse_amino_acids else [
-        "A", "D", "E", "F", "G", "H", "K", "L", "N", "Q", "R", "S", "T", "V", "Y"
+        "T", "Y", "L", "K", "A", "R", "D", "E", "G", "V", "F", "S", "H", "N", "Q"
     ]
 
     all_cluster_positions: Set[int] = set()
@@ -191,30 +191,61 @@ def generate_candidate_variants(
         raise ValueError("No allowed positions available after filtering forbidden positions")
 
     candidates: List[Variant] = []
+    seen_notations: Set[str] = set()
 
-    # 1. Single mutants across allowed cluster positions
+    # 1. Single mutants across all allowed cluster positions
     for pos in allowed_positions:
         wt_aa = wt_sequence[pos - 1]
         for mut_aa in target_aas:
             if mut_aa != wt_aa:
-                candidates.append(Variant(notation=f"{wt_aa}{pos}{mut_aa}"))
+                notation = f"{wt_aa}{pos}{mut_aa}"
+                if notation not in seen_notations:
+                    seen_notations.add(notation)
+                    candidates.append(Variant(notation=notation))
 
-    # 2. Combinatorial double mutants within clusters
+    # 2. Combinatorial double mutants within clusters (intra-cluster)
     for cluster in strategy.target_clusters:
         cluster_allowed = [p for p in cluster.positions if p in allowed_positions]
         if len(cluster_allowed) >= 2 and strategy.max_mutation_depth >= 2:
             for pos1, pos2 in itertools.combinations(cluster_allowed[:4], 2):
                 wt1 = wt_sequence[pos1 - 1]
                 wt2 = wt_sequence[pos2 - 1]
-                for mut1 in target_aas[:5]:
+                for mut1 in target_aas[:6]:
                     if mut1 == wt1:
                         continue
-                    for mut2 in target_aas[:5]:
+                    for mut2 in target_aas[:6]:
                         if mut2 == wt2:
                             continue
-                        candidates.append(Variant(notation=f"{wt1}{pos1}{mut1}:{wt2}{pos2}{mut2}"))
-                        if len(candidates) >= max_candidates:
-                            return candidates
+                        notation = f"{wt1}{pos1}{mut1}:{wt2}{pos2}{mut2}"
+                        if notation not in seen_notations:
+                            seen_notations.add(notation)
+                            candidates.append(Variant(notation=notation))
+                            if len(candidates) >= max_candidates:
+                                return candidates
+
+    # 3. Inter-cluster cross-talk double mutants (e.g. chromophore triad + pocket contact)
+    if len(strategy.target_clusters) >= 2 and strategy.max_mutation_depth >= 2:
+        for c1, c2 in itertools.combinations(strategy.target_clusters, 2):
+            c1_pos = [p for p in c1.positions if p in allowed_positions][:3]
+            c2_pos = [p for p in c2.positions if p in allowed_positions][:3]
+            for pos1 in c1_pos:
+                for pos2 in c2_pos:
+                    if pos1 == pos2:
+                        continue
+                    wt1 = wt_sequence[pos1 - 1]
+                    wt2 = wt_sequence[pos2 - 1]
+                    for mut1 in target_aas[:5]:
+                        if mut1 == wt1:
+                            continue
+                        for mut2 in target_aas[:5]:
+                            if mut2 == wt2:
+                                continue
+                            notation = f"{wt1}{pos1}{mut1}:{wt2}{pos2}{mut2}"
+                            if notation not in seen_notations:
+                                seen_notations.add(notation)
+                                candidates.append(Variant(notation=notation))
+                                if len(candidates) >= max_candidates:
+                                    return candidates
 
     return candidates
 

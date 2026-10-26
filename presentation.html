@@ -122,7 +122,7 @@
       gap: 1.25rem;
     }
 
-    /* Mode Toggle (Partner vs Technical) */
+    /* Mode Toggle (Strategy vs Technical) */
     .toggle-container {
       display: flex;
       background: rgba(255, 255, 255, 0.04);
@@ -293,10 +293,29 @@
       margin-bottom: 0.6rem;
     }
 
-    .pill-cyan { background: var(--accent-cyan-dim); color: var(--accent-cyan); border: 1px solid rgba(0, 240, 255, 0.3); }
-    .pill-green { background: var(--accent-emerald-dim); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
-    .pill-purple { background: var(--accent-violet-dim); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.3); }
-    .pill-amber { background: var(--accent-amber-dim); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .pill-cyan {
+      background: var(--accent-cyan-dim);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+    }
+
+    .pill-green {
+      background: var(--accent-emerald-dim);
+      color: var(--accent-emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .pill-purple {
+      background: var(--accent-violet-dim);
+      color: #c084fc;
+      border: 1px solid rgba(139, 92, 246, 0.3);
+    }
+
+    .pill-amber {
+      background: var(--accent-amber-dim);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
 
     /* Interactive Flow Visualizer */
     .flow-chain {
@@ -522,23 +541,55 @@
       overflow-x: auto;
     }
 
-    .code-comment { color: #64748b; }
-    .code-num { color: #38bdf8; }
-    .code-func { color: #a78bfa; }
-    .code-str { color: #34d399; }
+    .code-comment {
+      color: #64748b;
+    }
+
+    .code-num {
+      color: #38bdf8;
+    }
+
+    .code-func {
+      color: #a78bfa;
+    }
+
+    .code-str {
+      color: #34d399;
+    }
 
     /* Mode switching */
-    .mode-tech { display: none; }
-    body.tech-mode .mode-tech { display: block; }
-    body.tech-mode .mode-nontech { display: none; }
+    .mode-tech {
+      display: none;
+    }
+
+    body.tech-mode .mode-tech {
+      display: block;
+    }
+
+    body.tech-mode .mode-nontech {
+      display: none;
+    }
 
     @media (max-width: 900px) {
-      .grid-2, .grid-3, .grid-4, .calc-box {
+
+      .grid-2,
+      .grid-3,
+      .grid-4,
+      .calc-box {
         grid-template-columns: 1fr;
       }
-      .slide-title { font-size: 2rem; }
-      header { padding: 1rem; }
-      main { padding: 1rem; }
+
+      .slide-title {
+        font-size: 2rem;
+      }
+
+      header {
+        padding: 1rem;
+      }
+
+      main {
+        padding: 1rem;
+      }
     }
   </style>
 </head>
@@ -557,7 +608,7 @@
 
     <div class="header-controls">
       <div class="toggle-container">
-        <button class="toggle-btn active" id="btn-partner" onclick="setMode('partner')">Partner / Strategic</button>
+        <button class="toggle-btn active" id="btn-partner" onclick="setMode('partner')">Strategic</button>
         <button class="toggle-btn" id="btn-tech" onclick="setMode('tech')">Deep Technical</button>
       </div>
     </div>
@@ -578,11 +629,15 @@
 
         <div class="grid-2">
           <div class="card" style="border-color: rgba(239, 68, 68, 0.4);">
-            <span class="pill" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">THE CLOUD COST TRAP</span>
+            <span class="pill"
+              style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);">THE
+              CLOUD COST TRAP</span>
             <h3 class="card-title">Runaway Foundation Model Spend</h3>
             <p class="card-desc">
-              Screening double and triple mutants on a 238-amino-acid protein yields $>1.1 \times 10^7$ candidate variants.
-              Running unconstrained foundation models (ESM-2, AlphaFold 3) costs over <strong>$35,000</strong> per project.
+              Screening double and triple mutants on a 238-amino-acid protein yields $>1.1 \times 10^7$ candidate
+              variants.
+              Running unconstrained foundation models (ESM-2, AlphaFold 3) costs over <strong>$35,000</strong> per
+              project.
               Furthermore, standard cloud instances burn 15–30s on cold-start container boots on every request.
             </p>
           </div>
@@ -591,7 +646,8 @@
             <span class="pill pill-green">THE VERITASBIO SOLUTION</span>
             <h3 class="card-title">Deterministic Active Learning</h3>
             <p class="card-desc">
-              We separate strategy from execution: Meta Llama 3.1 only proposes biophysical boundaries; a physicochemical
+              We separate strategy from execution: Meta Llama 3.1 only proposes biophysical boundaries; a
+              physicochemical
               Gaussian Process selects variants by Expected Improvement per Dollar ($EI/\$$); and a fail-closed SQLite
               ledger guarantees zero budget overruns.
             </p>
@@ -613,7 +669,8 @@
             <div class="flow-num">1</div>
             <div class="flow-content">
               <div class="flow-title">UniProt RAG Knowledge Harvester (workers/rag_worker.py)</div>
-              <div class="flow-text">Pulls primary wild-type sequence (avGFP P42212), chromophore triad residues [65, 66, 67], and beta-can barrel topology with local disk caching.</div>
+              <div class="flow-text">Pulls primary wild-type sequence (avGFP P42212), chromophore triad residues [65,
+                66, 67], and beta-can barrel topology with local disk caching.</div>
             </div>
           </div>
 
@@ -621,7 +678,8 @@
             <div class="flow-num">2</div>
             <div class="flow-content">
               <div class="flow-title">Meta Llama 3.1 Combinatorial Strategy Prior (controller/prompts.py)</div>
-              <div class="flow-text">Strict JSON mode generates multi-site residue clusters (chromophore triad + barrel pocket) and forbidden positions. No conversational text; zero arithmetic.</div>
+              <div class="flow-text">Strict JSON mode generates multi-site residue clusters (chromophore triad + barrel
+                pocket) and forbidden positions. No conversational text; zero arithmetic.</div>
             </div>
           </div>
 
@@ -629,7 +687,9 @@
             <div class="flow-num">3</div>
             <div class="flow-content">
               <div class="flow-title">Quant Engine & Physicochemical GP (workers/math_worker.py)</div>
-              <div class="flow-text">Featurizes mutations across 5 biophysical delta scales (hydrophobicity, mass, charge, polarity, pI) and fits a Matérn 5/2 composite GP to select micro-batches via Expected Improvement (EI).</div>
+              <div class="flow-text">Featurizes mutations across 5 biophysical delta scales (hydrophobicity, mass,
+                charge, polarity, pI) and fits a Matérn 5/2 composite GP to select micro-batches via Expected
+                Improvement (EI).</div>
             </div>
           </div>
 
@@ -637,7 +697,9 @@
             <div class="flow-num">4</div>
             <div class="flow-content">
               <div class="flow-title">Fail-Closed Gatekeeper & Two-State Pricing (controller/gatekeeper.py)</div>
-              <div class="flow-text">Biophysically validates variants against wild-type; calculates warm container rates ($t_{\text{boot}}=0\text{s}$ vs $20\text{s}$); evaluates ROI ($EI/\$$); atomically invokes SQLite ledger.</div>
+              <div class="flow-text">Biophysically validates variants against wild-type; calculates warm container rates
+                ($t_{\text{boot}}=0\text{s}$ vs $20\text{s}$); evaluates ROI ($EI/\$$); atomically invokes SQLite
+                ledger.</div>
             </div>
           </div>
 
@@ -645,7 +707,9 @@
             <div class="flow-num">5</div>
             <div class="flow-content">
               <div class="flow-title">Cloud Muscle on Modal NVIDIA A10G (workers/esm_worker.py)</div>
-              <div class="flow-text">Executes batched ESM-2 650M PyTorch tensor scoring with <code>scaledown_window=120</code> to keep containers warm across loop iterations. Includes zero-cost epistatic mock fallback.</div>
+              <div class="flow-text">Executes batched ESM-2 650M PyTorch tensor scoring with
+                <code>scaledown_window=120</code> to keep containers warm across loop iterations. Includes zero-cost
+                epistatic mock fallback.</div>
             </div>
           </div>
 
@@ -653,7 +717,8 @@
             <div class="flow-num">6</div>
             <div class="flow-content">
               <div class="flow-title">Immutable Evidence Logging & Active Learning Update (ledger/database.py)</div>
-              <div class="flow-text">Atomically records computed fitness scores into SQLite; updates GP posterior; loops autonomously until budget exhaustion or maximum iteration cap.</div>
+              <div class="flow-text">Atomically records computed fitness scores into SQLite; updates GP posterior; loops
+                autonomously until budget exhaustion or maximum iteration cap.</div>
             </div>
           </div>
         </div>
@@ -664,7 +729,8 @@
         <span class="slide-tag">Implementation Status</span>
         <h1 class="slide-title">All 6 Engineering Phases: 100% Complete</h1>
         <p class="slide-subtitle">
-          Over 50 comprehensive unit tests passing across all six functional layers. Strict separation of concerns enforced.
+          Over 50 comprehensive unit tests passing across all six functional layers. Strict separation of concerns
+          enforced.
         </p>
 
         <div class="grid-3">
@@ -672,7 +738,8 @@
             <span class="pill pill-green">LEDGER ENGINE</span>
             <h3 class="card-title">SQLite Micro-USD ACID Ledger</h3>
             <p class="card-desc">
-              Stored as exact <code>INTEGER micro-USD</code> (1 USD = 1,000,000). Immutability triggers prevent deletes or evidence tampering. Monotonic spend tracking.
+              Stored as exact <code>INTEGER micro-USD</code> (1 USD = 1,000,000). Immutability triggers prevent deletes
+              or evidence tampering. Monotonic spend tracking.
             </p>
           </div>
 
@@ -680,7 +747,8 @@
             <span class="pill pill-cyan">GATEKEEPER</span>
             <h3 class="card-title">Fail-Closed Security Gate</h3>
             <p class="card-desc">
-              Pydantic biophysical schema cross-checks mutation notations against WT sequence. Two-state container pricing eliminates cold boots. Reject-first security.
+              Pydantic biophysical schema cross-checks mutation notations against WT sequence. Two-state container
+              pricing eliminates cold boots. Reject-first security.
             </p>
           </div>
 
@@ -688,7 +756,8 @@
             <span class="pill pill-purple">PRIORS & RAG</span>
             <h3 class="card-title">UniProt RAG & Llama 3.1</h3>
             <p class="card-desc">
-              Automated biological prior harvesting with zero network leaks. Strict JSON schema parser extracting multi-residue combinatorial clusters.
+              Automated biological prior harvesting with zero network leaks. Strict JSON schema parser extracting
+              multi-residue combinatorial clusters.
             </p>
           </div>
 
@@ -696,7 +765,8 @@
             <span class="pill pill-cyan">QUANT ENGINE</span>
             <h3 class="card-title">5-Factor Physicochemical GP</h3>
             <p class="card-desc">
-              Standardized Kyte-Doolittle hydrophobicity, mass, charge, polarity, and pI delta featurizer. Vectorized Expected Improvement ($EI$) acquisition function.
+              Standardized Kyte-Doolittle hydrophobicity, mass, charge, polarity, and pI delta featurizer. Vectorized
+              Expected Improvement ($EI$) acquisition function.
             </p>
           </div>
 
@@ -704,7 +774,8 @@
             <span class="pill pill-green">CLOUD MUSCLE</span>
             <h3 class="card-title">Modal A10G ESM-2 + Mock</h3>
             <p class="card-desc">
-              Serverless GPU PyTorch forward pass with 120s warm keep-alive. High-fidelity epistatic DMS continuous simulator for zero-cost testing.
+              Serverless GPU PyTorch forward pass with 120s warm keep-alive. High-fidelity epistatic DMS continuous
+              simulator for zero-cost testing.
             </p>
           </div>
 
@@ -712,7 +783,8 @@
             <span class="pill pill-amber">TELEMETRY & UI</span>
             <h3 class="card-title">Async Gradio Dashboard</h3>
             <p class="card-desc">
-              Generator streaming UI with real-time budget deduction, terminal event stream, ranked candidate tables, and Pareto visualization tab.
+              Generator streaming UI with real-time budget deduction, terminal event stream, ranked candidate tables,
+              and Pareto visualization tab.
             </p>
           </div>
         </div>
@@ -723,7 +795,8 @@
         <span class="slide-tag">Interactive Economics Engine</span>
         <h1 class="slide-title">Two-State Container Pricing Model</h1>
         <p class="slide-subtitle">
-          See how VeritasBio eliminates serverless cold-start overhead ($20.0\text{s}$ vs. $0.0\text{s}$) to achieve up to <strong>21x cheaper</strong> execution per micro-batch.
+          See how VeritasBio eliminates serverless cold-start overhead ($20.0\text{s}$ vs. $0.0\text{s}$) to achieve up
+          to <strong>21x cheaper</strong> execution per micro-batch.
         </p>
 
         <div class="calc-box">
@@ -731,9 +804,11 @@
             <div class="calc-slider-group">
               <div class="calc-label">
                 <span>Variants per Micro-Batch:</span>
-                <span id="calc-variants-val" style="color:var(--accent-cyan); font-family:var(--font-code);">50 variants</span>
+                <span id="calc-variants-val" style="color:var(--accent-cyan); font-family:var(--font-code);">50
+                  variants</span>
               </div>
-              <input type="range" class="calc-slider" id="calc-variants" min="10" max="250" step="10" value="50" oninput="updateCostCalc()">
+              <input type="range" class="calc-slider" id="calc-variants" min="10" max="250" step="10" value="50"
+                oninput="updateCostCalc()">
             </div>
 
             <div class="calc-slider-group">
@@ -747,7 +822,8 @@
               <span>Container Lifecycle State:</span>
             </div>
             <div class="calc-state-toggle">
-              <button class="calc-toggle-btn active" id="btn-cold" onclick="setCalcWarm(false)">Cold Boot (+20.0s)</button>
+              <button class="calc-toggle-btn active" id="btn-cold" onclick="setCalcWarm(false)">Cold Boot
+                (+20.0s)</button>
               <button class="calc-toggle-btn" id="btn-warm" onclick="setCalcWarm(true)">Warm Keep-Alive (0.0s)</button>
             </div>
           </div>
@@ -778,26 +854,36 @@
         </p>
 
         <div style="margin-top: 0.5rem; text-align: center;">
-          <img src="scripts/benchmark_results.png" alt="VeritasBio Optimization Report" style="width: 100%; max-height: 360px; object-fit: contain; border-radius: 12px; border: 1px solid var(--border-subtle); box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
+          <img src="scripts/benchmark_results.png" alt="VeritasBio Optimization Report"
+            style="width: 100%; max-height: 360px; object-fit: contain; border-radius: 12px; border: 1px solid var(--border-subtle); box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
         </div>
 
         <div class="grid-3" style="margin-top: 1.25rem;">
           <div class="card highlight">
             <span class="pill pill-green">ACCURACY</span>
-            <div style="font-family:var(--font-code); font-size:1.5rem; font-weight:800; color:#00f0ff; margin-top:0.3rem;">ρ = +0.9718</div>
-            <p class="card-desc" style="margin-top:0.2rem;">Spearman rank correlation with ground-truth experimental fluorescence (p = 9.72e-13).</p>
+            <div
+              style="font-family:var(--font-code); font-size:1.5rem; font-weight:800; color:#00f0ff; margin-top:0.3rem;">
+              ρ = +0.9718</div>
+            <p class="card-desc" style="margin-top:0.2rem;">Spearman rank correlation with ground-truth experimental
+              fluorescence (p = 9.72e-13).</p>
           </div>
 
           <div class="card purple">
             <span class="pill pill-purple">SAVINGS</span>
-            <div style="font-family:var(--font-code); font-size:1.5rem; font-weight:800; color:#c084fc; margin-top:0.3rem;">98.9% Saved</div>
-            <p class="card-desc" style="margin-top:0.2rem;">$0.0002 spend vs. $0.0184 equivalent brute-force screening cost.</p>
+            <div
+              style="font-family:var(--font-code); font-size:1.5rem; font-weight:800; color:#c084fc; margin-top:0.3rem;">
+              98.9% Saved</div>
+            <p class="card-desc" style="margin-top:0.2rem;">$0.0002 spend vs. $0.0184 equivalent brute-force screening
+              cost.</p>
           </div>
 
           <div class="card emerald">
             <span class="pill pill-cyan">DISCOVERY</span>
-            <div style="font-family:var(--font-code); font-size:1.5rem; font-weight:800; color:#10b981; margin-top:0.3rem;">T203F:E222G</div>
-            <p class="card-desc" style="margin-top:0.2rem;">Located synergistic double mutant with +1.2818 fitness within 2 active learning rounds.</p>
+            <div
+              style="font-family:var(--font-code); font-size:1.5rem; font-weight:800; color:#10b981; margin-top:0.3rem;">
+              T203F:E222G</div>
+            <p class="card-desc" style="margin-top:0.2rem;">Located synergistic double mutant with +1.2818 fitness
+              within 2 active learning rounds.</p>
           </div>
         </div>
       </div>
@@ -807,7 +893,8 @@
         <span class="slide-tag">Strategic Gap Resolution</span>
         <h1 class="slide-title">How We Resolved the 5 Critical Gaps</h1>
         <p class="slide-subtitle">
-          From cold-start serverless waste to biophysical blind spots, here is how VeritasBio tackled each roadblock identified in our roadmap.
+          From cold-start serverless waste to biophysical blind spots, here is how VeritasBio tackled each roadblock
+          identified in our roadmap.
         </p>
 
         <div class="grid-2">
@@ -816,7 +903,9 @@
             <h3 class="card-title">Two-State Container Pricing</h3>
             <p class="card-desc">
               <strong>Problem:</strong> Standard serverless charges 20s spinup per batch.<br>
-              <strong>Solution:</strong> We modeled container state ($t_{\text{boot}}=20.0\text{s} \to 0.0\text{s}$) with Modal's <code>scaledown_window=120</code> keep-alive, cutting cost per batch from $0.0064 to $0.0003 (~21x cheaper).
+              <strong>Solution:</strong> We modeled container state ($t_{\text{boot}}=20.0\text{s} \to 0.0\text{s}$)
+              with Modal's <code>scaledown_window=120</code> keep-alive, cutting cost per batch from $0.0064 to $0.0003
+              (~21x cheaper).
             </p>
           </div>
 
@@ -825,7 +914,8 @@
             <h3 class="card-title">5-Factor Physicochemical Featurization</h3>
             <p class="card-desc">
               <strong>Problem:</strong> Categorical one-hot tokens ignore biophysics.<br>
-              <strong>Solution:</strong> Featurized mutations across 5 standardized physical scales (hydrophobicity, mass, charge, polarity, pI) to guide the GP along true energy landscapes.
+              <strong>Solution:</strong> Featurized mutations across 5 standardized physical scales (hydrophobicity,
+              mass, charge, polarity, pI) to guide the GP along true energy landscapes.
             </p>
           </div>
 
@@ -834,7 +924,8 @@
             <h3 class="card-title">Combinatorial Residue Clusters</h3>
             <p class="card-desc">
               <strong>Problem:</strong> Point-mutation searches miss cooperative mutations.<br>
-              <strong>Solution:</strong> Llama 3.1 identifies 3D spatial clusters; math pairs simultaneous mutations (e.g. S65T:T203Y), unlocking non-linear epistatic synergies.
+              <strong>Solution:</strong> Llama 3.1 identifies 3D spatial clusters; math pairs simultaneous mutations
+              (e.g. S65T:T203Y), unlocking non-linear epistatic synergies.
             </p>
           </div>
 
@@ -843,7 +934,8 @@
             <h3 class="card-title">Zero-Cost Simulation & DMS Proof</h3>
             <p class="card-desc">
               <strong>Problem:</strong> Testing burns real funds; ROI is hard to quantify.<br>
-              <strong>Solution:</strong> Built the continuous Sarkisyan DMS landscape for instant $0.00 testing and proved 98.9% savings against real experimental ground truth.
+              <strong>Solution:</strong> Built the continuous Sarkisyan DMS landscape for instant $0.00 testing and
+              proved 98.9% savings against real experimental ground truth.
             </p>
           </div>
         </div>
@@ -886,11 +978,14 @@
           </div>
         </div>
 
-        <div class="card" style="margin-top:1.5rem; background:rgba(0, 240, 255, 0.04); border-color:rgba(0, 240, 255, 0.25);">
+        <div class="card"
+          style="margin-top:1.5rem; background:rgba(0, 240, 255, 0.04); border-color:rgba(0, 240, 255, 0.25);">
           <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem;">
             <div>
-              <div style="font-family:var(--font-display); font-size:1.15rem; font-weight:700; color:#ffffff;">Ready for Live Demo & Partner Review</div>
-              <div style="font-size:0.9rem; color:var(--text-muted); margin-top:0.2rem;">All 50 unit tests passing • Real-time Gradio telemetry running at <code>http://127.0.0.1:7860</code></div>
+              <div style="font-family:var(--font-display); font-size:1.15rem; font-weight:700; color:#ffffff;">Ready for
+                Live Demo Review</div>
+              <div style="font-size:0.9rem; color:var(--text-muted); margin-top:0.2rem;">All 50 unit tests passing •
+                Real-time Gradio telemetry running at <code>http://127.0.0.1:7860</code></div>
             </div>
             <span class="pill pill-green" style="font-size:0.85rem; padding:0.4rem 0.9rem;">ENTERPRISE-READY</span>
           </div>
@@ -957,7 +1052,7 @@
       }
     });
 
-    // Mode Toggle (Partner vs Tech)
+    // Mode Toggle (Strategy vs Tech)
     function setMode(mode) {
       const isTech = (mode === 'tech');
       document.body.classList.toggle('tech-mode', isTech);
