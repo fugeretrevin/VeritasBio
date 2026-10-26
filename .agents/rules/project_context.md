@@ -59,7 +59,9 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
 - [x] `workers/rag_worker.py`, `controller/prompts.py` (UniProt RAG + Llama 3.1 combinatorial prompts + 9 unit tests passing).
 - [x] `workers/math_worker.py` (Physicochemical featurization + Gaussian Process active learning + 7 unit tests passing).
 - [x] `workers/esm_worker.py`, `workers/mock_workers.py` (Modal A10G ESM-2 650M + high-fidelity mock + 8 unit tests passing).
-- [ ] `controller/orchestrator.py`, `ui/dashboard.py`, `scripts/evaluate.py`, `main.py`
+- [x] `controller/orchestrator.py`, `ui/dashboard.py`, `main.py` (6-step active learning loop, async Gradio UI, 4 unit tests passing).
+- [x] `scripts/evaluate.py`, `scripts/data/sarkisyan_gfp_benchmark.json` (ProteinGym DMS benchmark & cloud economics metrics, 6 unit tests passing).
+- [x] Full test discovery passing: 50/50 unit tests across all 6 phases.
 
 ## Open questions (ask the user when relevant)
 - Numeric constants for D3: A10G $/sec, GPU-seconds/variant, cold-start seconds.

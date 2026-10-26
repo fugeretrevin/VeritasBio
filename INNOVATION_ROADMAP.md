@@ -97,13 +97,13 @@ This roadmap outlines the **5 foundational gaps** identified in early architectu
 ### Phase 5: Unidirectional Orchestrator & Asynchronous UI (Orchestration)
 *Goal: Wire the closed-loop active learning cycle without blocking or open-ended agent loops.*
 
-- [ ] **TASK-5.1: 6-Step Active Learning Loop** (`controller/orchestrator.py`)
+- [x] **TASK-5.1: 6-Step Active Learning Loop** (`controller/orchestrator.py`)
   - Sequential loop: RAG -> Strategy -> Math -> Gatekeeper Authorization -> Modal Execution -> Evidence Logging.
   - Fail-safe termination: stops when `authorize_spend()` rejects or iteration cap is hit.
-- [ ] **TASK-5.2: Non-Blocking Gradio Dashboard** (`ui/dashboard.py`)
+- [x] **TASK-5.2: Non-Blocking Gradio Dashboard** (`ui/dashboard.py`)
   - Async DB polling via generator `yield` (never freeze UI during GPU compute).
   - Live visual metrics: Remaining Budget gauge, Cumulative Spend chart, Fitness Trajectory vs. Iterations, Approved vs. Rejected Audit log.
-- [ ] **TASK-5.3: Entrypoint Integration** (`main.py`)
+- [x] **TASK-5.3: Entrypoint Integration** (`main.py`)
   - Database initialization, optional CLI/UI mode flags, and orchestrator hookup.
 
 ---
@@ -111,9 +111,9 @@ This roadmap outlines the **5 foundational gaps** identified in early architectu
 ### Phase 6: Hackathon Benchmark & Valuation Proof (G5)
 *Goal: Demonstrate measurable 80%+ cloud savings vs. brute-force discovery.*
 
-- [ ] **TASK-6.1: ProteinGym Ground Truth Ingestion** (`scripts/evaluate.py`)
+- [x] **TASK-6.1: ProteinGym Ground Truth Ingestion** (`scripts/evaluate.py`)
   - Load Sarkisyan 2016 GFP DMS dataset (fluorescence fitness scores for single and multi-mutants).
-- [ ] **TASK-6.2: Benchmark Metrics Engine** (`scripts/evaluate.py`)
+- [x] **TASK-6.2: Benchmark Metrics Engine** (`scripts/evaluate.py`)
   - Compute:
     1. **Spearman Rank Correlation** vs. ground truth.
     2. **Cost-to-Top-Decile**: Total USD spent by VeritasBio to locate top 5% brightest variants vs. brute-force random screening.
@@ -133,6 +133,8 @@ This roadmap outlines the **5 foundational gaps** identified in early architectu
 [x] Phase 2: Biological Priors & Combinatorial Prompts (workers/rag_worker.py, controller/prompts.py, 9/9 unit tests)
 [x] Phase 3: Quant Engine with Physicochemical GP (workers/math_worker.py, 7/7 unit tests)
 [x] Phase 4: Cloud Muscle & Multi-Fidelity Execution (workers/esm_worker.py, workers/mock_workers.py, 8/8 unit tests)
+[x] Phase 5: Unidirectional Orchestrator & Gradio Dashboard (controller/orchestrator.py, ui/dashboard.py, 4/4 unit tests)
+[x] Phase 6: Hackathon Benchmark & Valuation Proof (scripts/evaluate.py, 6/6 unit tests)
 ----------------------------------------------------------------------
-[ ] NEXT UP: Phase 5 — controller/orchestrator.py (unidirectional 6-step loop) & ui/dashboard.py (Gradio async UI)
+ALL 6 PHASES COMPLETE: 50/50 unit tests passing, full end-to-end integration verified!
 ```
