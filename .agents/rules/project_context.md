@@ -74,3 +74,4 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
 - Value of the max-iteration cap (D8) and the mock nominal cost (D2).
 - Llama 3.1 variant (8B / 70B / 405B) and exact Meta Llama API model ID.
 - Python version and whether to pin `requirements.txt`.
+
