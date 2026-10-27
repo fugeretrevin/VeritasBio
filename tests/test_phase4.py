@@ -14,6 +14,7 @@ Tests:
 """
 
 import unittest
+from unittest import mock
 
 from controller.gatekeeper import SingleMutation, Variant
 from workers.esm_worker import score_variants
@@ -101,9 +102,10 @@ class TestPhase4(unittest.TestCase):
         self.assertEqual(len(scores), 1)
         self.assertGreater(scores[0], 0.5)
 
-    def test_esm_worker_fallback_when_unconfigured(self):
+    @mock.patch("workers.esm_worker.is_modal_configured", return_value=False)
+    def test_esm_worker_fallback_when_unconfigured(self, _mock_configured):
         var1 = Variant(notation="S65T").apply_to(self.wt_sequence)
-        # In test environments without live Modal tokens, use_mock_fallback=True returns valid mock scores
+        # When Modal is unconfigured, use_mock_fallback=True returns valid mock scores
         scores = score_variants(
             wt_sequence=self.wt_sequence,
             variant_sequences=[var1],

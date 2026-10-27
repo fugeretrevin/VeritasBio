@@ -24,8 +24,6 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import modal
 
-from workers.mock_workers import MockESMWorker
-
 logger = logging.getLogger(__name__)
 
 # Modal App definition
@@ -147,6 +145,8 @@ def score_variants(
       - `MockESMWorker` if `target_model == 'mock_esm'` or Modal is unconfigured.
       - Remote Modal A10G function if running live cloud execution.
     """
+    from workers.mock_workers import MockESMWorker
+
     clean_model = target_model.strip().lower()
 
     if clean_model == "mock_esm":
@@ -158,11 +158,12 @@ def score_variants(
         hf_id = MODEL_MAP.get(clean_model, "facebook/esm2_t33_650M_UR50D")
         logger.info("Submitting %d variants to Modal A10G (%s)...", len(variant_sequences), hf_id)
         try:
-            return score_variants_remote.remote(
-                wt_sequence=wt_sequence,
-                variant_sequences=list(variant_sequences),
-                hf_model_id=hf_id,
-            )
+            with app.run():
+                return score_variants_remote.remote(
+                    wt_sequence=wt_sequence,
+                    variant_sequences=list(variant_sequences),
+                    hf_model_id=hf_id,
+                )
         except Exception as exc:
             logger.error("Modal remote execution failed: %s", exc)
             if not use_mock_fallback:

@@ -393,8 +393,9 @@ class Orchestrator:
             round_num += 1
 
         # Run Completed
-        final_rem = ledger_db.get_remaining_budget(self.config.budget_id, self.db_path)
-        final_spent = self.config.total_budget_usd - final_rem
+        budget_row = ledger_db.get_budget(self.config.budget_id, self.db_path)
+        final_rem = budget_row["remaining"] if budget_row else ledger_db.get_remaining_budget(self.config.budget_id, self.db_path)
+        final_spent = budget_row["cumulative_spent"] if budget_row else max(0.0, self.config.total_budget_usd - final_rem)
         all_ev = ledger_db.get_evidence(db_path=self.db_path)
         best_ev = max(all_ev, key=lambda e: float(e["computed_score"])) if all_ev else None
         best_fitness = float(best_ev["computed_score"]) if best_ev else 0.0
@@ -419,8 +420,9 @@ class Orchestrator:
             if on_event:
                 on_event(event)
 
-        final_rem = ledger_db.get_remaining_budget(self.config.budget_id, self.db_path)
-        final_spent = self.config.total_budget_usd - final_rem
+        budget_row = ledger_db.get_budget(self.config.budget_id, self.db_path)
+        final_rem = budget_row["remaining"] if budget_row else ledger_db.get_remaining_budget(self.config.budget_id, self.db_path)
+        final_spent = budget_row["cumulative_spent"] if budget_row else max(0.0, self.config.total_budget_usd - final_rem)
         all_ev = ledger_db.get_evidence(db_path=self.db_path)
         all_jobs = ledger_db.list_jobs(db_path=self.db_path)
         best_ev = max(all_ev, key=lambda e: float(e["computed_score"])) if all_ev else None
