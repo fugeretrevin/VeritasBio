@@ -183,7 +183,7 @@ class GatekeeperConfig(BaseModel):
         default=20.0, ge=0.0, description="Estimated cold-boot & PyTorch model load time"
     )
     idle_timeout_sec: float = Field(
-        default=120.0, ge=0.0, description="Modal scaledown window keep-alive duration"
+        default=45.0, ge=0.0, description="Modal scaledown window keep-alive duration"
     )
     mock_nominal_cost: float = Field(
         default=0.0001, ge=0.000001, description="Nominal non-zero USD cost for mock test jobs (D2)"

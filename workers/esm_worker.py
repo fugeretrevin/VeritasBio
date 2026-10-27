@@ -52,7 +52,7 @@ MODEL_MAP: Dict[str, str] = {
     image=esm_image,
     gpu="A10G",
     timeout=300,
-    scaledown_window=120,  # 2 minutes keep-alive (Gap 1 solution: amortizes cold boot)
+    scaledown_window=45,  # 45 seconds keep-alive: amortizes cold boot across rounds without lingering idle costs
 )
 def score_variants_remote(
     wt_sequence: str,

@@ -141,13 +141,17 @@ def compute_expected_improvement(
 
 
 def build_gp_model(random_state: int = 42) -> GaussianProcessRegressor:
-    """Constructs a Gaussian Process with a composite Matern 5/2 + noise kernel."""
-    kernel = ConstantKernel(1.0, (1e-4, 1e4)) * Matern(
-        length_scale=1.0, length_scale_bounds=(1e-2, 1e2), nu=2.5
-    ) + WhiteKernel(noise_level=1e-3, noise_level_bounds=(1e-6, 1e2))
+    """
+    Constructs a well-conditioned Gaussian Process with Matern 5/2 kernel
+    and robust alpha diagonal regularization for stable small-sample convergence.
+    """
+    kernel = ConstantKernel(1.0, constant_value_bounds="fixed") * Matern(
+        length_scale=1.0, length_scale_bounds=(1e-1, 1e2), nu=2.5
+    )
     return GaussianProcessRegressor(
         kernel=kernel,
-        n_restarts_optimizer=2,
+        alpha=1e-2,
+        n_restarts_optimizer=1,
         normalize_y=True,
         random_state=random_state,
     )
