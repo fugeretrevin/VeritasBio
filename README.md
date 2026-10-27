@@ -38,6 +38,50 @@ Validated against the gold-standard **ProteinGym / Sarkisyan et al. GFP Deep Mut
 | **Cloud Efficiency Multiple** | **91.8x cheaper** | 1.0x baseline | **Near 2 orders of magnitude** |
 | **Top Discovered Variant** | `T203F:E222G` (+1.2818) | Random variants | **Discovers synergistic double mutants** |
 
+> **Reading the correlations above.** These are measured on the points the Gaussian Process was
+> trained on, so they describe *fit*, not predictive skill, and will sit near 1.0 for almost any
+> model. The TrpB benchmark below reports a held-out figure alongside the in-sample one.
+
+### 2b. Second Benchmark: TrpB Active-Site Landscape (Johnston et al. 2024)
+
+A harder and stricter test. The avGFP assay is sparse and survivorship-biased; the TrpB library is
+**combinatorially complete** — all 20⁴ = 160,000 combinations at active-site residues 183/184/227/228
+of the engineered parent Tm9D8\* were measured, so the global optimum is *known* to be in the pool
+and nothing is missing.
+
+| Metric | VeritasBio Guided Search | Random Screening (n=200 draws) |
+|---|---|---|
+| **Variants screened** | 125 of 159,999 (0.078%) | 125 |
+| **Top-1% hits found** | **36** | 1.17 |
+| **Enrichment over random** | **30.9x** | 1.0x baseline |
+| **Best fitness found** | **0.8005** (parent Tm9D8\* = 0.4081) | 0.4453 |
+| **Held-out Spearman ($\rho$)** | −0.0365 | — |
+| **In-sample Spearman ($\rho$)** | +0.9944 | — |
+| **Cloud cost for discovery** | **$0.00175** | $0.9852 brute force |
+
+The honest headline here is **30.9x enrichment over random screening at 0.078% of the screening
+cost**, reaching 0.80 fitness against a known global optimum of 1.00 after 125 measurements — the
+loop finds strong variants well above chance. The near-zero *held-out* correlation is
+reported deliberately: TrpB's active site is famously epistatic, and 5-scale physicochemical deltas
+do not generalise across it from 125 measurements. Expected Improvement still concentrates sampling
+in good regions even when the surrogate's global ranking is weak, which is why the hit rate rises
+while $\rho$ does not. Treat this as the benchmark that shows where the current featurizer runs out
+of road, not as a regression.
+
+```bash
+python scripts/download_trpb_benchmark.py && python scripts/run_trpb_benchmark.py
+```
+
+The full 159,999-variant run takes ~10s. `--pool-size N` subsamples the candidate pool for a faster
+demo, at the cost of a weaker result (the optimum may not be in the subsample).
+
+**Data provenance.** `scripts/download_trpb_benchmark.py` downloads the published landscape, keeps
+every fitness value verbatim, and re-encodes each full-length sequence as mutation notation against
+the Tm9D8\* parent. It refuses to emit a benchmark if the saturated positions it recovers from the
+data disagree with the published active site. `tests/test_trpb_benchmark.py` asserts combinatorial
+completeness (19, 19², 19³, 19⁴ by mutation order) and the published score range, so silent drift in
+the upstream file fails the suite rather than producing a plausible-looking result.
+
 ---
 
 ## 3. System Architecture & The 6-Step Loop
@@ -158,6 +202,7 @@ VeritasBio/
 │   └── orchestrator.py     # Unidirectional 6-step active learning generator loop
 ├── workers/
 │   ├── rag_worker.py       # UniProt metadata fetcher & local disk caching
+│   ├── data/               # Offline caches: P42212 (avGFP), P50909 + TRPB_TM9D8 (TrpB parent)
 │   ├── math_worker.py      # 5-factor featurizer, Matérn 5/2 GP, Expected Improvement
 │   ├── esm_worker.py       # Modal serverless NVIDIA A10G ESM-2 scoring function
 │   └── mock_workers.py     # Continuous epistatic avGFP fitness landscape (Sarkisyan 2016)
@@ -169,8 +214,13 @@ VeritasBio/
 ├── scripts/
 │   ├── evaluate.py         # Spearman correlation, hit rate, and cloud savings engine
 │   ├── plot_benchmark.py   # Publication-quality benchmark visualization generator
+│   ├── download_real_benchmark.py  # Fetches the ProteinGym avGFP DMS assay
+│   ├── download_trpb_benchmark.py  # Fetches + re-encodes the TrpB active-site landscape
+│   ├── run_real_data_benchmark.py  # Active learning loop on avGFP
+│   ├── run_trpb_benchmark.py       # Active learning loop on TrpB (held-out + random baseline)
 │   └── data/
-│       └── sarkisyan_gfp_benchmark.json # Sarkisyan et al. avGFP ground truth
+│       ├── sarkisyan_gfp_benchmark.json # Sarkisyan et al. avGFP ground truth
+│       └── TRPB_THEMA_Johnston_2024.csv # TrpB landscape, 159,999 measured variants
 ├── presentation.html       # Interactive partner deck with live economics simulator
 ├── main.py                 # Application entry point (CLI and Web Dashboard)
 ├── requirements.txt        # Production dependencies
