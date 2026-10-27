@@ -64,9 +64,12 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
 - [x] Wet-lab translation & enterprise innovations: `workers/wetlab_worker.py`, `ui/structure_viewer.py`, `ui/landscape_plot.py` (codon optimization, Twist/IDT CSV, Opentrons OT-2 script, FDA 21 CFR Part 11 audit certificate, 3Dmol WebGL, 6 unit tests passing).
 - [x] Iterative lead maturation & epistatic synergy: `workers/math_worker.py`, `controller/gatekeeper.py`, `workers/mock_workers.py` (lead recombination, sequence-to-variant parsing, round-progressive directed evolution).
 - [x] Full test discovery passing: 60/60 unit tests across all test suites.
+- [x] Live cloud verification passing: Full production active learning run executed with Meta Model API (`muse-spark-1.3`) and Modal serverless A10G (`esm2_t30_150M_UR50D`), verifying warm keep-alive amortization ($0.0062 cold -> $0.00015 warm).
+- [x] Generational Impact Blueprint: 4-pillar vision (closed-loop self-driving lab, federated negative data ledger, 72h pandemic defense, algorithmic grant milestones) added to `INNOVATION_ROADMAP.md`.
 
 ## Open questions (ask the user when relevant)
 - Numeric constants for D3: A10G $/sec, GPU-seconds/variant, cold-start seconds.
 - Value of the max-iteration cap (D8) and the mock nominal cost (D2).
 - Llama 3.1 variant (8B / 70B / 405B) and exact Meta Llama API model ID.
 - Python version and whether to pin `requirements.txt`.
+
