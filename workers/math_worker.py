@@ -169,11 +169,13 @@ def generate_candidate_variants(
     wt_sequence: str,
     max_candidates: int = 2500,
     diverse_amino_acids: Optional[Sequence[str]] = None,
+    lead_variants: Optional[List[Variant]] = None,
 ) -> List[Variant]:
     """
     Generates combinatorial candidate variants across and between target clusters.
     Prioritizes high-impact physicochemical substitutions (T, Y, L, K, A, R)
     to discover synergistic epistatic multi-point improvements.
+    Also executes iterative lead maturation on top of prior high-performing leads.
     """
     # Prioritize functionally impactful amino acid substitutions across size, polarity, and charge
     target_aas = list(diverse_amino_acids) if diverse_amino_acids else [
@@ -203,7 +205,28 @@ def generate_candidate_variants(
                     seen_notations.add(notation)
                     candidates.append(Variant(notation=notation))
 
-    # 2. Combinatorial double mutants within clusters (intra-cluster)
+    # 2. Iterative Lead Maturation: Stacking new cluster mutations on top of discovered high-fitness leads
+    if lead_variants:
+        for lead in lead_variants[:5]:
+            lead_positions = {m.position for m in lead.mutations}
+            # Find candidate positions in current strategy not yet mutated in lead
+            available_pos = [p for p in allowed_positions if p not in lead_positions]
+            for pos in available_pos[:6]:
+                wt_aa = wt_sequence[pos - 1]
+                for mut_aa in target_aas[:8]:
+                    if mut_aa != wt_aa:
+                        new_muts = sorted(
+                            lead.mutations + [SingleMutation(wt_aa=wt_aa, position=pos, mut_aa=mut_aa)],
+                            key=lambda m: m.position,
+                        )
+                        notation = ":".join(m.to_string() for m in new_muts)
+                        if notation not in seen_notations:
+                            seen_notations.add(notation)
+                            candidates.append(Variant(notation=notation, mutations=new_muts))
+                            if len(candidates) >= max_candidates:
+                                return candidates
+
+    # 3. Combinatorial double mutants within clusters (intra-cluster)
     for cluster in strategy.target_clusters:
         cluster_allowed = [p for p in cluster.positions if p in allowed_positions]
         if len(cluster_allowed) >= 2 and strategy.max_mutation_depth >= 2:
@@ -223,7 +246,7 @@ def generate_candidate_variants(
                             if len(candidates) >= max_candidates:
                                 return candidates
 
-    # 3. Inter-cluster cross-talk double mutants (e.g. chromophore triad + pocket contact)
+    # 4. Inter-cluster cross-talk double mutants (e.g. chromophore triad + pocket contact)
     if len(strategy.target_clusters) >= 2 and strategy.max_mutation_depth >= 2:
         for c1, c2 in itertools.combinations(strategy.target_clusters, 2):
             c1_pos = [p for p in c1.positions if p in allowed_positions][:3]
@@ -268,13 +291,27 @@ def select_next_micro_batch(
       4. Predicts mean and uncertainty, computes Expected Improvement.
       5. Returns top-N variants with their EI values.
     """
-    # Collect all positions from the strategy clusters
-    active_positions: List[int] = sorted(
-        list(set(p for c in strategy.target_clusters for p in c.positions))
-    )
+    # Collect all positions from the strategy clusters AND prior evidence
+    active_positions_set: Set[int] = set(p for c in strategy.target_clusters for p in c.positions)
+    lead_variants: List[Variant] = []
 
-    # Filter out forbidden positions
-    active_positions = [p for p in active_positions if p not in strategy.forbidden_positions]
+    if evidence:
+        sorted_ev = sorted(evidence, key=lambda e: float(e.get("computed_score", 0.0)), reverse=True)
+        for ev in sorted_ev:
+            score_val = float(ev.get("computed_score", 0.0))
+            var_seq = ev.get("variant_sequence")
+            if var_seq and len(var_seq) == len(wt_sequence):
+                mut_indices = [i for i, (wc, vc) in enumerate(zip(wt_sequence, var_seq), 1) if wc != vc]
+                active_positions_set.update(mut_indices)
+                if score_val > 0.0 and len(lead_variants) < 5:
+                    try:
+                        lead_variants.append(Variant.from_sequence(var_seq, wt_sequence))
+                    except Exception:
+                        pass
+
+    active_positions: List[int] = sorted(
+        [p for p in active_positions_set if p not in strategy.forbidden_positions]
+    )
     if not active_positions:
         raise ValueError("Active exploration positions cannot be empty")
 
@@ -320,8 +357,8 @@ def select_next_micro_batch(
         gp = GaussianProcessRegressor(alpha=0.1, random_state=42)
         gp.fit(X_train, y_train)
 
-    # Step 3: Generate candidate variants
-    candidates = generate_candidate_variants(strategy, wt_sequence)
+    # Step 3: Generate candidate variants (both exploration and iterative lead maturation)
+    candidates = generate_candidate_variants(strategy, wt_sequence, lead_variants=lead_variants)
 
     # Filter out any candidates already evaluated in evidence
     evaluated_notations = set()

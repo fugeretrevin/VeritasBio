@@ -45,6 +45,12 @@ _BENEFICIAL_EFFECTS: Dict[str, float] = {
     # Spectral shift alternatives
     "Y66H": 0.20,   # BFP (blue fluorescent protein)
     "Y66W": 0.15,   # CFP (cyan fluorescent protein)
+    # Superfolder GFP (sfGFP) folding & stability mutations
+    "V163A": 0.65,  # Superfolder core packing enhancement
+    "T97A": 0.45,   # Beta-strand 5 folding kinetics
+    "M153T": 0.50,  # Beta-strand 7 hydrophobic core packing
+    "S30R": 0.35,   # N-terminal loop stabilization
+    "N212K": 0.35,  # C-terminal barrel electrostatic stabilization
 }
 
 # Synergistic epistatic pairs (non-linear positive epistasis)
@@ -54,6 +60,10 @@ _EPISTATIC_SYNERGIES: Dict[frozenset, float] = {
     frozenset(["S65T", "E222G"]): 0.35,  # Single-peak green emitter
     frozenset(["T203Y", "E222G"]): 0.25, # High-quantum yellow emitter
     frozenset(["F64L", "S65T"]): 0.30,   # 37°C enhanced maturation
+    frozenset(["S65T", "V163A"]): 0.35,  # Core fluorophore + superfolder packing
+    frozenset(["T203Y", "V163A"]): 0.30, # Pi-stacking + stability
+    frozenset(["T97A", "M153T"]): 0.35,  # Superfolder dual-strand cooperativity
+    frozenset(["V163A", "M153T"]): 0.30, # Beta-sheet core stabilization
 }
 
 
@@ -149,27 +159,88 @@ class MockLLMWorker:
         round_number: int = 1,
         top_evidence: Optional[Sequence[Dict[str, Any]]] = None,
     ) -> SearchStrategy:
-        """Returns a biologically valid SearchStrategy for avGFP."""
+        """Returns a biologically valid, round-progressive SearchStrategy for avGFP."""
+        if round_number == 1:
+            hypothesis = (
+                "Round 1: Screening catalytic chromophore core (positions 64, 65, 68) "
+                "to discover baseline fluorophore maturation and quantum yield enhancers."
+            )
+            clusters = [
+                ResidueCluster(
+                    cluster_id="chromophore_core",
+                    positions=[64, 65, 68],
+                    rationale="Direct chromophore environment; modulates excitation peaks and maturation rate.",
+                ),
+            ]
+        elif round_number == 2:
+            hypothesis = (
+                "Round 2: Expanding to first-shell pi-stacking contacts (positions 203, 206, 222) "
+                "coupled with chromophore core to unlock dual-enhanced yellow/green fluorophores."
+            )
+            clusters = [
+                ResidueCluster(
+                    cluster_id="chromophore_lead",
+                    positions=[65, 68],
+                    rationale="Retaining primary fluorophore maturation locus.",
+                ),
+                ResidueCluster(
+                    cluster_id="pi_stacking_pocket",
+                    positions=[203, 206, 222],
+                    rationale="Spatial interaction partners in contact with internal chromophore (T203Y, A206K).",
+                ),
+            ]
+        elif round_number == 3:
+            hypothesis = (
+                "Round 3: Targeting beta-can barrel structural rigidity and loop dynamics (positions 147, 163, 167) "
+                "to eliminate 37°C thermal quenching and enhance conformational stability."
+            )
+            clusters = [
+                ResidueCluster(
+                    cluster_id="active_pocket_lead",
+                    positions=[65, 203],
+                    rationale="Coupling discovered chromophore hits with barrel scaffold.",
+                ),
+                ResidueCluster(
+                    cluster_id="beta_barrel_rigidity",
+                    positions=[147, 163, 167],
+                    rationale="Internal barrel packing and loop dynamics (V163A, S147P).",
+                ),
+            ]
+        elif round_number == 4:
+            hypothesis = (
+                "Round 4: Introducing canonical Superfolder GFP folding chaperones (positions 30, 97, 153, 212) "
+                "to accelerate beta-sheet assembly and prevent off-pathway inclusion bodies."
+            )
+            clusters = [
+                ResidueCluster(
+                    cluster_id="scaffold_core_lead",
+                    positions=[65, 163, 203],
+                    rationale="Consolidating high-fitness core alleles.",
+                ),
+                ResidueCluster(
+                    cluster_id="superfolder_chaperones",
+                    positions=[30, 97, 153, 212],
+                    rationale="Canonical superfolder GFP folding enhancers (T97A, M153T, S30R).",
+                ),
+            ]
+        else:
+            hypothesis = (
+                f"Round {round_number}: Global multi-module combinatorial consolidation across all "
+                "discovered beneficial hotspots (65, 97, 153, 163, 203) to assemble peak super-mutants."
+            )
+            clusters = [
+                ResidueCluster(
+                    cluster_id="global_hotspots",
+                    positions=[65, 97, 153, 163, 203],
+                    rationale="Global multi-module epistatic consolidation across all validated loci.",
+                ),
+            ]
+
         return SearchStrategy(
             target_protein=metadata.protein_name,
             target_accession=metadata.accession,
-            hypothesis=(
-                "Targeting the central chromophore triad (positions 65-67) and interacting "
-                "steric pocket contacts (positions 203, 206, 222) to discover synergistic "
-                "spectral and stability improvements."
-            ),
-            target_clusters=[
-                ResidueCluster(
-                    cluster_id="chromophore_triad",
-                    positions=[64, 65, 66, 67, 68],
-                    rationale="Direct chromophore environment; modulates excitation peaks and maturation rate.",
-                ),
-                ResidueCluster(
-                    cluster_id="barrel_pocket",
-                    positions=[203, 206, 222],
-                    rationale="Spatial interaction partners in contact with the internal chromophore.",
-                ),
-            ],
+            hypothesis=hypothesis,
+            target_clusters=clusters,
             forbidden_positions=[1, 2, 238],
             max_mutation_depth=2,
         )

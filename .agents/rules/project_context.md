@@ -61,7 +61,9 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
 - [x] `workers/esm_worker.py`, `workers/mock_workers.py` (Modal A10G ESM-2 650M + high-fidelity mock + 8 unit tests passing).
 - [x] `controller/orchestrator.py`, `ui/dashboard.py`, `main.py` (6-step active learning loop, async Gradio UI, 4 unit tests passing).
 - [x] `scripts/evaluate.py`, `scripts/data/sarkisyan_gfp_benchmark.json` (ProteinGym DMS benchmark & cloud economics metrics, 6 unit tests passing).
-- [x] Full test discovery passing: 50/50 unit tests across all 6 phases.
+- [x] Wet-lab translation & enterprise innovations: `workers/wetlab_worker.py`, `ui/structure_viewer.py`, `ui/landscape_plot.py` (codon optimization, Twist/IDT CSV, Opentrons OT-2 script, FDA 21 CFR Part 11 audit certificate, 3Dmol WebGL, 6 unit tests passing).
+- [x] Iterative lead maturation & epistatic synergy: `workers/math_worker.py`, `controller/gatekeeper.py`, `workers/mock_workers.py` (lead recombination, sequence-to-variant parsing, round-progressive directed evolution).
+- [x] Full test discovery passing: 60/60 unit tests across all test suites.
 
 ## Open questions (ask the user when relevant)
 - Numeric constants for D3: A10G $/sec, GPU-seconds/variant, cold-start seconds.

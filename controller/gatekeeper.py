@@ -105,6 +105,9 @@ class Variant(BaseModel):
             raw = str(data["notation"]).strip()
             if not raw:
                 raise ValueError("Variant notation cannot be empty")
+            if raw == "WT":
+                data["mutations"] = []
+                return data
             parts = raw.split(":")
             parsed_muts = [SingleMutation.from_string(p) for p in parts]
             # Verify no colliding positions in the same multi-point variant
@@ -114,12 +117,28 @@ class Variant(BaseModel):
             data["mutations"] = parsed_muts
         return data
 
+    @classmethod
+    def from_sequence(cls, variant_sequence: str, wt_sequence: str) -> Variant:
+        """Derive a Variant from a mutated sequence and reference wild-type sequence."""
+        if len(variant_sequence) != len(wt_sequence):
+            raise ValueError(f"Sequence length mismatch: {len(variant_sequence)} vs {len(wt_sequence)}")
+        muts: List[SingleMutation] = []
+        for i, (wc, vc) in enumerate(zip(wt_sequence, variant_sequence), 1):
+            if wc != vc:
+                muts.append(SingleMutation(wt_aa=wc, position=i, mut_aa=vc))
+        if not muts:
+            return cls(notation="WT", mutations=[])
+        notation = ":".join(m.to_string() for m in muts)
+        return cls(notation=notation, mutations=muts)
+
     def validate_against_wt(self, wt_sequence: str) -> None:
         """
         Verify that:
         1. All positions exist in the wild-type sequence.
         2. The stated WT amino acid exactly matches the actual sequence residue.
         """
+        if self.notation == "WT":
+            return
         seq_len = len(wt_sequence)
         for m in self.mutations:
             if m.position > seq_len:
@@ -136,6 +155,8 @@ class Variant(BaseModel):
 
     def apply_to(self, wt_sequence: str) -> str:
         """Apply the variant mutations to the WT sequence and return the full mutated sequence."""
+        if self.notation == "WT":
+            return wt_sequence
         self.validate_against_wt(wt_sequence)
         chars = list(wt_sequence.upper())
         for m in self.mutations:
