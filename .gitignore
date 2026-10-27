@@ -229,3 +229,7 @@ __marimo__/
 .env
 .env.*
 !.env.example
+
+# VeritasBio bulk upstream downloads (regenerate with scripts/download_*_benchmark.py).
+# The prepared benchmark CSVs they produce are committed; these raw sources are not.
+scripts/data/TrpB_Johnston_2024_raw.csv

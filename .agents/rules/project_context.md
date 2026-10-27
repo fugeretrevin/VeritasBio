@@ -37,6 +37,7 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
 | D6 | Demo target | **avGFP** + **ESM-2 650M**; hidden answer key = **ProteinGym GFP DMS (Sarkisyan 2016)**; metric = Spearman (`scripts/evaluate.py`). |
 | D7 | LLM host | **Meta Llama API** (`LLAMA_API_KEY`). |
 | D8 | Variants & stopping | Point/multi-point mutations as strings, e.g. `S65T:Y66H`, applied to the WT sequence. Loop stops on budget exhaustion **or** a hard **max-iteration cap**. |
+| D9 | Second benchmark | **TrpB** active-site landscape (Johnston et al. 2024), combinatorially complete 20⁴ at residues 183/184/227/228 of the engineered parent Tm9D8\*. Reference sequence is the **parent, not UniProt P50909** (they differ by 10 substitutions + a His-tag). Reported metrics are **held-out** $\rho$ and **enrichment vs. a random-screening baseline**, never in-sample fit alone. |
 
 ## Changes vs. the original v3.0 §6 (now reflected in ARCHITECTURE.md v3.1)
 - Money columns are `INTEGER` micro-USD instead of `float` (D1).
@@ -64,6 +65,9 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
 - [x] Wet-lab translation & enterprise innovations: `workers/wetlab_worker.py`, `ui/structure_viewer.py`, `ui/landscape_plot.py` (codon optimization, Twist/IDT CSV, Opentrons OT-2 script, FDA 21 CFR Part 11 audit certificate, 3Dmol WebGL, 6 unit tests passing).
 - [x] Iterative lead maturation & epistatic synergy: `workers/math_worker.py`, `controller/gatekeeper.py`, `workers/mock_workers.py` (lead recombination, sequence-to-variant parsing, round-progressive directed evolution).
 - [x] Full test discovery passing: 60/60 unit tests across all test suites.
+- [x] TrpB second benchmark: `scripts/download_trpb_benchmark.py`, `scripts/run_trpb_benchmark.py`,
+      `tests/test_trpb_benchmark.py` (159,999 empirical variants, dataset-integrity assertions,
+      held-out evaluation + random-screening baseline, 8 unit tests passing).
 
 ## Open questions (ask the user when relevant)
 - Numeric constants for D3: A10G $/sec, GPU-seconds/variant, cold-start seconds.
