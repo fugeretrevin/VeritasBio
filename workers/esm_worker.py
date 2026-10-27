@@ -29,6 +29,13 @@ logger = logging.getLogger(__name__)
 # Modal App definition
 app = modal.App("veritasbio-esm")
 
+def download_esm_models():
+    """Pre-downloads ESM model weights into container image during build time."""
+    from transformers import AutoModelForMaskedLM, AutoTokenizer
+    for model_id in ["facebook/esm2_t30_150M_UR50D"]:
+        AutoTokenizer.from_pretrained(model_id)
+        AutoModelForMaskedLM.from_pretrained(model_id)
+
 # Remote container image with PyTorch and HuggingFace Transformers
 esm_image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -37,6 +44,7 @@ esm_image = (
         "transformers>=4.35.0",
         "numpy>=1.24.0",
     )
+    .run_function(download_esm_models)
 )
 
 # Standard HuggingFace model identifiers
@@ -158,12 +166,25 @@ def score_variants(
         hf_id = MODEL_MAP.get(clean_model, "facebook/esm2_t33_650M_UR50D")
         logger.info("Submitting %d variants to Modal A10G (%s)...", len(variant_sequences), hf_id)
         try:
-            with app.run():
-                return score_variants_remote.remote(
+            # Attempt lookup on deployed Modal app for instant zero-overhead invocation
+            try:
+                fn = modal.Function.lookup("veritasbio-esm", "score_variants_remote")
+                return fn.remote(
                     wt_sequence=wt_sequence,
                     variant_sequences=list(variant_sequences),
                     hf_model_id=hf_id,
                 )
+            except Exception as lookup_err:
+                logger.debug(
+                    "modal.Function.lookup failed (%s); running ephemeral app.run()...",
+                    lookup_err,
+                )
+                with app.run():
+                    return score_variants_remote.remote(
+                        wt_sequence=wt_sequence,
+                        variant_sequences=list(variant_sequences),
+                        hf_model_id=hf_id,
+                    )
         except Exception as exc:
             logger.error("Modal remote execution failed: %s", exc)
             if not use_mock_fallback:

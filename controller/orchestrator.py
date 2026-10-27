@@ -29,6 +29,9 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
+import requests
+from requests.adapters import HTTPAdapter, Retry
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -66,7 +69,7 @@ class OrchestratorConfig(BaseModel):
     total_budget_usd: float = Field(default=5.00, gt=0.0, description="Total budget in USD")
     budget_id: int = Field(default=ledger_db.DEFAULT_BUDGET_ID, ge=1)
     max_iterations: int = Field(default=10, ge=1, le=100, description="Hard cap on loop rounds (D8)")
-    batch_size: int = Field(default=50, ge=1, le=500, description="Variants per micro-batch")
+    batch_size: int = Field(default=25, ge=1, le=500, description="Variants per micro-batch (20-30 saturates A10G parallel tensors)")
     target_model: str = Field(default="esm2_650m", description="esm2_650m, esm2_150m, or mock_esm")
     db_path: Optional[str] = Field(default=None, description="Path to ledger SQLite file")
     use_mock_llm: bool = Field(default=True, description="Default True to prevent accidental credit burning")
@@ -111,9 +114,30 @@ class Orchestrator:
         self.db_path: Optional[Path] = Path(self.config.db_path) if self.config.db_path else None
         self.gatekeeper = Gatekeeper(db_path=self.db_path)
         self.mock_llm = MockLLMWorker()
+        self._http_session: Optional[requests.Session] = None
+
+    @property
+    def http_session(self) -> requests.Session:
+        """Persistent HTTP session with connection pooling and retries for LLM requests."""
+        if self._http_session is None:
+            self._http_session = requests.Session()
+            retries = Retry(
+                total=3,
+                backoff_factor=1.0,
+                status_forcelist=[429, 500, 502, 503, 504],
+                allowed_methods=["POST"],
+            )
+            adapter = HTTPAdapter(
+                pool_connections=5,
+                pool_maxsize=10,
+                max_retries=retries,
+            )
+            self._http_session.mount("https://", adapter)
+            self._http_session.mount("http://", adapter)
+        return self._http_session
 
     def _call_llama_api(self, system_prompt: str, user_prompt: str, max_retries: int = 3) -> str:
-        """Invokes Meta Model API via HTTP POST in strict JSON mode with exponential backoff."""
+        """Invokes Meta Model API via persistent HTTP session in strict JSON mode with exponential backoff."""
         api_key = os.getenv("LLAMA_API_KEY") or os.getenv("META_API_KEY")
         if not api_key:
             raise RuntimeError("LLAMA_API_KEY environment variable is not set")
@@ -136,21 +160,19 @@ class Orchestrator:
             "temperature": 0.2,
         }
 
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        }
+
         last_exc: Optional[Exception] = None
         for attempt in range(max_retries):
             try:
-                req = urllib.request.Request(
-                    url,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {api_key}",
-                    },
-                )
-                with urllib.request.urlopen(req, timeout=60.0) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                    return data["choices"][0]["message"]["content"]
-            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+                resp = self.http_session.post(url, json=payload, headers=headers, timeout=60.0)
+                resp.raise_for_status()
+                data = resp.json()
+                return data["choices"][0]["message"]["content"]
+            except Exception as exc:
                 last_exc = exc
                 wait_time = 2.0 ** attempt
                 logger.warning(

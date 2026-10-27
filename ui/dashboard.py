@@ -276,15 +276,17 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                     )
                     input_batch_size = gr.Slider(
                         label="Micro-Batch Size (Variants per Loop)",
-                        minimum=10,
+                        minimum=5,
                         maximum=100,
-                        step=10,
-                        value=50,
+                        step=5,
+                        value=25,
+                        info="Optimal GPU saturation: 20-30 variants parallelized per forward pass",
                     )
                     input_model = gr.Dropdown(
                         label="Foundation Inference Model",
-                        choices=["mock_esm", "esm2_650m", "esm2_150m"],
-                        value="mock_esm",
+                        choices=["esm2_150m", "esm2_650m", "mock_esm"],
+                        value="esm2_150m",
+                        info="Fast-screening A10G tier (150M) or high-capacity (650M)",
                     )
                     check_live_llm = gr.Checkbox(
                         label="Enable Live Meta AI Strategic Planner (Calls Meta API)",

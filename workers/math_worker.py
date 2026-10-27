@@ -146,7 +146,7 @@ def build_gp_model(random_state: int = 42) -> GaussianProcessRegressor:
     and robust alpha diagonal regularization for stable small-sample convergence.
     """
     kernel = ConstantKernel(1.0, constant_value_bounds="fixed") * Matern(
-        length_scale=1.0, length_scale_bounds=(1e-1, 1e2), nu=2.5
+        length_scale=1.0, length_scale_bounds=(1e-2, 1e2), nu=2.5
     )
     return GaussianProcessRegressor(
         kernel=kernel,
