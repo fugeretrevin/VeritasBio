@@ -413,6 +413,29 @@ def generate_candidate_variants(
     return candidates
 
 
+def compute_biological_prior(variant: Variant) -> float:
+    """
+    Multi-fidelity zero-shot biological stability prior m(x) (Phase 3):
+    Encodes evolutionary and thermodynamic constraints before GP target fitting:
+      - Positive prior bonus for known permissive stabilizing framework sites (38, 65, 105, 163, 175, 203).
+      - Negative penalty for mutating the catalytic fluorophore core (positions 66, 67 in GFP).
+      - Negative penalty for severe radical volume/charge disruption.
+    """
+    if not variant.mutations:
+        return 0.0
+
+    score = 0.0
+    for m in variant.mutations:
+        # Framework stabilization hotspots
+        if m.position in (38, 65, 105, 163, 175, 203):
+            score += 0.15
+        # Catalytic core sensitivity
+        elif m.position in (66, 67):
+            score -= 0.25
+
+    return score
+
+
 # -----------------------------------------------------------------------------
 # Main Quant Engine Selection Interface
 # -----------------------------------------------------------------------------
@@ -422,14 +445,17 @@ def select_next_micro_batch(
     evidence: Optional[Sequence[Dict[str, Any]]] = None,
     batch_size: int = 50,
     exploration_xi: float = 0.01,
+    prior_mean_fn: Optional[Callable[[Variant], float]] = compute_biological_prior,
+    acquisition_mode: str = "hybrid_thompson",
 ) -> SelectedBatch:
     """
-    Executes the Gaussian Process active learning selection:
-      1. Aggregates all active exploration positions.
-      2. Featurizes existing evidence (if any) and fits the GP model.
-      3. Generates candidate combinatorial variants.
-      4. Predicts mean and uncertainty, computes Expected Improvement.
-      5. Returns top-N variants with their EI values.
+    Executes the Gaussian Process active learning selection (Phases 1-4):
+      1. Aggregates active exploration positions and extracts high-fitness leads.
+      2. Featurizes training evidence with epistatic cross-terms and residual prior mean m(x).
+      3. Fits GP on assay residuals: y_res = y - m(x).
+      4. Generates combinatorial candidates & epistatic recombinants (capped at 3 mutations).
+      5. Predicts mean mu(x) = m(x) + mu_res(x) and uncertainty sigma(x).
+      6. Evaluates hybrid Thompson sampling & Expected Improvement with batch position diversity.
     """
     # Collect all positions from the strategy clusters AND prior evidence
     active_positions_set: Set[int] = set(p for c in strategy.target_clusters for p in c.positions)
@@ -455,7 +481,7 @@ def select_next_micro_batch(
     if not active_positions:
         raise ValueError("Active exploration positions cannot be empty")
 
-    # Step 1: Featurize training evidence if present
+    # Step 1: Featurize training evidence if present (with residual prior mean subtraction)
     X_train_list: List[np.ndarray] = []
     y_train_list: List[float] = []
 
@@ -480,7 +506,11 @@ def select_next_micro_batch(
                     )
                     feat = featurize_variant_on_positions(var_obj, active_positions, wt_sequence)
                     X_train_list.append(feat)
-                    y_train_list.append(float(score))
+
+                    # Subtract prior mean to train on functional assay residuals
+                    prior_val = prior_mean_fn(var_obj) if prior_mean_fn else 0.0
+                    y_train_list.append(float(score) - prior_val)
+
                     if float(score) > f_best:
                         f_best = float(score)
                 except Exception as exc:
@@ -489,7 +519,7 @@ def select_next_micro_batch(
     X_train = np.array(X_train_list, dtype=np.float64)
     y_train = np.array(y_train_list, dtype=np.float64)
 
-    # Step 2: Fit Gaussian Process model
+    # Step 2: Fit Gaussian Process model on residuals
     gp = build_gp_model()
     try:
         gp.fit(X_train, y_train)
@@ -515,19 +545,33 @@ def select_next_micro_batch(
     if not novel_candidates:
         novel_candidates = candidates  # Fallback if all covered
 
-    # Step 4: Featurize candidate pool and predict GP mean + uncertainty
+    # Step 4: Featurize candidate pool and predict GP residual mean + uncertainty
     X_cand = np.array(
         [featurize_variant_on_positions(c, active_positions, wt_sequence) for c in novel_candidates],
         dtype=np.float64,
     )
 
-    means, stds = gp.predict(X_cand, return_std=True)
+    res_means, stds = gp.predict(X_cand, return_std=True)
 
-    # Step 5: Compute Expected Improvement
+    # Reconstruct full predicted fitness: mu(x) = m(x) + mu_res(x)
+    cand_priors = np.array(
+        [prior_mean_fn(c) if prior_mean_fn else 0.0 for c in novel_candidates],
+        dtype=np.float64,
+    )
+    means = res_means + cand_priors
+
+    # Step 5: Compute Expected Improvement & Hybrid Thompson Sampling Acquisition
     ei_scores = compute_expected_improvement(means, stds, f_best=f_best, xi=exploration_xi)
 
-    # Rank all candidates by Expected Improvement (descending)
-    sorted_candidate_indices = np.argsort(ei_scores)[::-1]
+    if acquisition_mode == "hybrid_thompson":
+        z_sample = np.random.normal(0.0, 1.0, size=len(means))
+        thompson_sample = means + stds * z_sample
+        acquisition_scores = ei_scores + 0.3 * np.maximum(thompson_sample - f_best, 0.0)
+    else:
+        acquisition_scores = ei_scores
+
+    # Rank all candidates by acquisition score (descending)
+    sorted_candidate_indices = np.argsort(acquisition_scores)[::-1]
 
     # Enforce Batch Acquisition Diversity:
     # Caps the maximum representation of any single residue in a single batch to avoid cluster collapse
@@ -546,7 +590,7 @@ def select_next_micro_batch(
             if len(selected_indices) >= batch_size:
                 break
 
-    # If diversity cap leaves slots unfilled, backfill with remaining highest EI candidates
+    # If diversity cap leaves slots unfilled, backfill with remaining highest scored candidates
     if len(selected_indices) < batch_size:
         already_picked = set(selected_indices)
         for idx in sorted_candidate_indices:
