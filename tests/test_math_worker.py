@@ -16,10 +16,12 @@ from controller.gatekeeper import Variant
 from controller.prompts import ResidueCluster, SearchStrategy
 from workers.math_worker import (
     AA_FEATURE_DIM,
+    GLOBAL_EPISTATIC_DIM,
     compute_expected_improvement,
     featurize_single_delta,
     featurize_variant_on_positions,
     generate_candidate_variants,
+    recombine_lead_variants,
     select_next_micro_batch,
 )
 from workers.rag_worker import fetch_protein_metadata
@@ -60,18 +62,25 @@ class TestMathWorker(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(delta)))
 
     def test_featurize_variant_vector_length(self):
-        # 5 active positions: 64, 65, 66, 67, 68 -> vector length = 5 * 5 = 25
+        # 5 active positions: 64, 65, 66, 67, 68
         active_positions = [64, 65, 66, 67, 68]
         v = Variant(notation="S65T")
-        vec = featurize_variant_on_positions(v, active_positions, self.wt_sequence)
-        self.assertEqual(len(vec), 25)
-        self.assertTrue(np.all(np.isfinite(vec)))
+
+        # Linear only -> vector length = 5 * 5 = 25
+        vec_linear = featurize_variant_on_positions(v, active_positions, self.wt_sequence, include_epistatic=False)
+        self.assertEqual(len(vec_linear), 25)
+        self.assertTrue(np.all(np.isfinite(vec_linear)))
+
+        # Epistatic enhanced -> vector length = 5 * 5 + 10 = 35
+        vec_epistatic = featurize_variant_on_positions(v, active_positions, self.wt_sequence, include_epistatic=True)
+        self.assertEqual(len(vec_epistatic), 25 + GLOBAL_EPISTATIC_DIM)
+        self.assertTrue(np.all(np.isfinite(vec_epistatic)))
 
         # Position 64 is unmutated -> first 5 entries should be 0.0
-        np.testing.assert_array_equal(vec[0:5], np.zeros(5))
+        np.testing.assert_array_equal(vec_linear[0:5], np.zeros(5))
 
         # Position 65 is S->T -> entries 5:10 should be non-zero
-        self.assertFalse(np.all(vec[5:10] == 0.0))
+        self.assertFalse(np.all(vec_linear[5:10] == 0.0))
 
     # -------------------------------------------------------------------------
     # 2. Candidate Generation Tests
@@ -92,6 +101,30 @@ class TestMathWorker(unittest.TestCase):
         self.assertGreater(len(double_mutants), 0)
         # Verify valid notation format
         self.assertIn(":", double_mutants[0].notation)
+
+    def test_recombine_lead_variants_capping_and_collision(self):
+        # Lead 1: S65T, Lead 2: V163A, Lead 3: T203A
+        l1 = Variant(notation="S65T")
+        l2 = Variant(notation="V163A")
+        l3 = Variant(notation="T203A")
+        # Lead 4 with collision at position 65: S65A
+        l4 = Variant(notation="S65A")
+
+        recombinants = recombine_lead_variants([l1, l2, l3, l4], self.wt_sequence, max_mutations=3)
+        self.assertGreater(len(recombinants), 0)
+
+        # All recombinants must have between 2 and 3 mutations
+        for r in recombinants:
+            self.assertGreaterEqual(len(r.mutations), 2)
+            self.assertLessEqual(len(r.mutations), 3)
+            # Ensure no collision on pos 65
+            pos_list = [m.position for m in r.mutations]
+            self.assertEqual(len(pos_list), len(set(pos_list)), "Must not have duplicate positions")
+
+        # Must include the synergistic double S65T:V163A and triple S65T:V163A:T203A
+        notations = {r.notation for r in recombinants}
+        self.assertIn("S65T:V163A", notations)
+        self.assertIn("S65T:V163A:T203A", notations)
 
     # -------------------------------------------------------------------------
     # 3. Expected Improvement & GP Active Learning Selection

@@ -86,16 +86,25 @@ def featurize_single_delta(wt_aa: str, mut_aa: str) -> np.ndarray:
     return mut_vec - wt_vec
 
 
+GLOBAL_EPISTATIC_DIM: int = 10  # 6 global biophysical deltas + 4 pairwise interaction cross-terms
+
+
 def featurize_variant_on_positions(
     variant: Variant,
     active_positions: Sequence[int],
     wt_sequence: str,
+    include_epistatic: bool = True,
 ) -> np.ndarray:
     """
-    Constructs a fixed-length continuous vector of length len(active_positions) * 5.
-    For each position p in active_positions:
-      - if mutated: inserts 5D property delta vector.
-      - if unmutated: inserts zeros(5).
+    Constructs a fixed-length continuous vector with two complementary blocks:
+      1. Linear block (len(active_positions) * 5): 5D property deltas per active site.
+      2. Global & Epistatic interaction block (10D, if include_epistatic=True):
+         - 6 global summary deltas: mutation density (N/3.0), net hydropathy, net charge,
+           net volume, net polarity, net aromaticity.
+         - 4 pairwise second-order cross-terms: electrostatic coupling (charge products),
+           steric packing (volume products), hydrophobic clustering, and inverse distance weights.
+
+    Enables Gaussian Process to model synergistic epistatic cooperativity vs steric clash penalties.
     """
     variant.validate_against_wt(wt_sequence)
     mut_dict: Dict[int, SingleMutation] = {m.position: m for m in variant.mutations}
@@ -108,7 +117,52 @@ def featurize_variant_on_positions(
         else:
             chunks.append(np.zeros(AA_FEATURE_DIM, dtype=np.float64))
 
-    return np.concatenate(chunks)
+    linear_vec = np.concatenate(chunks)
+    if not include_epistatic:
+        return linear_vec
+
+    n_mut = len(variant.mutations)
+    if n_mut == 0:
+        global_vec = np.zeros(6, dtype=np.float64)
+        interaction_vec = np.zeros(4, dtype=np.float64)
+    else:
+        deltas = [featurize_single_delta(m.wt_aa, m.mut_aa) for m in variant.mutations]
+        sum_delta = np.sum(deltas, axis=0)  # [hydropathy, charge, volume, polarity, aromaticity]
+        global_vec = np.array([
+            n_mut / 3.0,
+            sum_delta[0],
+            sum_delta[1],
+            sum_delta[2],
+            sum_delta[3],
+            sum_delta[4],
+        ], dtype=np.float64)
+
+        if n_mut >= 2:
+            charge_prod = 0.0
+            volume_prod = 0.0
+            hydro_prod = 0.0
+            dist_inv = 0.0
+            pairs = list(itertools.combinations(range(n_mut), 2))
+            for i, j in pairs:
+                m1, m2 = variant.mutations[i], variant.mutations[j]
+                d1, d2 = deltas[i], deltas[j]
+                seq_dist = max(1, abs(m1.position - m2.position))
+                dist_weight = 1.0 / np.sqrt(seq_dist)
+                dist_inv += dist_weight
+                charge_prod += d1[1] * d2[1] * dist_weight
+                volume_prod += d1[2] * d2[2] * dist_weight
+                hydro_prod += d1[0] * d2[0] * dist_weight
+            n_pairs = float(len(pairs))
+            interaction_vec = np.array([
+                charge_prod / n_pairs,
+                volume_prod / n_pairs,
+                hydro_prod / n_pairs,
+                dist_inv / n_pairs,
+            ], dtype=np.float64)
+        else:
+            interaction_vec = np.zeros(4, dtype=np.float64)
+
+    return np.concatenate([linear_vec, global_vec, interaction_vec])
 
 
 # -----------------------------------------------------------------------------
@@ -168,6 +222,71 @@ def extract_mutations_from_sequence(mutated_seq: str, wt_seq: str) -> List[Singl
     return muts
 
 
+def recombine_lead_variants(
+    lead_variants: Sequence[Variant],
+    wt_sequence: str,
+    max_mutations: int = 3,
+    max_recombinants: int = 1000,
+) -> List[Variant]:
+    """
+    Epistatic recombination operator (Phase 1):
+    Cross-breeds high-fitness lead variants into synergistic higher-order epistatic complexes
+    capped strictly at `max_mutations` (default: 3 per user decision).
+
+    Handles:
+      - Pairwise crossover: Lead A (S65T) + Lead B (V163A) -> S65T:V163A
+      - Triplet recombination: Lead A (T38S:K41R) + Lead B (N105S) -> T38S:K41R:N105S
+      - Single-lead triad combination: L1 + L2 + L3 -> 3-mutation complex
+      - Filters out position collisions (conflicting mutations on the same residue).
+      - Canonical position sorting.
+    """
+    recombinants: List[Variant] = []
+    seen: Set[str] = set()
+
+    # 1. Pairwise crossover
+    for l1, l2 in itertools.combinations(lead_variants, 2):
+        pos1 = {m.position for m in l1.mutations}
+        pos2 = {m.position for m in l2.mutations}
+        if not pos1.intersection(pos2):
+            combined = sorted(l1.mutations + l2.mutations, key=lambda m: m.position)
+            if 2 <= len(combined) <= max_mutations:
+                notation = ":".join(m.to_string() for m in combined)
+                if notation not in seen:
+                    seen.add(notation)
+                    v = Variant(notation=notation, mutations=combined)
+                    try:
+                        v.validate_against_wt(wt_sequence)
+                        recombinants.append(v)
+                    except ValueError:
+                        pass
+                    if len(recombinants) >= max_recombinants:
+                        return recombinants
+
+    # 2. Triplet crossover of single leads (if max_mutations >= 3)
+    single_leads = [l for l in lead_variants if len(l.mutations) == 1]
+    if len(single_leads) >= 3 and max_mutations >= 3:
+        for l1, l2, l3 in itertools.combinations(single_leads, 3):
+            pos_set = {l1.mutations[0].position, l2.mutations[0].position, l3.mutations[0].position}
+            if len(pos_set) == 3:
+                combined = sorted(
+                    [l1.mutations[0], l2.mutations[0], l3.mutations[0]],
+                    key=lambda m: m.position,
+                )
+                notation = ":".join(m.to_string() for m in combined)
+                if notation not in seen:
+                    seen.add(notation)
+                    v = Variant(notation=notation, mutations=combined)
+                    try:
+                        v.validate_against_wt(wt_sequence)
+                        recombinants.append(v)
+                    except ValueError:
+                        pass
+                    if len(recombinants) >= max_recombinants:
+                        return recombinants
+
+    return recombinants
+
+
 def generate_candidate_variants(
     strategy: SearchStrategy,
     wt_sequence: str,
@@ -179,7 +298,7 @@ def generate_candidate_variants(
     Generates combinatorial candidate variants across and between target clusters.
     Prioritizes high-impact physicochemical substitutions (T, Y, L, K, A, R)
     to discover synergistic epistatic multi-point improvements.
-    Also executes iterative lead maturation on top of prior high-performing leads.
+    Also executes iterative lead maturation and epistatic recombination on prior leads (capped at 3 mutations).
     """
     # Prioritize functionally impactful amino acid substitutions across size, polarity, and charge
     target_aas = list(diverse_amino_acids) if diverse_amino_acids else [
@@ -209,11 +328,27 @@ def generate_candidate_variants(
                     seen_notations.add(notation)
                     candidates.append(Variant(notation=notation))
 
-    # 2. Iterative Lead Maturation: Stacking new cluster mutations on top of discovered high-fitness leads
+    # 2. Epistatic Lead Recombination & Maturation (Capped at 3 mutations)
     if lead_variants:
-        for lead in lead_variants[:5]:
+        # Cross-breed discovered top leads (Phase 1 Epistatic Recombination)
+        recombinants = recombine_lead_variants(
+            lead_variants,
+            wt_sequence,
+            max_mutations=3,
+            max_recombinants=max_candidates // 2,
+        )
+        for r_var in recombinants:
+            if r_var.notation not in seen_notations:
+                seen_notations.add(r_var.notation)
+                candidates.append(r_var)
+                if len(candidates) >= max_candidates:
+                    return candidates
+
+        # Stacking new cluster mutations on top of discovered high-fitness leads (up to 3 mutations max)
+        for lead in lead_variants[:8]:
+            if len(lead.mutations) >= 3:
+                continue
             lead_positions = {m.position for m in lead.mutations}
-            # Find candidate positions in current strategy not yet mutated in lead
             available_pos = [p for p in allowed_positions if p not in lead_positions]
             for pos in available_pos[:6]:
                 wt_aa = wt_sequence[pos - 1]
@@ -223,12 +358,13 @@ def generate_candidate_variants(
                             lead.mutations + [SingleMutation(wt_aa=wt_aa, position=pos, mut_aa=mut_aa)],
                             key=lambda m: m.position,
                         )
-                        notation = ":".join(m.to_string() for m in new_muts)
-                        if notation not in seen_notations:
-                            seen_notations.add(notation)
-                            candidates.append(Variant(notation=notation, mutations=new_muts))
-                            if len(candidates) >= max_candidates:
-                                return candidates
+                        if len(new_muts) <= 3:
+                            notation = ":".join(m.to_string() for m in new_muts)
+                            if notation not in seen_notations:
+                                seen_notations.add(notation)
+                                candidates.append(Variant(notation=notation, mutations=new_muts))
+                                if len(candidates) >= max_candidates:
+                                    return candidates
 
     # 3. Combinatorial double mutants within clusters (intra-cluster)
     for cluster in strategy.target_clusters:
@@ -307,7 +443,7 @@ def select_next_micro_batch(
             if var_seq and len(var_seq) == len(wt_sequence):
                 mut_indices = [i for i, (wc, vc) in enumerate(zip(wt_sequence, var_seq), 1) if wc != vc]
                 active_positions_set.update(mut_indices)
-                if score_val > 0.0 and len(lead_variants) < 5:
+                if score_val > 0.0 and len(lead_variants) < 8:
                     try:
                         lead_variants.append(Variant.from_sequence(var_seq, wt_sequence))
                     except Exception:
@@ -324,7 +460,8 @@ def select_next_micro_batch(
     y_train_list: List[float] = []
 
     # Include WT sequence baseline as score 0.0 (reference)
-    wt_features = np.zeros(len(active_positions) * AA_FEATURE_DIM, dtype=np.float64)
+    wt_var = Variant(notation="WT", mutations=[])
+    wt_features = featurize_variant_on_positions(wt_var, active_positions, wt_sequence)
     X_train_list.append(wt_features)
     y_train_list.append(0.0)
 
