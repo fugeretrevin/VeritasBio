@@ -168,7 +168,10 @@ def score_variants(
         try:
             # Attempt lookup on deployed Modal app for instant zero-overhead invocation
             try:
-                fn = modal.Function.lookup("veritasbio-esm", "score_variants_remote")
+                fn_getter = getattr(modal.Function, "from_name", getattr(modal.Function, "lookup", None))
+                if fn_getter is None:
+                    raise AttributeError("Neither from_name nor lookup found on modal.Function")
+                fn = fn_getter("veritasbio-esm", "score_variants_remote")
                 return fn.remote(
                     wt_sequence=wt_sequence,
                     variant_sequences=list(variant_sequences),
@@ -176,7 +179,7 @@ def score_variants(
                 )
             except Exception as lookup_err:
                 logger.debug(
-                    "modal.Function.lookup failed (%s); running ephemeral app.run()...",
+                    "Modal deployed function lookup failed (%s); running ephemeral app.run()...",
                     lookup_err,
                 )
                 with app.run():
