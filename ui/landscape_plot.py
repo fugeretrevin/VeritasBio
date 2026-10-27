@@ -149,8 +149,7 @@ def generate_landscape_figure(
                 colorscale="Viridis",
                 showscale=True,
                 colorbar=dict(
-                    title="Expected<br>Improvement",
-                    titleside="top",
+                    title=dict(text="Expected<br>Improvement", side="top"),
                     thickness=12,
                     len=0.7,
                     x=1.02,
@@ -175,8 +174,7 @@ def generate_landscape_figure(
                 colorscale="Plasma",
                 showscale=True,
                 colorbar=dict(
-                    title="Measured<br>Fitness",
-                    titleside="top",
+                    title=dict(text="Measured<br>Fitness", side="top"),
                     thickness=12,
                     len=0.7,
                     x=1.15,
