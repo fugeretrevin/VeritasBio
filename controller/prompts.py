@@ -380,3 +380,171 @@ def parse_strategy_response(raw_response: str, sequence_length: int) -> SearchSt
             )
 
     return strategy
+
+
+# -----------------------------------------------------------------------------
+# Closed-Loop Mechanistic Residual Reflection (Gap 1 / Route C)
+# -----------------------------------------------------------------------------
+class ResidualOutlier(BaseModel):
+    """An empirical outlier variant where GP surrogate prediction deviated from reality."""
+
+    variant_notation: str = Field(..., description="Mutation notation (e.g. 'F184I:S228G')")
+    predicted_score: float = Field(..., description="Prior surrogate predicted mean mu(x)")
+    observed_score: float = Field(..., description="Empirical ground-truth score y(x)")
+    residual: float = Field(..., description="Prediction residual e = y(x) - mu(x)")
+    distance_angstroms: Optional[float] = Field(default=None, description="Max pairwise 3D distance between mutated residues")
+    mutation_details: List[str] = Field(default_factory=list, description="Positional chemistries, e.g. ['F184I (aromatic->branched)', 'S228G (polar->flexible)']")
+
+
+class ReflectionDiagnosis(BaseModel):
+    """
+    Structured biophysical diagnosis emitted by Meta Llama 3.1 upon analyzing
+    active-learning prediction residuals between rounds.
+    """
+
+    target_protein: str = Field(..., description="Target protein name (e.g. TrpB TM9D8)")
+    round_number: int = Field(..., description="Active learning round just completed")
+    mechanistic_diagnosis: str = Field(
+        ...,
+        description="Biophysical and structural explanation for observed synergistic wins or epistatic crashes",
+    )
+    updated_suggested_chemistries: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Position-specific amino acid recommendations based on reflection (e.g. {'184': ['I', 'V']})",
+    )
+    forbidden_chemistries: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Position-specific amino acids to avoid based on observed crashes (e.g. {'228': ['K', 'R']})",
+    )
+    structural_cooperativity_insight: Optional[str] = Field(
+        default=None,
+        description="Specific 3D loop or pocket cooperativity insight guiding subsequent rounds",
+    )
+
+    @field_validator("updated_suggested_chemistries", "forbidden_chemistries", mode="before")
+    @classmethod
+    def clean_chemistries_map(cls, v: Any) -> Dict[str, List[str]]:
+        if not isinstance(v, dict):
+            return {}
+        cleaned: Dict[str, List[str]] = {}
+        for k, val in v.items():
+            str_key = str(k).strip()
+            if isinstance(val, list):
+                cleaned[str_key] = [str(x).strip().upper() for x in val if isinstance(x, str) and len(str(x).strip()) == 1]
+            elif isinstance(val, str):
+                cleaned[str_key] = [c.upper() for c in val if c.isalpha() and len(c) == 1]
+        return cleaned
+
+
+REFLECTION_SYSTEM_PROMPT = """You are the Senior Biophysical Reasoning Engine for VeritasBio.
+Your mission is Closed-Loop Residual Reflection: analyze active-learning surrogate prediction residuals (unpredicted synergistic wins and epistatic crashes) to guide subsequent rounds of protein engineering.
+
+CRITICAL RULES:
+1. You MUST respond ONLY with a raw JSON object matching the ReflectionDiagnosis schema.
+2. Do NOT include markdown code fences (like ```json), commentary, or pleasantries.
+3. You NEVER calculate math or evaluate equations directly.
+4. Focus on 3D STRUCTURAL & CHEMICAL EXPLANATIONS:
+   - Why did the positive outlier variants outperform the Gaussian Process model? (e.g. relieved steric hindrance, established new hydrogen bond, stabilized loop backbone).
+   - Why did the negative outlier variants crash? (e.g. introduced buried charge desolvation, steric clash with cofactor, disrupted active site hinge).
+5. Output actionable updated_suggested_chemistries and forbidden_chemistries per residue to steer candidate sampling in the next round.
+"""
+
+
+def get_reflection_system_prompt() -> str:
+    """Returns the system prompt for closed-loop residual reflection."""
+    return REFLECTION_SYSTEM_PROMPT.strip()
+
+
+def build_reflection_prompt(
+    target_protein: str,
+    round_number: int,
+    positive_outliers: List[ResidualOutlier],
+    negative_outliers: List[ResidualOutlier],
+    protein_summary: str,
+    pdb_id: Optional[str] = None,
+) -> str:
+    """Constructs the prompt for Meta Llama 3.1 to reflect upon empirical prediction residuals."""
+    lines = [
+        f"Active Learning Iteration: Completed Round {round_number}",
+        f"Target Protein: {target_protein}",
+        f"Structural Coordinate PDB: {pdb_id or 'Local Structure'}",
+        "",
+        "## Verified Biological Context:",
+        protein_summary,
+        "",
+        "## Empirical Gaussian Process Residual Outliers:",
+        "The active-learning surrogate evaluated candidate variants. Below are the most significant prediction errors:",
+        "",
+        "### Top Positive Residuals (Unpredicted Synergistic Wins / Epistatic Goldmines):",
+    ]
+
+    if positive_outliers:
+        for out in positive_outliers:
+            dist_str = f" | 3D Max Distance: {out.distance_angstroms:.1f}A" if out.distance_angstroms else ""
+            lines.append(
+                f"- Variant: {out.variant_notation} | Predicted: {out.predicted_score:.4f} -> Observed: {out.observed_score:.4f} (Residual: +{out.residual:.4f}){dist_str}"
+            )
+            if out.mutation_details:
+                lines.append(f"  Chemistries: {', '.join(out.mutation_details)}")
+    else:
+        lines.append("- (No strong positive outliers this round; predictions aligned well with observations)")
+
+    lines.extend([
+        "",
+        "### Top Negative Residuals (Unpredicted Epistatic Crashes / Destabilizing Traps):",
+    ])
+
+    if negative_outliers:
+        for out in negative_outliers:
+            dist_str = f" | 3D Max Distance: {out.distance_angstroms:.1f}A" if out.distance_angstroms else ""
+            lines.append(
+                f"- Variant: {out.variant_notation} | Predicted: {out.predicted_score:.4f} -> Observed: {out.observed_score:.4f} (Residual: {out.residual:.4f}){dist_str}"
+            )
+            if out.mutation_details:
+                lines.append(f"  Chemistries: {', '.join(out.mutation_details)}")
+    else:
+        lines.append("- (No severe negative crashes this round)")
+
+    example_reflection = {
+        "target_protein": target_protein,
+        "round_number": round_number,
+        "mechanistic_diagnosis": "Positive outlier F184I relieved steric congestion in the substrate channel, permitting S228G to relieve backbone strain without disrupting the PLP Schiff base. Negative outlier V183K placed a charged amine too close to the cofactor binding sphere, causing electrostatic repulsion.",
+        "updated_suggested_chemistries": {
+            "184": ["I", "V"],
+            "227": ["M", "Q", "A"],
+            "228": ["G", "A"],
+        },
+        "forbidden_chemistries": {
+            "183": ["K", "R", "D", "E"],
+            "228": ["K", "R"],
+        },
+        "structural_cooperativity_insight": "Loops 183-184 and 227-228 interact across an 18.9A cleft. Relaxing Loop 1 enables Loop 2 to adopt a closed catalytic conformation.",
+    }
+
+    lines.extend([
+        "",
+        "## Required ReflectionDiagnosis JSON Output Schema:",
+        json.dumps(example_reflection, indent=2),
+        "",
+        "Analyze the biophysical reasons behind these empirical residuals and output the ReflectionDiagnosis JSON only.",
+    ])
+
+    return "\n".join(lines)
+
+
+def parse_reflection_response(raw_response: str) -> ReflectionDiagnosis:
+    """Parses and validates ReflectionDiagnosis JSON from Meta Llama 3.1 output."""
+    text = raw_response.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+        text = text.strip()
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        logger.error("Failed to parse JSON from LLM reflection response: %s", exc)
+        raise ValueError(f"LLM reflection output is not valid JSON: {exc}") from exc
+
+    return ReflectionDiagnosis.model_validate(data)
+

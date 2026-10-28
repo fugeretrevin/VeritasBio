@@ -49,9 +49,15 @@ from controller.gatekeeper import (
     Variant,
 )
 from controller.prompts import (
+    BiophysicalHypothesis,
+    ReflectionDiagnosis,
+    ResidualOutlier,
     SearchStrategy,
+    build_reflection_prompt,
     build_strategy_user_prompt,
+    get_reflection_system_prompt,
     get_strategy_system_prompt,
+    parse_reflection_response,
     parse_strategy_response,
 )
 from ledger import database as ledger_db
@@ -126,6 +132,16 @@ class OrchestratorConfig(BaseModel):
     structure_pdb_id: Optional[str] = Field(
         default=None,
         description="Explicit local PDB ID for optional structural features (e.g. 1EMA, 8EH0, 2QMT, 1N8Z)",
+    )
+    enable_reflection: bool = Field(
+        default=True,
+        description="Enable closed-loop Llama 3.1 mechanistic reflection on prediction residuals between rounds",
+    )
+    reflection_top_k: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Number of top positive and negative residual outliers to reflect upon",
     )
 
 
@@ -228,6 +244,7 @@ class Orchestrator:
         self.gatekeeper = Gatekeeper(db_path=self.db_path)
         self.mock_llm = MockLLMWorker()
         self.last_metadata: Optional[ProteinMetadata] = None
+        self.last_reflection: Optional[ReflectionDiagnosis] = None
         self._http_session: Optional[requests.Session] = None
 
     @property
@@ -335,11 +352,62 @@ class Orchestrator:
                 )
 
         # Default fallback: Mock worker (zero credit burn)
-        return self.mock_llm.generate_strategy(
+        strategy = self.mock_llm.generate_strategy(
             metadata,
             round_number=round_number,
             top_evidence=top_evidence,
             current_hop=current_hop,
+        )
+
+        # Merge Closed-Loop Llama 3.1 Residual Reflection hypotheses into strategy
+        if self.last_reflection and getattr(self.last_reflection, "updated_suggested_chemistries", None):
+            target_pos = [int(p) for p in self.last_reflection.updated_suggested_chemistries.keys() if str(p).isdigit()]
+            if target_pos:
+                ref_hyp = BiophysicalHypothesis(
+                    pocket_name=f"reflection_round_{self.last_reflection.round_number}",
+                    target_residues=target_pos,
+                    mechanism=self.last_reflection.mechanistic_diagnosis[:140],
+                    structural_rationale=self.last_reflection.structural_cooperativity_insight or "Empirical residual reflection feedback",
+                    suggested_chemistries=self.last_reflection.updated_suggested_chemistries,
+                    epistatic_coupling="Synergistic empirical feedback bonus applied to next round",
+                )
+                strategy.mechanistic_hypotheses.append(ref_hyp)
+        return strategy
+
+    def _generate_reflection(
+        self,
+        metadata: ProteinMetadata,
+        round_number: int,
+        positive_outliers: List[ResidualOutlier],
+        negative_outliers: List[ResidualOutlier],
+        pdb_id: Optional[str] = None,
+    ) -> ReflectionDiagnosis:
+        """Step 6b: Obtains closed-loop ReflectionDiagnosis from Meta Llama API or Mock fallback."""
+        live_opt_in = self.config.enable_live_llm or (os.getenv("ENABLE_LIVE_LLM", "").lower() in ("true", "1"))
+        api_key = os.getenv("LLAMA_API_KEY") or os.getenv("META_API_KEY")
+
+        if live_opt_in and not self.config.use_mock_llm and api_key:
+            try:
+                logger.info("Querying Meta Model API for Round %d residual reflection...", round_number)
+                sys_prompt = get_reflection_system_prompt()
+                user_prompt = build_reflection_prompt(
+                    target_protein=metadata.protein_name,
+                    round_number=round_number,
+                    positive_outliers=positive_outliers,
+                    negative_outliers=negative_outliers,
+                    protein_summary=metadata.to_llm_summary(),
+                    pdb_id=pdb_id or metadata.pdb_id,
+                )
+                raw_json = self._call_llama_api(sys_prompt, user_prompt)
+                return parse_reflection_response(raw_json)
+            except Exception as exc:
+                logger.warning("Meta Model API reflection call failed (%s). Falling back to mock reflection.", exc)
+
+        return self.mock_llm.generate_reflection(
+            metadata=metadata,
+            round_number=round_number,
+            positive_outliers=positive_outliers,
+            negative_outliers=negative_outliers,
         )
 
     def run_stream(self) -> Iterator[OrchestratorEvent]:
@@ -724,6 +792,70 @@ class Orchestrator:
                 current_job_id=job_id,
                 top_variants=sorted_all[:5],
             )
+
+            # -----------------------------------------------------------------
+            # Step 6b: Closed-Loop Residual Reflection (Meta Llama 3.1 Gap 1)
+            # -----------------------------------------------------------------
+            if (
+                self.config.enable_reflection
+                and selected_batch is not None
+                and getattr(selected_batch, "predicted_means", None)
+            ):
+                predicted_map = {}
+                for var, mu in zip(selected_batch.variants, selected_batch.predicted_means):
+                    predicted_map[var.notation] = mu
+
+                outliers: List[ResidualOutlier] = []
+                for seq, empirical_score in results_pairs:
+                    muts = extract_mutations_from_sequence(seq, wt_sequence)
+                    var_not = ":".join(f"{w}{p}{m}" for p, w, m in muts) if muts else "WT"
+                    pred = predicted_map.get(var_not, 0.0)
+                    res = float(empirical_score) - float(pred)
+
+                    dist_val = None
+                    if pdb_path and len(muts) > 1:
+                        try:
+                            from workers.spatial_filter import get_spatial_contact_map
+                            cmap = get_spatial_contact_map(pdb_path)
+                            pos_list = [p for p, _, _ in muts]
+                            d_list = [cmap.get_distance(pos_list[i], pos_list[j]) for i in range(len(pos_list)) for j in range(i + 1, len(pos_list))]
+                            valid_d = [d for d in d_list if d is not None]
+                            if valid_d:
+                                dist_val = max(valid_d)
+                        except Exception:
+                            pass
+
+                    outliers.append(ResidualOutlier(
+                        variant_notation=var_not,
+                        predicted_score=round(float(pred), 4),
+                        observed_score=round(float(empirical_score), 4),
+                        residual=round(float(res), 4),
+                        distance_angstroms=round(dist_val, 2) if dist_val is not None else None,
+                        mutation_details=[f"{w}{p}{m}" for p, w, m in muts],
+                    ))
+
+                outliers.sort(key=lambda o: o.residual, reverse=True)
+                pos_outliers = [o for o in outliers if o.residual > 0.05][:self.config.reflection_top_k]
+                neg_outliers = [o for o in reversed(outliers) if o.residual < -0.05][:self.config.reflection_top_k]
+
+                if pos_outliers or neg_outliers:
+                    reflection = self._generate_reflection(
+                        metadata=metadata,
+                        round_number=round_num,
+                        positive_outliers=pos_outliers,
+                        negative_outliers=neg_outliers,
+                        pdb_id=self.config.structure_pdb_id or metadata.pdb_id,
+                    )
+                    self.last_reflection = reflection
+                    yield OrchestratorEvent(
+                        iteration=round_num,
+                        step="reflection_complete",
+                        message=f"Round {round_num} Llama 3.1 Reflection: {reflection.mechanistic_diagnosis[:140]}...",
+                        remaining_budget_usd=rem_after_spend,
+                        cumulative_spent_usd=spent_after_spend,
+                        current_job_id=job_id,
+                        decision=reflection.model_dump(),
+                    )
 
             # Check stagnation stopping after round 3
             if self.config.enable_stagnation_stopping and round_num >= 4:

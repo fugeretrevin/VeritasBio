@@ -21,7 +21,7 @@ import logging
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from controller.gatekeeper import SingleMutation, Variant
-from controller.prompts import BiophysicalHypothesis, ResidueCluster, SearchStrategy
+from controller.prompts import BiophysicalHypothesis, ReflectionDiagnosis, ResidualOutlier, ResidueCluster, SearchStrategy
 from workers.rag_worker import ProteinMetadata, fetch_protein_metadata
 
 logger = logging.getLogger(__name__)
@@ -484,4 +484,61 @@ class MockLLMWorker:
             forbidden_positions=[1, 2, 67, 238],
             max_mutation_depth=2,
             mechanistic_hypotheses=mechanistic_hyps,
+        )
+
+    def generate_reflection(
+        self,
+        metadata: ProteinMetadata,
+        round_number: int,
+        positive_outliers: List[ResidualOutlier],
+        negative_outliers: List[ResidualOutlier],
+    ) -> ReflectionDiagnosis:
+        """
+        Generates a biologically grounded reflection diagnosis explaining empirical
+        prediction residuals and emitting updated chemistry preferences.
+        """
+        prot_name = metadata.protein_name
+        pos_str_list = [f"{o.variant_notation} (+{o.residual:.2f})" for o in positive_outliers[:2]]
+        neg_str_list = [f"{o.variant_notation} ({o.residual:.2f})" for o in negative_outliers[:2]]
+
+        updated_chem: Dict[str, List[str]] = {}
+        for out in positive_outliers:
+            for part in out.variant_notation.split(":"):
+                if len(part) >= 3 and part[1:-1].isdigit():
+                    pos_str = str(int(part[1:-1]))
+                    mut_aa = part[-1]
+                    if mut_aa not in updated_chem.setdefault(pos_str, []):
+                        updated_chem[pos_str].append(mut_aa)
+
+        forbidden_chem: Dict[str, List[str]] = {}
+        for out in negative_outliers:
+            for part in out.variant_notation.split(":"):
+                if len(part) >= 3 and part[1:-1].isdigit():
+                    pos_str = str(int(part[1:-1]))
+                    mut_aa = part[-1]
+                    if mut_aa not in forbidden_chem.setdefault(pos_str, []):
+                        forbidden_chem[pos_str].append(mut_aa)
+
+        if not updated_chem:
+            updated_chem = {"65": ["T"], "203": ["Y"]} if "gfp" in prot_name.lower() or "P42212" in metadata.accession else {"184": ["I"], "228": ["G"]}
+
+        pos_summary = ", ".join(pos_str_list) if pos_str_list else "top candidates"
+        neg_summary = ", ".join(neg_str_list) if neg_str_list else "penalized candidates"
+
+        diagnosis = (
+            f"Round {round_number} Residual Analysis for {prot_name}: "
+            f"Synergistic positive epistasis detected in {pos_summary}. "
+            f"Steric relaxation and backbone packing relieved strain. "
+            f"Negative crashes in {neg_summary} incurred steric congestion or electrostatic repulsion."
+        )
+
+        return ReflectionDiagnosis(
+            target_protein=metadata.protein_name,
+            round_number=round_number,
+            positive_outliers=positive_outliers,
+            negative_outliers=negative_outliers,
+            mechanistic_diagnosis=diagnosis,
+            updated_suggested_chemistries=updated_chem,
+            forbidden_chemistries=forbidden_chem,
+            structural_cooperativity_insight=f"Consolidate synergistic chemistries from {pos_summary} into subsequent round.",
         )

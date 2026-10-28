@@ -22,12 +22,14 @@ import logging
 import os
 from typing import Any, Dict, List, Optional, Sequence
 
-import modal
+try:
+    import modal
+    app = modal.App("veritasbio-esm")
+except ImportError:
+    modal = None
+    app = None
 
 logger = logging.getLogger(__name__)
-
-# Modal App definition
-app = modal.App("veritasbio-esm")
 
 def download_esm_models():
     """Pre-downloads ESM model weights into container image during build time."""
@@ -36,16 +38,25 @@ def download_esm_models():
         AutoTokenizer.from_pretrained(model_id)
         AutoModelForMaskedLM.from_pretrained(model_id)
 
-# Remote container image with PyTorch and HuggingFace Transformers
-esm_image = (
-    modal.Image.debian_slim(python_version="3.11")
-    .pip_install(
-        "torch>=2.1.0",
-        "transformers>=4.35.0",
-        "numpy>=1.24.0",
+if modal is not None:
+    esm_image = (
+        modal.Image.debian_slim(python_version="3.11")
+        .pip_install(
+            "torch>=2.1.0",
+            "transformers>=4.35.0",
+            "numpy>=1.24.0",
+        )
+        .run_function(download_esm_models)
     )
-    .run_function(download_esm_models)
-)
+else:
+    esm_image = None
+
+def _modal_function(**kwargs):
+    def decorator(fn):
+        if app is not None:
+            return app.function(**kwargs)(fn)
+        return fn
+    return decorator
 
 # Standard HuggingFace model identifiers
 MODEL_MAP: Dict[str, str] = {
@@ -131,7 +142,7 @@ def _score_variants_core(
     return scores
 
 
-@app.function(
+@_modal_function(
     image=esm_image,
     gpu="A10G",
     timeout=300,
@@ -153,7 +164,7 @@ def score_variants_remote(
     return _score_variants_core(wt_sequence, variant_sequences, hf_model_id, batch_size)
 
 
-@app.function(
+@_modal_function(
     image=esm_image,
     gpu="A10G",
     timeout=300,
@@ -201,7 +212,7 @@ def score_variants_cascade_remote(
     }
 
 
-@app.function(
+@_modal_function(
     image=esm_image,
     gpu="A10G",
     timeout=300,
