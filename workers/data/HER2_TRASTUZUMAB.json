@@ -1,0 +1,230 @@
+{
+  "primaryAccession": "HER2_TRASTUZUMAB",
+  "uniProtkbId": "TRASTUZUMAB_VH",
+  "proteinDescription": {
+    "recommendedName": {
+      "fullName": {
+        "value": "Trastuzumab (Herceptin) Fab Variable Heavy Domain"
+      }
+    }
+  },
+  "organism": {
+    "scientificName": "Homo sapiens / Synthetic therapeutic antibody"
+  },
+  "sequence": {
+    "value": "EVQLVESGGGLVQPGGSLRLSCAASGFNIKDTYIHWVRQAPGKGLEWVARIYPTNGYTRYADSVKGRFTISADTSKNTAYLQMNSLRAEDTAVYYCSRWGGDGFYAMDYWGQGTLVTVSS",
+    "length": 120
+  },
+  "uniProtKBCrossReferences": [
+    {
+      "database": "PDB",
+      "id": "1N8Z"
+    }
+  ],
+  "features": [
+    {
+      "type": "Domain",
+      "description": "Variable Heavy Domain (VH)",
+      "location": {
+        "start": {
+          "value": 1
+        },
+        "end": {
+          "value": 120
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "Complementarity-Determining Region 3 (CDR-H3) antigen contact",
+      "location": {
+        "start": {
+          "value": 99
+        },
+        "end": {
+          "value": 99
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "Complementarity-Determining Region 3 (CDR-H3) antigen contact",
+      "location": {
+        "start": {
+          "value": 100
+        },
+        "end": {
+          "value": 100
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "Complementarity-Determining Region 3 (CDR-H3) antigen contact",
+      "location": {
+        "start": {
+          "value": 101
+        },
+        "end": {
+          "value": 101
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "Complementarity-Determining Region 3 (CDR-H3) antigen contact",
+      "location": {
+        "start": {
+          "value": 102
+        },
+        "end": {
+          "value": 102
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "Complementarity-Determining Region 3 (CDR-H3) antigen contact",
+      "location": {
+        "start": {
+          "value": 103
+        },
+        "end": {
+          "value": 103
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "Complementarity-Determining Region 3 (CDR-H3) antigen contact",
+      "location": {
+        "start": {
+          "value": 104
+        },
+        "end": {
+          "value": 104
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "Complementarity-Determining Region 3 (CDR-H3) antigen contact",
+      "location": {
+        "start": {
+          "value": 105
+        },
+        "end": {
+          "value": 105
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "Complementarity-Determining Region 3 (CDR-H3) antigen contact",
+      "location": {
+        "start": {
+          "value": 106
+        },
+        "end": {
+          "value": 106
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "Complementarity-Determining Region 3 (CDR-H3) antigen contact",
+      "location": {
+        "start": {
+          "value": 107
+        },
+        "end": {
+          "value": 107
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "Complementarity-Determining Region 3 (CDR-H3) antigen contact",
+      "location": {
+        "start": {
+          "value": 108
+        },
+        "end": {
+          "value": 108
+        }
+      }
+    },
+    {
+      "type": "Active site",
+      "description": "Invariant framework anchor / structural cysteine",
+      "location": {
+        "start": {
+          "value": 1
+        },
+        "end": {
+          "value": 1
+        }
+      }
+    },
+    {
+      "type": "Active site",
+      "description": "Invariant framework anchor / structural cysteine",
+      "location": {
+        "start": {
+          "value": 2
+        },
+        "end": {
+          "value": 2
+        }
+      }
+    },
+    {
+      "type": "Active site",
+      "description": "Invariant framework anchor / structural cysteine",
+      "location": {
+        "start": {
+          "value": 22
+        },
+        "end": {
+          "value": 22
+        }
+      }
+    },
+    {
+      "type": "Active site",
+      "description": "Invariant framework anchor / structural cysteine",
+      "location": {
+        "start": {
+          "value": 92
+        },
+        "end": {
+          "value": 92
+        }
+      }
+    },
+    {
+      "type": "Active site",
+      "description": "Invariant framework anchor / structural cysteine",
+      "location": {
+        "start": {
+          "value": 119
+        },
+        "end": {
+          "value": 119
+        }
+      }
+    },
+    {
+      "type": "Active site",
+      "description": "Invariant framework anchor / structural cysteine",
+      "location": {
+        "start": {
+          "value": 120
+        },
+        "end": {
+          "value": 120
+        }
+      }
+    }
+  ]
+}

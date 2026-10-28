@@ -44,7 +44,27 @@ def resolve_target_pdb_context(
             "#0284c7",
         )
 
-    if any(k in acc_lower for k in ("trpb", "tm9d8", "tryptophan", "p50909")):
+    if any(k in acc_lower for k in ("gb1", "spg1", "2qmt")):
+        gb1_pdb = data_dir / "2QMT.pdb"
+        return (
+            gb1_pdb,
+            "3D Crystal Structure (PDB: 2QMT · 1.10 Å Resolution)",
+            "Immunoglobulin G-Binding Protein G (GB1)",
+            [39, 40, 41, 54],
+            "IgG Fc Binding Interface (39, 40, 41, 54)",
+            "#8b5cf6",  # Royal violet
+        )
+    elif any(k in acc_lower for k in ("trastuzumab", "her2", "herceptin", "1n8z")):
+        her2_pdb = data_dir / "1N8Z.pdb"
+        return (
+            her2_pdb,
+            "3D Crystal Structure (PDB: 1N8Z · 2.50 Å Complex)",
+            "Herceptin Fab (VH Domain) : HER2 Complex",
+            [99, 100, 101, 102, 103, 104, 105, 106, 107, 108],
+            "CDR-H3 Hypervariable Loop (Residues 99-108)",
+            "#ec4899",  # Rose pink
+        )
+    elif any(k in acc_lower for k in ("trpb", "tm9d8", "tryptophan", "p50909")):
         trpb_pdb = data_dir / "8EH0.pdb"
         return (
             trpb_pdb,

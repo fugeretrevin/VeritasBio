@@ -115,9 +115,14 @@ def load_ground_truth_benchmark(benchmark_path: Optional[str] = None) -> Dict[st
             for row in reader:
                 mut = row.get("mutant") or row.get("mutation")
                 score = row.get("DMS_score") or row.get("dms_score")
-                if mut and score:
+                seq = row.get("mutated_sequence") or row.get("sequence")
+                if score is not None:
                     try:
-                        bench_map[mut.strip()] = float(score)
+                        s_val = float(score)
+                        if mut:
+                            bench_map[mut.strip()] = s_val
+                        if seq:
+                            bench_map[seq.strip()] = s_val
                     except ValueError:
                         continue
     else:
@@ -127,8 +132,16 @@ def load_ground_truth_benchmark(benchmark_path: Optional[str] = None) -> Dict[st
         for item in data.get("variants", []):
             mut = item.get("mutation")
             score = item.get("dms_score")
-            if mut is not None and score is not None:
-                bench_map[mut.strip()] = float(score)
+            seq = item.get("sequence")
+            if score is not None:
+                try:
+                    s_val = float(score)
+                    if mut:
+                        bench_map[mut.strip()] = s_val
+                    if seq:
+                        bench_map[seq.strip()] = s_val
+                except ValueError:
+                    continue
 
     return bench_map
 
@@ -150,7 +163,7 @@ def evaluate_run(
         db_path: Path to the SQLite ledger database.
         benchmark_path: Path to the ground-truth benchmark JSON/CSV.
         wt_sequence: WT sequence for sequence-to-mutation conversion. Defaults to avGFP.
-        target_name: Name of target protein (e.g. 'avGFP' or 'TrpB').
+        target_name: Name of target protein (e.g. 'avGFP', 'TrpB', 'SPG1_STRSG', or 'HER2_TRASTUZUMAB').
         total_candidate_universe_size: Assumed combinatorial search space size.
         a10g_gpu_seconds_per_variant: Inference seconds per variant for cost model.
         a10g_usd_per_second: Hourly $1.10 rate = $0.000306/sec.
@@ -160,20 +173,47 @@ def evaluate_run(
         BenchmarkMetrics object containing all evaluation metrics.
     """
     t_lower = (target_name or "").lower()
+    is_gb1 = (
+        "gb1" in t_lower
+        or "spg1" in t_lower
+        or target_name == "SPG1_STRSG"
+    )
+    is_trastuzumab = (
+        "trastuzumab" in t_lower
+        or "her2" in t_lower
+        or "herceptin" in t_lower
+        or target_name == "HER2_TRASTUZUMAB"
+    )
     is_trpb = (
         "trpb" in t_lower
         or "tryptophan" in t_lower
         or "tm9d8" in t_lower
         or target_name == "TRPB_TM9D8"
     )
-    if is_trpb:
+
+    if is_gb1:
+        if benchmark_path is None:
+            benchmark_path = str(Path(__file__).parent / "data" / "GB1_STRSG_Wu_2016.csv")
+        total_candidate_universe_size = 149_361
+    elif is_trastuzumab:
+        if benchmark_path is None:
+            benchmark_path = str(Path(__file__).parent / "data" / "HER2_TRASTUZUMAB_Mason_2021.csv")
+        total_candidate_universe_size = 36_391
+    elif is_trpb:
         if benchmark_path is None:
             benchmark_path = str(Path(__file__).parent / "data" / "TRPB_THEMA_Johnston_2024.csv")
         total_candidate_universe_size = 159_999
 
     if wt_sequence is None:
         try:
-            target_acc = "TRPB_TM9D8" if is_trpb else "P42212"
+            if is_gb1:
+                target_acc = "SPG1_STRSG"
+            elif is_trastuzumab:
+                target_acc = "HER2_TRASTUZUMAB"
+            elif is_trpb:
+                target_acc = "TRPB_TM9D8"
+            else:
+                target_acc = "P42212"
             meta = fetch_protein_metadata(target_acc, use_cache=True)
             wt_sequence = meta.sequence
         except Exception:

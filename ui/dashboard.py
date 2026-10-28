@@ -372,6 +372,8 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                         label="Target Protein Benchmark",
                         choices=[
                             "TRPB_TM9D8 (Tryptophan Synthase Beta · 160K DMS)",
+                            "SPG1_STRSG (Protein G GB1 · 150K Combinatorial DMS)",
+                            "HER2_TRASTUZUMAB (Trastuzumab Antibody CDR-H3 · 38K DMS)",
                             "P42212 (avGFP Fluorescent Protein · 54K DMS)",
                             "Custom UniProt Accession",
                         ],
@@ -534,6 +536,10 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             choice_str = str(target_choice).upper()
             if "TRPB" in choice_str:
                 acc = "TRPB_TM9D8"
+            elif "GB1" in choice_str or "SPG1" in choice_str:
+                acc = "SPG1_STRSG"
+            elif "TRASTUZUMAB" in choice_str or "HER2" in choice_str or "HERCEPTIN" in choice_str:
+                acc = "HER2_TRASTUZUMAB"
             elif "P42212" in choice_str or "GFP" in choice_str:
                 acc = "P42212"
             else:

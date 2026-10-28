@@ -1,0 +1,110 @@
+{
+  "primaryAccession": "SPG1_STRSG",
+  "uniProtkbId": "SPG1_STRSG_GB1",
+  "proteinDescription": {
+    "recommendedName": {
+      "fullName": {
+        "value": "Immunoglobulin G-binding protein G (GB1 domain)"
+      }
+    }
+  },
+  "organism": {
+    "scientificName": "Streptococcus dysgalactiae"
+  },
+  "sequence": {
+    "value": "MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDDATKTFTVTE",
+    "length": 56
+  },
+  "uniProtKBCrossReferences": [
+    {
+      "database": "PDB",
+      "id": "2QMT"
+    }
+  ],
+  "features": [
+    {
+      "type": "Domain",
+      "description": "IgG-binding domain B1",
+      "location": {
+        "start": {
+          "value": 1
+        },
+        "end": {
+          "value": 56
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "IgG Fc binding contact residue (Wu 2016)",
+      "location": {
+        "start": {
+          "value": 39
+        },
+        "end": {
+          "value": 39
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "IgG Fc binding contact residue (Wu 2016)",
+      "location": {
+        "start": {
+          "value": 40
+        },
+        "end": {
+          "value": 40
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "IgG Fc binding contact residue (Wu 2016)",
+      "location": {
+        "start": {
+          "value": 41
+        },
+        "end": {
+          "value": 41
+        }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "IgG Fc binding contact residue (Wu 2016)",
+      "location": {
+        "start": {
+          "value": 54
+        },
+        "end": {
+          "value": 54
+        }
+      }
+    },
+    {
+      "type": "Active site",
+      "description": "Invariant framework terminal anchor",
+      "location": {
+        "start": {
+          "value": 1
+        },
+        "end": {
+          "value": 1
+        }
+      }
+    },
+    {
+      "type": "Active site",
+      "description": "Invariant framework terminal anchor",
+      "location": {
+        "start": {
+          "value": 56
+        },
+        "end": {
+          "value": 56
+        }
+      }
+    }
+  ]
+}
