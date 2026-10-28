@@ -988,12 +988,12 @@ def compute_biological_prior(
     pdb_path: Optional[Any] = None,
 ) -> float:
     """
-    Multi-fidelity zero-shot biological stability prior m(x) (Phase 3 & Gap C):
+    Multi-fidelity zero-shot biological stability prior m(x) (Phase 3):
     Encodes evolutionary, thermodynamic, and fast zero-cost structural packing constraints:
       - Positive prior bonus for known permissive stabilizing framework sites (38, 65, 105, 163, 175, 203).
       - Negative penalty for mutating catalytic invariants across any target protein.
       - Negative penalty for severe radical volume/charge disruption.
-      - Fast zero-cost structural surrogate term S_struct(x) using 3D C-alpha coordinates.
+    - Structural surrogate scores are intentionally excluded from the fixed prior.
     """
     if not variant.mutations:
         return 0.0
@@ -1033,19 +1033,6 @@ def compute_biological_prior(
         elif m.position == 67:
             score -= 4.8  # Backbone hinge disruption
 
-    # 3. Gap C: Fast Zero-Cost Structural Surrogate Term (3D coordination & packing density)
-    if pdb_path:
-        try:
-            from workers.spatial_filter import compute_structural_surrogate_score
-            struct_score = compute_structural_surrogate_score(
-                variant.notation,
-                pdb_path=pdb_path,
-                catalytic_invariants=catalytic_invariants,
-            )
-            score += struct_score
-        except Exception:
-            pass
-
     return score
 
 
@@ -1062,6 +1049,7 @@ def select_next_micro_batch(
     acquisition_mode: str = "hybrid_thompson",
     catalytic_invariants: Optional[Set[int]] = None,
     pdb_path: Optional[Any] = None,
+    enable_structural_filter: bool = False,
 ) -> SelectedBatch:
     """
     Executes the Gaussian Process active learning selection (Phases 1-4):
@@ -1102,7 +1090,7 @@ def select_next_micro_batch(
     if pdb_path:
         try:
             from workers.spatial_filter import SpatialContactMap
-            spatial_map = SpatialContactMap(pdb_path=Path(pdb_path))
+            spatial_map = SpatialContactMap(pdb_path=Path(pdb_path), reference_sequence=wt_sequence)
         except Exception as sm_err:
             logger.debug("SpatialContactMap initialization skipped: %s", sm_err)
 
@@ -1234,7 +1222,7 @@ def select_next_micro_batch(
     if not novel_candidates:
         novel_candidates = candidates  # Fallback if all covered
 
-    # Filter candidates with 3D biomechanical spatial & steric clash filter
+    # Keep structural filtering opt-in; geometry is not an eligibility constraint by default.
     try:
         from workers.spatial_filter import filter_spatially_viable_variants
         cand_notations = [c.notation for c in novel_candidates]
@@ -1242,6 +1230,8 @@ def select_next_micro_batch(
             cand_notations,
             pdb_path=pdb_path,
             catalytic_invariants=invariants_set,
+            enable_heuristics=enable_structural_filter,
+            reference_sequence=wt_sequence,
         )
         viable_set = set(viable_notations)
         filtered_candidates = [c for c in novel_candidates if c.notation in viable_set]

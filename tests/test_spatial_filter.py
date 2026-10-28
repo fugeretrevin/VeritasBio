@@ -16,7 +16,15 @@ from workers.spatial_filter import (
 
 class TestSpatialFilter(unittest.TestCase):
     def setUp(self) -> None:
-        self.cmap = get_spatial_contact_map()
+        self.pdb_path = Path(__file__).resolve().parents[1] / "workers" / "data" / "1EMA.pdb"
+        self.cmap = get_spatial_contact_map(self.pdb_path)
+
+    def test_default_filter_is_identity_without_structure(self) -> None:
+        variants = ["Y39K:F46A:M153A", "V183A:F184I:V227K:S228G"]
+        approved, pruned = filter_spatially_viable_variants(variants)
+        self.assertEqual(approved, variants)
+        self.assertEqual(pruned, [])
+        self.assertEqual(get_spatial_contact_map().ca_coordinates, {})
 
     def test_ca_coordinates_loaded(self) -> None:
         """Verifies that 1EMA.pdb C-alpha coordinates were parsed."""
@@ -41,13 +49,17 @@ class TestSpatialFilter(unittest.TestCase):
         self.assertTrue(cohesion["is_cohesive"])
         self.assertLess(cohesion["mean_distance_angstroms"], 11.0)
 
-        approved, pruned = filter_spatially_viable_variants(["F64L:S65T:V68L:T203Y"])
+        approved, pruned = filter_spatially_viable_variants(
+            ["F64L:S65T:V68L:T203Y"], pdb_path=self.pdb_path, enable_heuristics=True
+        )
         self.assertEqual(approved, ["F64L:S65T:V68L:T203Y"])
         self.assertEqual(len(pruned), 0)
 
     def test_uncoupled_dollar_run_pruned(self) -> None:
         """The hallucinated distal cluster Y39K:F46A:M153A must be pruned."""
-        approved, pruned = filter_spatially_viable_variants(["Y39K:F46A:M153A"])
+        approved, pruned = filter_spatially_viable_variants(
+            ["Y39K:F46A:M153A"], pdb_path=self.pdb_path, enable_heuristics=True
+        )
         self.assertEqual(len(approved), 0)
         self.assertEqual(len(pruned), 1)
         self.assertIn("Spatially uncoupled", pruned[0][1])
@@ -75,24 +87,32 @@ class TestSpatialFilter(unittest.TestCase):
     def test_catalytic_invariant_blocks_dark_mutants(self) -> None:
         """Catalytic invariant mask must prune non-aromatic 66 and all 67 mutants."""
         # Y66A destroys the conjugated fluorophore ring
-        approved, pruned = filter_spatially_viable_variants(["F64L:Y66A:T203L"])
+        approved, pruned = filter_spatially_viable_variants(
+            ["F64L:Y66A:T203L"], pdb_path=self.pdb_path, enable_heuristics=True
+        )
         self.assertEqual(len(approved), 0)
         self.assertEqual(len(pruned), 1)
         self.assertIn("Catalytic Core Invariant", pruned[0][1])
 
         # G67A breaks backbone twist
-        approved_g, pruned_g = filter_spatially_viable_variants(["G67A"])
+        approved_g, pruned_g = filter_spatially_viable_variants(
+            ["G67A"], pdb_path=self.pdb_path, enable_heuristics=True
+        )
         self.assertEqual(len(approved_g), 0)
         self.assertEqual(len(pruned_g), 1)
         self.assertIn("Gly67 provides the tight steric backbone hinge", pruned_g[0][1])
 
         # Y66H retains aromatic ring (viable blue fluorescent protein)
-        approved_h, pruned_h = filter_spatially_viable_variants(["Y66H"])
+        approved_h, pruned_h = filter_spatially_viable_variants(
+            ["Y66H"], pdb_path=self.pdb_path, enable_heuristics=True
+        )
         self.assertEqual(approved_h, ["Y66H"])
         self.assertEqual(len(pruned_h), 0)
 
         # Authentic synergistic winners pass
-        approved_syn, pruned_syn = filter_spatially_viable_variants(["S65T:T203Y", "F64L:S65T"])
+        approved_syn, pruned_syn = filter_spatially_viable_variants(
+            ["S65T:T203Y", "F64L:S65T"], pdb_path=self.pdb_path, enable_heuristics=True
+        )
         self.assertEqual(approved_syn, ["S65T:T203Y", "F64L:S65T"])
         self.assertEqual(len(pruned_syn), 0)
 

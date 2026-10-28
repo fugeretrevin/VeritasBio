@@ -84,19 +84,15 @@ CRITICAL RULES:
 1. You MUST respond ONLY with a raw JSON object matching the requested schema.
 2. Do NOT include markdown code fences (like ```json), commentary, greetings, or conversational text.
 3. You NEVER calculate math, evaluate fitness equations, or pick individual amino acid mutations.
-4. Focus on COMBINATORIAL EPISTASIS: identify clusters of 2 to 5 interacting residues whose simultaneous mutation can produce synergistic functional improvements (e.g. active-site entrance loops, substrate binding pockets, cofactor coordination shells, allosteric interfaces, or packing contact shells).
+4. Focus on COMBINATORIAL EPISTASIS: identify clusters of 2 to 5 residues whose simultaneous mutation can produce synergistic functional improvements (e.g. active-site entrance loops, substrate binding pockets, cofactor coordination shells, allosteric interfaces, or packing contact shells).
 5. CATALYTIC & BIOCHEMICAL INVARIANT GUARD:
    - Any residues annotated in the input context as "INVARIANT Catalytic Sites", covalent cofactor attachment sites (e.g. PLP-binding lysine), metal-coordinating residues, or strict conformational hinges MUST NEVER BE MUTATED.
    - You MUST place all annotated invariant positions into "forbidden_positions".
    - Destructive non-conservative mutations to catalytic residues abolish enzyme turnover, ligand binding, or chromophore cyclization.
-6. 3D SPATIAL PROXIMITY CONSTRAINT:
-   - Residues grouped in a cluster MUST be physically adjacent in 3D tertiary space (mean C-alpha distance <= 11 to 13 Angstroms).
-   - Do NOT group residues separated across opposite sides of the protein scaffold that do not contact in 3D space.
-   - Prioritize clusters located within the same structural pocket, adjacent secondary structure elements (e.g. adjacent beta-strands or alpha-helices), or interacting loop manifolds.
-7. BURIED HYDROPHOBIC CORE STABILITY:
-   - Deeply buried hydrophobic core residues maintain the tertiary folding energy of the scaffold.
-   - Never mutate buried hydrophobic core residues to small cavity-creating residues (e.g. Trp/Phe/Leu/Ile to Ala/Gly) or charged residues without a compensatory packing partner, as this induces void collapse or severe desolvation penalties.
-   - Concentrate mutagenesis on surface-accessible binding pockets, flexible loop regions, and pocket-lining secondary shells.
+6. STRUCTURAL CONTEXT IS OPTIONAL:
+    - Do NOT require cluster residues to be close in 3D space; distant residues may be explored together.
+    - Do NOT exclude substitutions based on guessed buried-core, charge, volume, or steric rules.
+    - Preserve only explicit experimental constraints and annotated biochemical invariants supplied in the input.
 """
 
 FEW_SHOT_EXAMPLE_JSON = {
@@ -196,7 +192,7 @@ def build_strategy_user_prompt(
 ) -> str:
     """
     Constructs the operational user prompt containing UniProt metadata,
-    dynamically grounded invariants, structural constraints, and recent evidence
+    dynamically grounded invariants and recent evidence
     from previous active-learning rounds.
     """
     lines = [
@@ -211,7 +207,6 @@ def build_strategy_user_prompt(
     if protein_metadata is not None:
         cat_pos = getattr(protein_metadata, "catalytic_positions", [])
         bind_pos = getattr(protein_metadata, "binding_positions", [])
-        pdb_id = getattr(protein_metadata, "pdb_id", None)
         chrom_pos = getattr(protein_metadata, "chromophore_residues", [])
 
         directives = []
@@ -227,13 +222,8 @@ def build_strategy_user_prompt(
             directives.append(
                 f"- RECOMMENDED TARGET CLUSTERS (Binding Pocket / Entrance Loops): Prime candidate positions for combinatorial synergy: {bind_pos}."
             )
-        if pdb_id:
-            directives.append(
-                f"- 3D SPATIAL GROUNDING: Proposed cluster residue pairs must be cohesive in structure PDB {pdb_id} (distance <= 13 Angstroms)."
-            )
-
         if directives:
-            lines.append("## Target-Specific Invariant & Structural Constraints:")
+            lines.append("## Target-Specific Invariant Constraints:")
             lines.extend(directives)
             lines.append("")
 

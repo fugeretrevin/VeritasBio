@@ -70,9 +70,6 @@ class ProteinMetadata(BaseModel):
             "## Key Functional & Catalytic Machinery:",
         ]
 
-        if self.pdb_id:
-            lines.append(f"- Validated 3D Crystal / Cryo-EM Structure: PDB {self.pdb_id}")
-
         if self.catalytic_positions:
             cat_str = ", ".join(f"Pos {p} ({self.sequence[p-1]})" for p in self.catalytic_positions if p <= self.length)
             lines.append(f"- INVARIANT Catalytic Sites (DO NOT DESTROY / MUST CONSERVE): {cat_str}")
@@ -216,13 +213,11 @@ def parse_uniprot_response(raw_data: Dict[str, Any]) -> ProteinMetadata:
             catalytic_positions = [66, 67]
         if not binding_positions:
             binding_positions = [64, 65, 68, 203, 206, 222]
-        pdb_id = pdb_id or "1EMA"
     elif accession in ("TRPB_TM9D8", "P50909"):
         if not catalytic_positions:
             catalytic_positions = [83]  # Invariant PLP-binding lysine
         if not binding_positions:
             binding_positions = [183, 184, 227, 228]  # Saturated active site loops
-        pdb_id = pdb_id or "8EH0"
 
     return ProteinMetadata(
         accession=accession,

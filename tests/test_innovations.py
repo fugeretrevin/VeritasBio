@@ -94,12 +94,13 @@ class TestInnovations(unittest.TestCase):
     def test_structural_surrogate_term(self) -> None:
         """Verifies fast zero-cost structural surrogate scoring (Gap C)."""
         from workers.spatial_filter import compute_structural_surrogate_score
+        pdb_path = Path(__file__).resolve().parents[1] / "workers" / "data" / "1EMA.pdb"
         # Catalytic invariant mutation should get heavy negative penalty
-        score_bad = compute_structural_surrogate_score("Y66A", catalytic_invariants={66, 67})
+        score_bad = compute_structural_surrogate_score("Y66A", pdb_path=pdb_path, catalytic_invariants={66, 67})
         self.assertLess(score_bad, -4.0)
 
         # Contact pair close in space (< 8.5 A) should receive valid score
-        score_pair = compute_structural_surrogate_score("S65T:T203Y")
+        score_pair = compute_structural_surrogate_score("S65T:T203Y", pdb_path=pdb_path)
         self.assertIsInstance(score_pair, float)
 
     def test_dynamic_3d_viewer_trpb(self) -> None:
