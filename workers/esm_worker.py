@@ -132,6 +132,40 @@ def score_variants_remote(
     return scores
 
 
+@app.function(
+    image=esm_image,
+    gpu="A10G",
+    timeout=300,
+    scaledown_window=45,
+)
+def embed_sequences_remote(
+    sequences: List[str],
+    hf_model_id: str = "facebook/esm2_t33_650M_UR50D",
+    batch_size: int = 16,
+) -> List[List[float]]:
+    """
+    Remote Modal GPU function: extracts [CLS] 1280-dim representation vectors
+    for sequences, feeding deep latent representations to DKL.
+    """
+    import torch
+    from transformers import AutoModel, AutoTokenizer
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    tokenizer = AutoTokenizer.from_pretrained(hf_model_id)
+    model = AutoModel.from_pretrained(hf_model_id).to(device)
+    model.eval()
+
+    embeddings: List[List[float]] = []
+    for b_start in range(0, len(sequences), batch_size):
+        b_seqs = sequences[b_start : b_start + batch_size]
+        tokens = tokenizer(b_seqs, padding=True, return_tensors="pt").to(device)
+        with torch.no_grad():
+            outputs = model(**tokens)
+            cls_reps = outputs.last_hidden_state[:, 0, :].cpu().numpy().tolist()
+            embeddings.extend(cls_reps)
+    return embeddings
+
+
 def is_modal_configured() -> bool:
     """Checks whether Modal API credentials exist in environment."""
     return bool(
@@ -207,3 +241,34 @@ def score_variants(
             "Modal is not configured (MODAL_TOKEN_ID not set and ~/.modal.toml missing) "
             "and use_mock_fallback is False."
         )
+
+
+def embed_sequences(
+    sequences: Sequence[str],
+    target_model: str = "esm2_650m",
+    use_mock_fallback: bool = True,
+) -> List[List[float]]:
+    """
+    Client entrypoint for extracting latent representation vectors (1280-dim) for sequences.
+    Delegates to Modal GPU worker or local MockESMWorker.
+    """
+    from workers.mock_workers import MockESMWorker
+
+    clean_model = target_model.strip().lower()
+
+    if clean_model == "mock_esm":
+        return MockESMWorker().embed_sequences(sequences)
+
+    if is_modal_configured():
+        hf_id = MODEL_MAP.get(clean_model, "facebook/esm2_t33_650M_UR50D")
+        try:
+            fn_getter = getattr(modal.Function, "from_name", getattr(modal.Function, "lookup", None))
+            if fn_getter:
+                fn = fn_getter("veritasbio-esm", "embed_sequences_remote")
+                return fn.remote(list(sequences), hf_model_id=hf_id)
+        except Exception:
+            pass
+
+    if use_mock_fallback:
+        return MockESMWorker().embed_sequences(sequences)
+    raise RuntimeError("Modal is not configured and use_mock_fallback is False.")

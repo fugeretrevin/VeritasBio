@@ -172,6 +172,10 @@ def run_trpb_active_learning(
 
     gp_model = build_gp_model(random_state=42)
 
+    consecutive_low_ei = 0
+    consecutive_stagnation = 0
+    prev_best_truth = -1e9
+
     for round_num in range(1, rounds + 1):
         rem_budget = ledger_db.get_remaining_budget(budget_id=1, db_path=db_file)
         est_cost = len(current_idx) * 0.00001 + 0.0001
@@ -227,6 +231,33 @@ def run_trpb_active_learning(
         f_best = float(np.max(y_vec))
         eis = compute_expected_improvement(means, stds, f_best=f_best, xi=0.01)
 
+        # 1. Regret stopping check: If Expected Improvement drops to near zero
+        max_ei = float(np.max(eis)) if len(eis) > 0 else 0.0
+        if round_num >= 3 and max_ei < 0.005:
+            consecutive_low_ei += 1
+            if consecutive_low_ei >= 2:
+                logger.info(
+                    "Bayesian regret stopping triggered at round %d: max EI %.5f < 0.005 (patience: %d/2). Preserving unspent budget.",
+                    round_num, max_ei, consecutive_low_ei,
+                )
+                break
+        else:
+            consecutive_low_ei = 0
+
+        # 2. Fitness plateau check: If empirical top fitness stalls over consecutive rounds
+        current_best_truth = float(np.max(ground_truth_values))
+        if round_num >= 4 and (current_best_truth - prev_best_truth) < 0.001:
+            consecutive_stagnation += 1
+            if consecutive_stagnation >= 3:
+                logger.info(
+                    "Fitness plateau stopping triggered at round %d: no improvement > 0.001 over 3 consecutive rounds. Preserving unspent budget.",
+                    round_num,
+                )
+                break
+        else:
+            consecutive_stagnation = 0
+            prev_best_truth = current_best_truth
+
         top_local = np.argsort(eis)[::-1][:batch_size]
         current_idx = [int(remaining_idx[i]) for i in top_local]
 
@@ -235,6 +266,7 @@ def run_trpb_active_learning(
             "Round %02d Complete | Top EI Variant Selected: %s (Empirical Fitness: %.4f)",
             round_num, candidate_pool[best_in_round][0], candidate_pool[best_in_round][1],
         )
+
 
     if not train_idx:
         # The ledger refused the very first batch, so no model was ever fitted.

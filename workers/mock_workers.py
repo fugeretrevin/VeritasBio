@@ -146,6 +146,18 @@ class MockESMWorker:
             scores.append(compute_mock_gfp_fitness(muts))
         return scores
 
+    def embed_sequences(self, sequences: Sequence[str], dim: int = 1280) -> List[List[float]]:
+        """Generates deterministic latent sequence embeddings for surrogate models."""
+        import numpy as np
+        embeddings: List[List[float]] = []
+        for seq in sequences:
+            seed = int(hashlib.sha256(seq.encode("utf-8")).hexdigest()[:8], 16)
+            rng = np.random.RandomState(seed)
+            vec = rng.randn(dim).astype(np.float32)
+            vec /= float(np.linalg.norm(vec) + 1e-8)
+            embeddings.append(vec.tolist())
+        return embeddings
+
 
 class MockLLMWorker:
     """Mock strategic planner that produces valid SearchStrategy objects."""
@@ -158,8 +170,94 @@ class MockLLMWorker:
         metadata: ProteinMetadata,
         round_number: int = 1,
         top_evidence: Optional[Sequence[Dict[str, Any]]] = None,
+        current_hop: int = 0,
     ) -> SearchStrategy:
-        """Returns a biologically valid, round-progressive SearchStrategy for avGFP."""
+        """Returns a biologically valid, round-progressive SearchStrategy dynamically for any protein target."""
+        prot_name = metadata.protein_name
+        acc = metadata.accession
+        cat_pos = metadata.catalytic_positions
+        bind_pos = metadata.binding_positions
+
+        # Target: TrpB / Tryptophan synthase family
+        if "trpb" in prot_name.lower() or "tryptophan synthase" in prot_name.lower() or acc in ("P50909", "TRPB_TM9D8"):
+            if current_hop >= 1:
+                hypothesis = f"Pocket Hop {current_hop}: Sweeping opposing catalytic communication loop (positions 227, 228) coupled to the locked lead anchor."
+                clusters = [
+                    ResidueCluster(
+                        cluster_id="comm_loop_2",
+                        positions=[227, 228],
+                        rationale="Opposing loop residues directly contacting loop 1 to stabilize catalytic closure.",
+                    )
+                ]
+                return SearchStrategy(
+                    target_protein=metadata.protein_name,
+                    target_accession=metadata.accession,
+                    hypothesis=hypothesis,
+                    target_clusters=clusters,
+                    forbidden_positions=sorted(list(set([83] + cat_pos))),
+                    max_mutation_depth=4,
+                )
+            elif round_number == 1:
+                hypothesis = "Round 1: Initial sampling of substrate entrance loop 1 (positions 183, 184) to explore active-site accessibility."
+                clusters = [
+                    ResidueCluster(
+                        cluster_id="comm_loop_1",
+                        positions=[183, 184],
+                        rationale="Active site entrance loop gating substrate access to the PLP cofactor pocket.",
+                    )
+                ]
+            else:
+                hypothesis = f"Round {round_number}: Combinatorial coupling of substrate entrance loops (183, 184, 227, 228) to modulate catalytic turnover."
+                clusters = [
+                    ResidueCluster(
+                        cluster_id="comm_loop_1",
+                        positions=[183, 184],
+                        rationale="Active site entrance loop gating substrate access.",
+                    ),
+                    ResidueCluster(
+                        cluster_id="comm_loop_2",
+                        positions=[227, 228],
+                        rationale="Opposing loop residues directly contacting loop 1 to stabilize catalytic closure.",
+                    )
+                ]
+            return SearchStrategy(
+                target_protein=metadata.protein_name,
+                target_accession=metadata.accession,
+                hypothesis=hypothesis,
+                target_clusters=clusters,
+                forbidden_positions=sorted(list(set([83] + cat_pos))),
+                max_mutation_depth=4 if round_number > 1 else 2,
+            )
+
+        # Target: General protein target with UniProt binding pocket annotations
+        if bind_pos and len(bind_pos) >= 2 and acc != "P42212":
+            c1 = sorted(bind_pos[:min(3, len(bind_pos))])
+            c2 = sorted(bind_pos[min(3, len(bind_pos)):min(6, len(bind_pos))])
+            clusters = [
+                ResidueCluster(
+                    cluster_id="active_pocket_shell",
+                    positions=c1,
+                    rationale="Substrate/cofactor binding pocket residues directly modulating active-site geometry.",
+                )
+            ]
+            if c2:
+                clusters.append(
+                    ResidueCluster(
+                        cluster_id="pocket_interaction_network",
+                        positions=c2,
+                        rationale="Secondary shell interacting residues modulating conformational flexibility.",
+                    )
+                )
+            return SearchStrategy(
+                target_protein=metadata.protein_name,
+                target_accession=metadata.accession,
+                hypothesis=f"Round {round_number}: Targeting binding pocket contact network while strictly preserving catalytic machinery {cat_pos}.",
+                target_clusters=clusters,
+                forbidden_positions=sorted(list(set(cat_pos + [1, metadata.length]))),
+                max_mutation_depth=2,
+            )
+
+        # Default: avGFP round-progressive strategy
         if round_number == 1:
             hypothesis = (
                 "Round 1: Screening catalytic chromophore core (positions 64, 65, 68) "
@@ -241,6 +339,6 @@ class MockLLMWorker:
             target_accession=metadata.accession,
             hypothesis=hypothesis,
             target_clusters=clusters,
-            forbidden_positions=[1, 2, 238],
+            forbidden_positions=[1, 2, 67, 238],
             max_mutation_depth=2,
         )

@@ -48,13 +48,17 @@ class ProteinMetadata(BaseModel):
     sequence: str
     length: int
     chromophore_residues: List[int] = Field(default_factory=list)
+    catalytic_positions: List[int] = Field(default_factory=list, description="Annotated active/catalytic/cofactor residues that cannot tolerate non-conservative mutations")
+    binding_positions: List[int] = Field(default_factory=list, description="Substrate or cofactor binding pocket positions")
+    metal_binding_positions: List[int] = Field(default_factory=list, description="Metal-coordinating residues")
+    pdb_id: Optional[str] = Field(default=None, description="PDB structure ID associated with the entry")
     functional_features: List[FeatureAnnotation] = Field(default_factory=list)
     mutagenesis_hotspots: List[FeatureAnnotation] = Field(default_factory=list)
 
     def to_llm_summary(self) -> str:
         """
         Formats metadata into a concise, high-density scientific context
-        block for the LLM prompt.
+        block for the LLM prompt dynamically for ANY protein dataset.
         """
         lines = [
             f"# Target Protein: {self.protein_name} ({self.entry_name})",
@@ -63,20 +67,35 @@ class ProteinMetadata(BaseModel):
             f"- Sequence Length: {self.length} amino acids",
             f"- WT Sequence:\n{self.sequence}",
             "",
-            "## Key Functional & Catalytic Sites:",
+            "## Key Functional & Catalytic Machinery:",
         ]
 
-        if self.chromophore_residues:
-            chrom_str = ", ".join(f"Residue {p} ({self.sequence[p-1]})" for p in self.chromophore_residues if p <= self.length)
-            lines.append(f"- Core Chromophore Triad: {chrom_str}")
+        if self.pdb_id:
+            lines.append(f"- Validated 3D Crystal / Cryo-EM Structure: PDB {self.pdb_id}")
 
-        lines.append("\n## Mutagenesis & Spectral Hotspots:")
+        if self.catalytic_positions:
+            cat_str = ", ".join(f"Pos {p} ({self.sequence[p-1]})" for p in self.catalytic_positions if p <= self.length)
+            lines.append(f"- INVARIANT Catalytic Sites (DO NOT DESTROY / MUST CONSERVE): {cat_str}")
+
+        if self.chromophore_residues:
+            chrom_str = ", ".join(f"Pos {p} ({self.sequence[p-1]})" for p in self.chromophore_residues if p <= self.length)
+            lines.append(f"- Fluorophore / Chromophore Triad: {chrom_str}")
+
+        if self.binding_positions:
+            bind_str = ", ".join(f"Pos {p} ({self.sequence[p-1]})" for p in self.binding_positions if p <= self.length)
+            lines.append(f"- Active-Site Entrance / Substrate Binding Pocket: {bind_str}")
+
+        if self.metal_binding_positions:
+            metal_str = ", ".join(f"Pos {p} ({self.sequence[p-1]})" for p in self.metal_binding_positions if p <= self.length)
+            lines.append(f"- Catalytic Metal Coordination Sites: {metal_str}")
+
+        lines.append("\n## Mutagenesis & Experimental Literature Hotspots:")
         for mut in self.mutagenesis_hotspots[:10]:
             lines.append(f"- Pos {mut.start}-{mut.end}: {mut.description}")
 
-        lines.append("\n## Key Structural Barrel Elements:")
+        lines.append("\n## Key Structural Scaffold Elements:")
         for feat in self.functional_features[:6]:
-            lines.append(f"- {feat.feature_type} ({feat.start}-{feat.end}): {feat.description or 'Beta-canister scaffold'}")
+            lines.append(f"- {feat.feature_type} ({feat.start}-{feat.end}): {feat.description or 'Scaffold domain'}")
 
         return "\n".join(lines)
 
@@ -125,6 +144,10 @@ def parse_uniprot_response(raw_data: Dict[str, Any]) -> ProteinMetadata:
     functional_features: List[FeatureAnnotation] = []
     mutagenesis_hotspots: List[FeatureAnnotation] = []
     chromophore_residues: List[int] = []
+    catalytic_positions: List[int] = []
+    binding_positions: List[int] = []
+    metal_binding_positions: List[int] = []
+    pdb_id: Optional[str] = None
 
     for f in features:
         ftype = f.get("type", "")
@@ -132,6 +155,12 @@ def parse_uniprot_response(raw_data: Dict[str, Any]) -> ProteinMetadata:
         loc = f.get("location", {})
         start_val = loc.get("start", {}).get("value")
         end_val = loc.get("end", {}).get("value")
+
+        # Extract PDB ID from structural evidences
+        evidences = f.get("evidences", [])
+        for ev in evidences:
+            if ev.get("source") == "PDB" and ev.get("id"):
+                pdb_id = ev.get("id")
 
         if start_val is None or end_val is None:
             continue
@@ -143,19 +172,57 @@ def parse_uniprot_response(raw_data: Dict[str, Any]) -> ProteinMetadata:
             end=int(end_val),
         )
 
+        # Dynamic fluorophore detection
         if "chromophore" in fdesc.lower() or "fluorophore" in fdesc.lower():
             for p in range(int(start_val), int(end_val) + 1):
                 if p not in chromophore_residues:
                     chromophore_residues.append(p)
 
+        # Dynamic catalytic and active-site detection for ANY enzyme or protein
+        if ftype == "Active site" or ("catalytic" in fdesc.lower()):
+            for p in range(int(start_val), int(end_val) + 1):
+                if p not in catalytic_positions:
+                    catalytic_positions.append(p)
+        elif ftype == "Modified residue" and ("pyridoxal" in fdesc.lower() or "cofactor" in fdesc.lower()):
+            for p in range(int(start_val), int(end_val) + 1):
+                if p not in catalytic_positions:
+                    catalytic_positions.append(p)
+        elif ftype == "Binding site":
+            for p in range(int(start_val), int(end_val) + 1):
+                if p not in binding_positions:
+                    binding_positions.append(p)
+        elif ftype == "Metal binding":
+            for p in range(int(start_val), int(end_val) + 1):
+                if p not in metal_binding_positions:
+                    metal_binding_positions.append(p)
+
         if ftype == "Mutagenesis":
             mutagenesis_hotspots.append(annot)
-        elif ftype in ("Site", "Region", "Active site", "Beta strand"):
+        elif ftype in ("Site", "Region", "Active site", "Beta strand", "Binding site", "Modified residue"):
             functional_features.append(annot)
 
-    # avGFP default chromophore fallback (65, 66, 67) if not explicitly tagged
-    if accession == "P42212" and not chromophore_residues:
-        chromophore_residues = [65, 66, 67]
+    # Ingest provenance active sites for derived datasets (e.g. TrpB parent Tm9D8*)
+    prov = raw_data.get("veritasbio_provenance", {})
+    if prov.get("active_site_positions"):
+        for p in prov["active_site_positions"]:
+            if p not in binding_positions:
+                binding_positions.append(p)
+
+    # Protein-specific canonical falls backs
+    if accession == "P42212":
+        if not chromophore_residues:
+            chromophore_residues = [65, 66, 67]
+        if not catalytic_positions:
+            catalytic_positions = [66, 67]
+        if not binding_positions:
+            binding_positions = [64, 65, 68, 203, 206, 222]
+        pdb_id = pdb_id or "1EMA"
+    elif accession in ("TRPB_TM9D8", "P50909"):
+        if not catalytic_positions:
+            catalytic_positions = [83]  # Invariant PLP-binding lysine
+        if not binding_positions:
+            binding_positions = [183, 184, 227, 228]  # Saturated active site loops
+        pdb_id = pdb_id or "8EH0"
 
     return ProteinMetadata(
         accession=accession,
@@ -165,6 +232,10 @@ def parse_uniprot_response(raw_data: Dict[str, Any]) -> ProteinMetadata:
         sequence=sequence,
         length=length,
         chromophore_residues=sorted(chromophore_residues),
+        catalytic_positions=sorted(catalytic_positions),
+        binding_positions=sorted(binding_positions),
+        metal_binding_positions=sorted(metal_binding_positions),
+        pdb_id=pdb_id,
         functional_features=functional_features,
         mutagenesis_hotspots=mutagenesis_hotspots,
     )

@@ -844,46 +844,43 @@
         </div>
       </div>
 
-      <!-- SLIDE 5: Empirical Benchmark & Valuation Proof -->
+      <!-- SLIDE 5: Dual Empirical Benchmark & Valuation Proof -->
       <div class="slide" id="slide-5">
-        <span class="slide-tag">Empirical Benchmark Verification</span>
-        <h1 class="slide-title">Ground-Truth Proof: Sarkisyan 2016 Nature DMS</h1>
+        <span class="slide-tag">Dual Empirical Benchmark Verification</span>
+        <h1 class="slide-title">Ground-Truth Proof: TrpB (160k) & avGFP (51k)</h1>
         <p class="slide-subtitle">
-          Benchmarked directly against the gold-standard <strong>ProteinGym avGFP fluorescence landscape</strong>:
-          proven <strong>98.9% cloud compute reduction (91.8x efficiency)</strong>.
+          Benchmarked against <strong>Johnston et al. (Nature Chem 2024)</strong> complete $20^4$ TrpB active site
+          and <strong>Sarkisyan et al. (Nature 2016)</strong> avGFP DMS: proven <strong>98.6%–99.7% cloud compute savings</strong>.
         </p>
 
         <div style="margin-top: 0.5rem; text-align: center;">
-          <img src="scripts/benchmark_results.png" alt="VeritasBio Optimization Report"
+          <img src="scripts/benchmark_results.png" alt="VeritasBio Side-by-Side Optimization Report"
             style="width: 100%; max-height: 360px; object-fit: contain; border-radius: 12px; border: 1px solid var(--border-subtle); box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
         </div>
 
         <div class="grid-3" style="margin-top: 1.25rem;">
           <div class="card highlight">
-            <span class="pill pill-green">ACCURACY</span>
+            <span class="pill pill-green">TRPB ENRICHMENT</span>
             <div
               style="font-family:var(--font-code); font-size:1.5rem; font-weight:800; color:#00f0ff; margin-top:0.3rem;">
-              ρ = +0.9718</div>
-            <p class="card-desc" style="margin-top:0.2rem;">Spearman rank correlation with ground-truth experimental
-              fluorescence (p = 9.72e-13).</p>
+              45.0x Fold</div>
+            <p class="card-desc" style="margin-top:0.2rem;">Enrichment vs. random screening on complete 159,999-member landscape; 43.5% of draws in top 1%.</p>
           </div>
 
           <div class="card purple">
-            <span class="pill pill-purple">SAVINGS</span>
+            <span class="pill pill-purple">CLOUD SAVINGS</span>
             <div
               style="font-family:var(--font-code); font-size:1.5rem; font-weight:800; color:#c084fc; margin-top:0.3rem;">
-              98.9% Saved</div>
-            <p class="card-desc" style="margin-top:0.2rem;">$0.0002 spend vs. $0.0184 equivalent brute-force screening
-              cost.</p>
+              99.7% Saved</div>
+            <p class="card-desc" style="margin-top:0.2rem;">$0.0028 spend vs. $0.9852 brute force (351.9x to 563.0x cheaper) via micro-USD spend gating.</p>
           </div>
 
           <div class="card emerald">
-            <span class="pill pill-cyan">DISCOVERY</span>
+            <span class="pill pill-cyan">LEAD ATTAINED</span>
             <div
               style="font-family:var(--font-code); font-size:1.5rem; font-weight:800; color:#10b981; margin-top:0.3rem;">
-              T203F:E222G</div>
-            <p class="card-desc" style="margin-top:0.2rem;">Located synergistic double mutant with +1.2818 fitness
-              within 2 active learning rounds.</p>
+              80.1% – 89.9%</div>
+            <p class="card-desc" style="margin-top:0.2rem;">Attained 80.1% of global optimum in TrpB (0.8005) and 89.9% in GFP (M153T) under 200 measurements.</p>
           </div>
         </div>
       </div>

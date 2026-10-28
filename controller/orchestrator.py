@@ -55,7 +55,11 @@ from controller.prompts import (
 )
 from ledger import database as ledger_db
 from workers.esm_worker import score_variants
-from workers.math_worker import SelectedBatch, select_next_micro_batch
+from workers.math_worker import (
+    SelectedBatch,
+    extract_mutations_from_sequence,
+    select_next_micro_batch,
+)
 from workers.mock_workers import MockLLMWorker
 from workers.rag_worker import ProteinMetadata, fetch_protein_metadata
 
@@ -70,10 +74,25 @@ class OrchestratorConfig(BaseModel):
     budget_id: int = Field(default=ledger_db.DEFAULT_BUDGET_ID, ge=1)
     max_iterations: int = Field(default=10, ge=1, le=100, description="Hard cap on loop rounds (D8)")
     batch_size: int = Field(default=25, ge=1, le=500, description="Variants per micro-batch (20-30 saturates A10G parallel tensors)")
+    cold_start_batch_size: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=500,
+        description="Cold-start micro-batch size to amortize container spin-up overhead (defaults to 2x batch_size, capped at 64)",
+    )
     target_model: str = Field(default="esm2_650m", description="esm2_650m, esm2_150m, or mock_esm")
     db_path: Optional[str] = Field(default=None, description="Path to ledger SQLite file")
     use_mock_llm: bool = Field(default=True, description="Default True to prevent accidental credit burning")
     enable_live_llm: bool = Field(default=False, description="Explicit opt-in required to invoke live Meta API")
+    enable_regret_stopping: bool = Field(default=True, description="Enable Bayesian regret early stopping when pool EI converges")
+    regret_stopping_threshold: float = Field(default=0.005, description="Pool EI threshold below which convergence is flagged")
+    regret_patience: int = Field(default=2, description="Consecutive rounds with EI below threshold before terminating")
+    enable_stagnation_stopping: bool = Field(default=True, description="Enable fitness plateau stagnation stopping")
+    stagnation_patience: int = Field(default=3, description="Consecutive rounds without fitness improvement before stopping")
+    stagnation_epsilon: float = Field(default=0.001, description="Minimum improvement threshold to reset stagnation counter")
+    enable_pocket_hopping: bool = Field(default=True, description="Enable hierarchical pocket-hopping across coupled spatial clusters")
+    max_hops: int = Field(default=2, description="Maximum pocket transitions per campaign")
+    enable_dynamic_batch_sizing: bool = Field(default=False, description="Enable budget-aware dynamic micro-batch scaling")
 
 
 class OrchestratorEvent(BaseModel):
@@ -114,6 +133,7 @@ class Orchestrator:
         self.db_path: Optional[Path] = Path(self.config.db_path) if self.config.db_path else None
         self.gatekeeper = Gatekeeper(db_path=self.db_path)
         self.mock_llm = MockLLMWorker()
+        self.last_metadata: Optional[ProteinMetadata] = None
         self._http_session: Optional[requests.Session] = None
 
     @property
@@ -188,6 +208,7 @@ class Orchestrator:
         metadata: ProteinMetadata,
         round_number: int,
         top_evidence: Optional[List[Dict[str, Any]]],
+        current_hop: int = 0,
     ) -> SearchStrategy:
         """Step 2: Obtains SearchStrategy JSON from Meta Model API or fallback Mock."""
         live_opt_in = self.config.enable_live_llm or (os.getenv("ENABLE_LIVE_LLM", "").lower() in ("true", "1"))
@@ -197,13 +218,20 @@ class Orchestrator:
         if live_opt_in and not self.config.use_mock_llm and api_key:
             try:
                 model_name = "muse-spark-1.3" if api_key.startswith("LLM_") else "Llama 3.1/3.3"
-                logger.info("Querying Meta Model API (%s) for Round %d strategy...", model_name, round_number)
+                logger.info("Querying Meta Model API (%s) for Round %d (Hop %d) strategy...", model_name, round_number, current_hop)
                 sys_prompt = get_strategy_system_prompt()
                 user_prompt = build_strategy_user_prompt(
                     protein_summary=metadata.to_llm_summary(),
                     round_number=round_number,
                     top_evidence=top_evidence,
+                    protein_metadata=metadata,
                 )
+                if current_hop >= 1:
+                    user_prompt += (
+                        f"\n\n[HIERARCHICAL POCKET-HOPPING ACTIVE — HOP {current_hop}]: "
+                        f"Pocket 1 has converged. Shift target cluster to secondary interacting pocket "
+                        f"and enable multi-point coupling (max_mutation_depth 4)."
+                    )
                 raw_json = self._call_llama_api(sys_prompt, user_prompt)
                 return parse_strategy_response(raw_json, sequence_length=metadata.length)
             except Exception as exc:
@@ -213,7 +241,12 @@ class Orchestrator:
                 )
 
         # Default fallback: Mock worker (zero credit burn)
-        return self.mock_llm.generate_strategy(metadata, round_number=round_number, top_evidence=top_evidence)
+        return self.mock_llm.generate_strategy(
+            metadata,
+            round_number=round_number,
+            top_evidence=top_evidence,
+            current_hop=current_hop,
+        )
 
     def run_stream(self) -> Iterator[OrchestratorEvent]:
         """
@@ -246,18 +279,30 @@ class Orchestrator:
         )
 
         metadata = fetch_protein_metadata(self.config.target_accession, use_cache=True)
+        self.last_metadata = metadata
         wt_sequence = metadata.sequence
+
+        if metadata.chromophore_residues:
+            feature_desc = f"Fluorophore at residues {metadata.chromophore_residues}."
+        elif metadata.catalytic_positions:
+            feature_desc = f"Catalytic sites at residues {metadata.catalytic_positions}."
+        else:
+            feature_desc = f"Scaffold length {len(wt_sequence)} AAs."
 
         yield OrchestratorEvent(
             iteration=0,
             step="init",
-            message=f"Target: {metadata.protein_name} ({len(wt_sequence)} AAs). Chromophore at residues {metadata.chromophore_residues}.",
+            message=f"Target: {metadata.protein_name} ({len(wt_sequence)} AAs). {feature_desc}",
             remaining_budget_usd=rem_usd,
             cumulative_spent_usd=spent_usd,
         )
 
         round_num = 1
         stop_reason = "max_iterations"
+        consecutive_low_regret = 0
+        consecutive_stagnation = 0
+        prev_best_fitness = -1e9
+        current_hop = 0
 
         while round_num <= self.config.max_iterations:
             rem_usd = ledger_db.get_remaining_budget(self.config.budget_id, self.db_path)
@@ -287,26 +332,149 @@ class Orchestrator:
                 current_job_id=job_id,
             )
 
-            strategy = self._generate_strategy(metadata, round_num, top_evidence_sorted)
+            strategy = self._generate_strategy(metadata, round_num, top_evidence_sorted, current_hop=current_hop)
 
             # -----------------------------------------------------------------
             # Step 3: Quant Selection (Gaussian Process Expected Improvement)
             # -----------------------------------------------------------------
+            # Gap B: Dynamic micro-batch sizing to amortize cold container spin-up overhead
+            if self.config.enable_dynamic_batch_sizing:
+                rounds_left = max(1, self.config.max_iterations - round_num + 1)
+                cost_per_var = 0.00000612 if "150m" in str(self.config.target_model) else 0.00001000
+                budget_per_round = rem_usd / rounds_left
+                affordable_batch = int(budget_per_round / max(cost_per_var, 1e-7))
+                effective_batch_size = max(self.config.batch_size, min(150, affordable_batch))
+                sizing_note = f" (Budget-aware scaled: {effective_batch_size} variants across {rounds_left} remaining rounds)"
+            else:
+                is_cold = (not self.gatekeeper.is_warm and self.config.target_model != "mock_esm") or (
+                    self.config.cold_start_batch_size is not None and round_num == 1
+                )
+                if is_cold and round_num == 1:
+                    effective_batch_size = self.config.cold_start_batch_size or min(self.config.batch_size * 2, 64)
+                    sizing_note = f" (Cold boot detected: scaled to {effective_batch_size} variants to amortize overhead)"
+                else:
+                    effective_batch_size = self.config.batch_size
+                    sizing_note = ""
+
             yield OrchestratorEvent(
                 iteration=round_num,
                 step="selection",
-                message=f"Round {round_num}: Fitting GP model & evaluating Expected Improvement over clusters...",
+                message=f"Round {round_num}: Sizing batch to {effective_batch_size} variants{sizing_note}. Fitting GP model & evaluating Expected Improvement...",
                 remaining_budget_usd=rem_usd,
                 cumulative_spent_usd=spent_usd,
                 current_job_id=job_id,
             )
 
+            # Resolve PDB structure file if available
+            pdb_path = None
+            if metadata.pdb_id:
+                candidate_pdb = Path(__file__).resolve().parent.parent / "workers" / "data" / f"{metadata.pdb_id}.pdb"
+                if candidate_pdb.exists():
+                    pdb_path = candidate_pdb
+
             selected_batch = select_next_micro_batch(
                 strategy=strategy,
                 wt_sequence=wt_sequence,
                 evidence=recent_evidence,
-                batch_size=self.config.batch_size,
+                batch_size=effective_batch_size,
+                catalytic_invariants=set(metadata.catalytic_positions),
+                pdb_path=pdb_path,
             )
+
+            # -----------------------------------------------------------------
+            # Step 3b: 3D Biomechanical Spatial & Steric Clash Pre-Filter
+            # -----------------------------------------------------------------
+            try:
+                from workers.spatial_filter import filter_spatially_viable_variants
+                candidate_notations = [v.notation for v in selected_batch.variants]
+                viable_notations, pruned_items = filter_spatially_viable_variants(
+                    candidate_notations,
+                    pdb_path=pdb_path,
+                    catalytic_invariants=set(metadata.catalytic_positions),
+                )
+                if pruned_items:
+                    viable_set = set(viable_notations)
+                    filtered_variants = [v for v in selected_batch.variants if v.notation in viable_set]
+                    filtered_eis = [
+                        ei for v, ei in zip(selected_batch.variants, selected_batch.expected_improvements)
+                        if v.notation in viable_set
+                    ]
+                    # Maintain batch throughput if viable variants exist
+                    if len(filtered_variants) >= min(5, len(selected_batch.variants) // 2):
+                        selected_batch.variants = filtered_variants
+                        selected_batch.expected_improvements = filtered_eis
+                    logger.info(
+                        "3D Spatial Filter screened %d variants in Round %d (%d viable, %d pruned)",
+                        len(selected_batch.variants), round_num, len(filtered_variants), len(pruned_items),
+                    )
+            except Exception as spatial_err:
+                logger.debug("Spatial filter check skipped: %s", spatial_err)
+
+            # -----------------------------------------------------------------
+            # Step 3c: Enterprise Improvement 3: Bayesian Regret Stopping
+            # -----------------------------------------------------------------
+            max_pool_ei = (
+                selected_batch.max_pool_ei
+                if selected_batch.max_pool_ei is not None
+                else (max(selected_batch.expected_improvements) if selected_batch.expected_improvements else 0.0)
+            )
+            if self.config.enable_regret_stopping and round_num >= 3:
+                if max_pool_ei < self.config.regret_stopping_threshold:
+                    consecutive_low_regret += 1
+                    logger.info(
+                        "Round %d: Max pool EI %.6f below threshold %.4f (patience: %d/%d)",
+                        round_num, max_pool_ei, self.config.regret_stopping_threshold,
+                        consecutive_low_regret, self.config.regret_patience,
+                    )
+                    if consecutive_low_regret >= self.config.regret_patience:
+                        # Check if hierarchical pocket hopping can sweep a coupled secondary pocket
+                        if (
+                            self.config.enable_pocket_hopping
+                            and current_hop < self.config.max_hops
+                            and rem_usd > 0.05
+                        ):
+                            ev_list = ledger_db.get_evidence(db_path=self.db_path)
+                            if ev_list:
+                                best_ev = max(ev_list, key=lambda e: float(e["computed_score"]))
+                                b_seq = best_ev["variant_sequence"]
+                                b_score = float(best_ev["computed_score"])
+                                b_muts = extract_mutations_from_sequence(b_seq, wt_sequence)
+                                if b_muts:
+                                    current_hop += 1
+                                    consecutive_low_regret = 0
+                                    consecutive_stagnation = 0
+                                    prev_best_fitness = b_score
+                                    lead_str = ":".join(m.to_string() for m in b_muts)
+                                    hop_msg = (
+                                        f"Round {round_num}: POCKET HOP {current_hop}/{self.config.max_hops}! "
+                                        f"Regret saturated on pocket {current_hop}. Locking lead anchor {lead_str} "
+                                        f"(score: {b_score:.4f}) and sweeping coupled spatial pocket..."
+                                    )
+                                    logger.info(hop_msg)
+                                    yield OrchestratorEvent(
+                                        iteration=round_num,
+                                        step="strategy",
+                                        message=hop_msg,
+                                        remaining_budget_usd=rem_usd,
+                                        cumulative_spent_usd=spent_usd,
+                                        current_job_id=job_id,
+                                        top_variants=sorted(ev_list, key=lambda e: float(e["computed_score"]), reverse=True)[:5],
+                                    )
+                                    round_num += 1
+                                    continue
+
+                        stop_reason = "converged_regret_threshold"
+                        logger.info("Bayesian regret stopping triggered: %s", stop_reason)
+                        yield OrchestratorEvent(
+                            iteration=round_num,
+                            step="halted",
+                            message=f"Round {round_num} STOPPED EARLY: converged_regret_threshold (Max pool EI {max_pool_ei:.5f} < {self.config.regret_stopping_threshold}). Budget preserved.",
+                            remaining_budget_usd=rem_usd,
+                            cumulative_spent_usd=spent_usd,
+                        )
+                        break
+                else:
+                    consecutive_low_regret = 0
 
             # -----------------------------------------------------------------
             # Step 4: Authorization (Deterministic Gatekeeper)
@@ -401,16 +569,82 @@ class Orchestrator:
 
             all_evidence = ledger_db.get_evidence(db_path=self.db_path)
             sorted_all = sorted(all_evidence, key=lambda e: float(e["computed_score"]), reverse=True)
+            current_best = float(sorted_all[0]["computed_score"]) if sorted_all else 0.0
 
             yield OrchestratorEvent(
                 iteration=round_num,
                 step="update",
-                message=f"Round {round_num} COMPLETED: Recorded {len(results_pairs)} scores. Top fitness to date: {float(sorted_all[0]['computed_score']):.4f}",
+                message=f"Round {round_num} COMPLETED: Recorded {len(results_pairs)} scores. Top fitness to date: {current_best:.4f}",
                 remaining_budget_usd=rem_after_spend,
                 cumulative_spent_usd=spent_after_spend,
                 current_job_id=job_id,
                 top_variants=sorted_all[:5],
             )
+
+            # Check stagnation stopping after round 3
+            if self.config.enable_stagnation_stopping and round_num >= 4:
+                improvement = current_best - prev_best_fitness
+                if improvement < self.config.stagnation_epsilon:
+                    consecutive_stagnation += 1
+                    logger.info(
+                        "Round %d: Fitness improvement %.6f below stagnation epsilon %.4f (patience: %d/%d)",
+                        round_num, improvement, self.config.stagnation_epsilon,
+                        consecutive_stagnation, self.config.stagnation_patience,
+                    )
+                    if consecutive_stagnation >= self.config.stagnation_patience:
+                        # Check if hierarchical pocket hopping can sweep a coupled secondary pocket
+                        if (
+                            self.config.enable_pocket_hopping
+                            and current_hop < self.config.max_hops
+                            and rem_after_spend > 0.05
+                        ):
+                            ev_list = ledger_db.get_evidence(db_path=self.db_path)
+                            if ev_list:
+                                best_ev = max(ev_list, key=lambda e: float(e["computed_score"]))
+                                b_seq = best_ev["variant_sequence"]
+                                b_score = float(best_ev["computed_score"])
+                                b_muts = extract_mutations_from_sequence(b_seq, wt_sequence)
+                                if b_muts:
+                                    current_hop += 1
+                                    consecutive_stagnation = 0
+                                    consecutive_low_regret = 0
+                                    prev_best_fitness = b_score
+                                    lead_str = ":".join(m.to_string() for m in b_muts)
+                                    hop_msg = (
+                                        f"Round {round_num}: POCKET HOP {current_hop}/{self.config.max_hops}! "
+                                        f"Plateau reached on pocket {current_hop}. Locking lead anchor {lead_str} "
+                                        f"(score: {b_score:.4f}) and sweeping coupled spatial pocket..."
+                                    )
+                                    logger.info(hop_msg)
+                                    yield OrchestratorEvent(
+                                        iteration=round_num,
+                                        step="strategy",
+                                        message=hop_msg,
+                                        remaining_budget_usd=rem_after_spend,
+                                        cumulative_spent_usd=spent_after_spend,
+                                        current_job_id=job_id,
+                                        top_variants=sorted_all[:5],
+                                    )
+                                    round_num += 1
+                                    continue
+
+                        stop_reason = "converged_fitness_plateau"
+                        logger.info("Fitness plateau stopping triggered: %s", stop_reason)
+                        yield OrchestratorEvent(
+                            iteration=round_num,
+                            step="halted",
+                            message=f"Round {round_num} STOPPED EARLY: converged_fitness_plateau (No improvement > {self.config.stagnation_epsilon} for {self.config.stagnation_patience} consecutive rounds). Budget preserved.",
+                            remaining_budget_usd=rem_after_spend,
+                            cumulative_spent_usd=spent_after_spend,
+                            current_job_id=job_id,
+                            top_variants=sorted_all[:5],
+                        )
+                        break
+                else:
+                    consecutive_stagnation = 0
+                    prev_best_fitness = current_best
+            else:
+                prev_best_fitness = max(prev_best_fitness, current_best)
 
             round_num += 1
 
@@ -450,7 +684,7 @@ class Orchestrator:
         best_ev = max(all_ev, key=lambda e: float(e["computed_score"])) if all_ev else None
 
         return OrchestratorSummary(
-            target_protein="avGFP",
+            target_protein=self.last_metadata.protein_name if self.last_metadata else "Target Protein",
             target_accession=self.config.target_accession,
             iterations_completed=last_event.iteration if last_event else 0,
             total_budget_usd=self.config.total_budget_usd,

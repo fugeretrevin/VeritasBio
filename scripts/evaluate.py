@@ -67,6 +67,9 @@ class BenchmarkMetrics(BaseModel):
     best_discovered_variant: str
     best_discovered_score: float
     best_ground_truth_score: float
+    global_ground_truth_optimum: float = Field(default=1.0, description="Highest fitness score in the ground-truth benchmark library")
+    global_optimum_variant: str = Field(default="", description="Variant with the global maximum fitness in the library")
+    pct_of_optimum_attained: float = Field(default=0.0, description="Percentage of global library optimum achieved by best discovered variant")
 
 
 def sequence_to_mutation_str(wt_seq: str, mut_seq: str) -> str:
@@ -134,6 +137,7 @@ def evaluate_run(
     db_path: Optional[str] = None,
     benchmark_path: Optional[str] = None,
     wt_sequence: Optional[str] = None,
+    target_name: str = "avGFP",
     total_candidate_universe_size: int = 2000,
     a10g_gpu_seconds_per_variant: float = 0.02,
     a10g_usd_per_second: float = 0.000306,
@@ -144,8 +148,9 @@ def evaluate_run(
 
     Args:
         db_path: Path to the SQLite ledger database.
-        benchmark_path: Path to the ground-truth benchmark JSON.
+        benchmark_path: Path to the ground-truth benchmark JSON/CSV.
         wt_sequence: WT sequence for sequence-to-mutation conversion. Defaults to avGFP.
+        target_name: Name of target protein (e.g. 'avGFP' or 'TrpB').
         total_candidate_universe_size: Assumed combinatorial search space size.
         a10g_gpu_seconds_per_variant: Inference seconds per variant for cost model.
         a10g_usd_per_second: Hourly $1.10 rate = $0.000306/sec.
@@ -154,9 +159,22 @@ def evaluate_run(
     Returns:
         BenchmarkMetrics object containing all evaluation metrics.
     """
+    t_lower = (target_name or "").lower()
+    is_trpb = (
+        "trpb" in t_lower
+        or "tryptophan" in t_lower
+        or "tm9d8" in t_lower
+        or target_name == "TRPB_TM9D8"
+    )
+    if is_trpb:
+        if benchmark_path is None:
+            benchmark_path = str(Path(__file__).parent / "data" / "TRPB_THEMA_Johnston_2024.csv")
+        total_candidate_universe_size = 159_999
+
     if wt_sequence is None:
         try:
-            meta = fetch_protein_metadata("P42212")
+            target_acc = "TRPB_TM9D8" if is_trpb else "P42212"
+            meta = fetch_protein_metadata(target_acc, use_cache=True)
             wt_sequence = meta.sequence
         except Exception:
             wt_sequence = ""
@@ -185,7 +203,7 @@ def evaluate_run(
             pairs.append((seq, score, ground_truth[seq], job_id))
         elif mut_str == "WT":
             pairs.append((mut_str, score, 0.0, job_id))
-        else:
+        elif "gfp" in str(target_name).lower() or target_name == "P42212":
             try:
                 from controller.gatekeeper import Variant
                 from workers.mock_workers import compute_mock_gfp_fitness
@@ -243,9 +261,12 @@ def evaluate_run(
     efficiency_multiple = bf_cost / max(1e-6, actual_spent)
 
     best_pair = max(pairs, key=lambda p: p[1]) if pairs else ("WT", 0.0, 0.0, "")
+    global_optimum_score = float(max(ground_truth.values())) if ground_truth else 1.0
+    global_opt_variant = max(ground_truth, key=ground_truth.get) if ground_truth else ""
+    pct_optimum = (best_pair[2] / max(1e-6, global_optimum_score)) * 100.0 if global_optimum_score > 0 else 0.0
 
     return BenchmarkMetrics(
-        target="avGFP",
+        target=target_name,
         total_ledger_evidence=len(all_evidence),
         matched_benchmark_variants=len(pairs),
         spearman_rho=rho,
@@ -262,6 +283,9 @@ def evaluate_run(
         best_discovered_variant=best_pair[0],
         best_discovered_score=best_pair[1],
         best_ground_truth_score=best_pair[2],
+        global_ground_truth_optimum=global_optimum_score,
+        global_optimum_variant=global_opt_variant,
+        pct_of_optimum_attained=pct_optimum,
     )
 
 
@@ -270,8 +294,10 @@ def print_report(metrics: BenchmarkMetrics) -> None:
     separator = "=" * 68
     sub_sep = "-" * 68
 
-    print("\n" + separator)
-    print(" VERITASBIO BENCHMARK EVALUATION REPORT (Sarkisyan et al. GFP DMS)")
+    t_lower = (metrics.target or "").lower()
+    is_trpb = "trpb" in t_lower or "tryptophan" in t_lower or "tm9d8" in t_lower
+    bench_label = "Johnston et al. TrpB Active-Site" if is_trpb else "Sarkisyan et al. GFP DMS"
+    print(f" VERITASBIO BENCHMARK EVALUATION REPORT ({bench_label})")
     print(separator)
     print(f"Target Protein:                {metrics.target}")
     print(f"Ledger Evidence Records:       {metrics.total_ledger_evidence}")
@@ -284,6 +310,8 @@ def print_report(metrics: BenchmarkMetrics) -> None:
     print(f"   [+] Enrichment vs. Random Search:     {metrics.enrichment_vs_random:.2f}x fold")
     print(f"   [+] Best Discovered Variant:          {metrics.best_discovered_variant}")
     print(f"   [+] Model Score / Ground Truth:       {metrics.best_discovered_score:.4f} / {metrics.best_ground_truth_score:.4f}")
+    print(f"   [+] True Library Global Optimum:      {metrics.global_ground_truth_optimum:.4f} ({metrics.global_optimum_variant})")
+    print(f"   [+] Pct of Optimum Attained:          {metrics.pct_of_optimum_attained:.1f}%")
     print(sub_sep)
     print(" 2. DETERMINISTIC CLOUD ECONOMICS & ROI")
     print(f"   [*] Total Compute Spent:              ${metrics.total_spent_usd:.4f}")

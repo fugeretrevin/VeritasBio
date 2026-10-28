@@ -137,55 +137,95 @@ Candidates are selected not merely by predicted fitness, but by Expected Improve
 
 ---
 
-## 5. Quickstart Guide
+## 5. User & Dashboard Guide: How to Run VeritasBio
 
-### Installation
+VeritasBio can be run in two modes: an **Interactive Web Dashboard** (Gradio) for real-time visualization and parameter tuning, and a **Production CLI Pipeline** for automated benchmark campaigns.
 
-```bash
-git clone https://github.com/fugeretrevin/VeritasBio.git
-cd VeritasBio
+### A. Running the Interactive Web UI
 
-# Create virtual environment (Python 3.11 recommended)
-python -m venv .venv
-.venv\Scripts\activate   # On Windows
-# source .venv/bin/activate # On Linux/macOS
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Running the Interactive Web UI
-Launch the real-time Gradio telemetry dashboard:
-
+Launch the local server:
 ```bash
 python main.py
 ```
-Open your browser to `http://127.0.0.1:7860`. The dashboard streams live round-by-round active learning progression, remaining budget gauges, top candidate rankings, and an audit trail.
+Open your browser to **`http://127.0.0.1:7860`**.
 
-### Running Headless CLI Mode
-For autonomous automated batch execution:
+#### Dashboard Controls & Parameters Explained
 
+| Control | Description & Recommended Setting |
+| :--- | :--- |
+| **Target Accession** | UniProt accession ID. Default: `P42212` (avGFP) or `TRPB_TM9D8` (TrpB). The RAG worker automatically retrieves sequence, catalytic sites, and 3D PDB structure. |
+| **Total Budget ($ USD)** | Hard financial ceiling enforced by the SQLite ledger. Even if 12 rounds are requested, the engine **hard-stops** the moment budget is exhausted. Recommended: `$1.00` to `$5.00`. |
+| **Max Iterations / Rounds** | Maximum active-learning iterations. The engine automatically terminates earlier if regret converges or fitness plateaus. Recommended: `8` to `12`. |
+| **Batch Size** | Base batch size per round. With **Dynamic Budget-Aware Sizing**, the engine automatically scales batch throughput up to 150–250 variants if budget permits, preventing idle funds. |
+| **Target Model** | **`mock_esm`**: Free, high-fidelity local simulation (zero cloud cost).<br>**`esm2_150m`**: Meta FAIR ESM-2 150M on Modal A10G (Tier-1 fast screening, ~$0.000006/variant).<br>**`esm2_650m`**: Meta FAIR ESM-2 650M on Modal A10G (Tier-2 high precision, ~$0.000018/variant). |
+| **Strategic Planner** | **`Live Meta Llama 3.1`**: Queries Meta Model API in strict JSON mode to formulate biophysical hypotheses.<br>**`Mock Strategic Planner`**: Uses rule-based domain annotations offline. |
+| **Adaptive Regret Stopping** | When enabled, monitors Expected Improvement ($\text{EI}$). If $\max \text{EI} < 0.005$ for 2 rounds, the engine halts to preserve unspent budget. |
+| **Fitness Plateau Exit** | When enabled, halts execution if top fitness fails to improve by $>0.001$ over 3 consecutive rounds after round 3. |
+| **Hierarchical Pocket-Hopping** | When enabled, decomposes multi-residue active sites into sub-pockets. When Pocket 1 saturates, locks the discovered lead as an anchor and sweeps the secondary pocket. |
+| **3D Spatial $\Delta\Delta G$ Pre-Filter**| Pre-screens candidates before GPU spend to eliminate core volume clashes, buried uncompensated charges, and proline backbone kinks. |
+
+#### Dashboard Outputs & Visualizations
+- **Live Event Stream**: Real-time ticker showing each of the 6 steps (RAG $\to$ Llama $\to$ Quant $\to$ Gatekeeper $\to$ Modal $\to$ Ledger).
+- **Interactive 3D Viewer (3Dmol.js)**: Visualizes the macromolecular PDB backbone with catalytic active-site residues highlighted in red and exploration pockets in cyan.
+- **Fitness Landscape Plot**: Live convergence curve showing top fitness gains and Expected Improvement decay.
+- **Top Discovered Variants Table**: Discovered mutations, model scores, and synthesizability scores.
+- **Layer 7 Physical Wet-Lab Exports**: Instant download buttons for Twist/IDT order CSVs, Opentrons OT-2 pipetting scripts, and FDA 21 CFR Part 11 SHA-256 certificates.
+
+---
+
+### B. Running Benchmarks with Datasets (One-Line CLI Commands)
+
+#### 1. Dual Production Benchmark (TrpB + avGFP Side-by-Side)
+Runs the complete production pipeline across both targets, saves evidence to SQLite ledgers, evaluates against empirical datasets, and generates comparison tables and publication plots:
 ```bash
-python main.py --cli --budget 2.00 --iterations 5 --batch-size 10 --model mock_esm
+python scripts/run_side_by_side_benchmarks.py
 ```
 
-### Benchmarking & Metrics
-Evaluate ledger discoveries against the Sarkisyan 2016 Nature DMS dataset:
-
+#### 2. Target-Specific Active Learning Campaign ($1.00 Budget)
+Runs an autonomous campaign on TrpB or avGFP and automatically outputs Twist/IDT synthesis CSVs and Opentrons OT-2 protocols:
 ```bash
-# Print formatted terminal report
-python scripts/evaluate.py --db ledger/veritasbio_ledger.db
+# Run TrpB active site (160k variants)
+python scripts/run_full_dollar_experiment.py --target TRPB_TM9D8 --budget 1.00 --rounds 12
 
-# Output raw JSON metrics
-python scripts/evaluate.py --db ledger/veritasbio_ledger.db --json
-
-# Generate publication-quality visualization charts
-python scripts/plot_benchmark.py --db ledger/veritasbio_ledger.db --out scripts/benchmark_results.png
+# Run avGFP full barrel (51k variants)
+python scripts/run_full_dollar_experiment.py --target P42212 --budget 1.00 --rounds 12
 ```
 
-### Running the Complete Test Suite
-VeritasBio includes 50 comprehensive unit tests covering all 6 phases:
+#### 3. Closed-Loop Simulation on TrpB Empirical Landscape (Johnston 2024)
+Evaluates real experimental fitness from 159,999 measured variants with held-out Spearman correlation and enrichment vs. random screening:
+```bash
+# Prepare dataset first
+python scripts/download_trpb_benchmark.py
 
+# Run benchmark (takes ~15s on full 159,999 library)
+python scripts/run_trpb_benchmark.py --rounds 5 --batch-size 25
+
+# Optional: Fast demo mode subsampling 3,000 candidates
+python scripts/run_trpb_benchmark.py --rounds 5 --pool-size 3000
+```
+
+#### 4. Evaluating Any Custom Dataset or Run
+To evaluate any completed ledger against ground-truth ProteinGym or custom DMS CSVs:
+```bash
+python scripts/evaluate.py --db ledger/dollar_live_trpb_tm9d8.db --benchmark scripts/data/TRPB_THEMA_Johnston_2024.csv
+```
+
+#### 5. Generating Publication Benchmark Plots
+Renders side-by-side or target-specific publication figures:
+```bash
+# Side-by-side comparison figure
+python scripts/plot_benchmark.py --side-by-side --out scripts/benchmark_results.png
+
+# Target-specific figures
+python scripts/plot_benchmark.py --target trpb --out scripts/benchmark_trpb.png
+python scripts/plot_benchmark.py --target avgfp --out scripts/benchmark_avgfp.png
+```
+
+---
+
+### C. Running the Complete Test Suite
+
+VeritasBio includes 99 automated unit tests covering all 7 layers:
 ```bash
 python -m unittest discover -s tests -v
 ```

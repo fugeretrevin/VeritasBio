@@ -75,16 +75,27 @@ def format_jobs_table(jobs: List[Dict[str, Any]]) -> List[List[Any]]:
     return rows
 
 
-def format_evidence_table(evidence: List[Dict[str, Any]]) -> List[List[Any]]:
-    """Formats top evidence for the Gradio Dataframe."""
+def format_evidence_table(
+    evidence: List[Dict[str, Any]],
+    wt_sequence: Optional[str] = None,
+) -> List[List[Any]]:
+    """Formats top evidence for the Gradio Dataframe with human-readable mutation notation."""
     sorted_ev = sorted(evidence, key=lambda e: float(e["computed_score"]), reverse=True)
     rows = []
     for rank, ev in enumerate(sorted_ev[:35], 1):
         seq = ev.get("variant_sequence", "")
-        display_seq = f"{seq[:14]}...{seq[-8:]}" if len(seq) > 26 else seq
+        if wt_sequence and len(seq) == len(wt_sequence):
+            if seq == wt_sequence:
+                display_mut = "WT (Reference Parent)"
+            else:
+                mut_list = [f"{wc}{i+1}{vc}" for i, (wc, vc) in enumerate(zip(wt_sequence, seq)) if wc != vc]
+                display_mut = ":".join(mut_list) if mut_list else "WT"
+        else:
+            display_mut = f"{seq[:10]}...{seq[-6:]}" if len(seq) > 16 else seq
+
         rows.append([
             rank,
-            display_seq,
+            display_mut,
             f"{float(ev.get('computed_score', 0.0)):.4f}",
             ev.get("job_id", ""),
             ev.get("timestamp", ""),
@@ -255,10 +266,21 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             with gr.Column(scale=4, min_width=280):
                 with gr.Group():
                     gr.Markdown("### Autonomous Search Controls")
-                    input_protein = gr.Textbox(
-                        label="Target Protein Accession",
-                        value="P42212 (Aequorea victoria avGFP)",
-                        interactive=False,
+                    input_target = gr.Dropdown(
+                        label="Target Protein Benchmark",
+                        choices=[
+                            "TRPB_TM9D8 (Tryptophan Synthase Beta · 160K DMS)",
+                            "P42212 (avGFP Fluorescent Protein · 54K DMS)",
+                            "Custom UniProt Accession",
+                        ],
+                        value="TRPB_TM9D8 (Tryptophan Synthase Beta · 160K DMS)",
+                        info="Select validated empirical DMS benchmark or custom protein",
+                    )
+                    input_custom_accession = gr.Textbox(
+                        label="Custom UniProt Accession ID",
+                        value="TRPB_TM9D8",
+                        placeholder="e.g. P50909, P42212, P00552",
+                        visible=False,
                     )
                     input_budget = gr.Slider(
                         label="Compute Budget Allocation ($ USD)",
@@ -275,12 +297,20 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                         value=5,
                     )
                     input_batch_size = gr.Slider(
-                        label="Micro-Batch Size (Variants per Loop)",
+                        label="Micro-Batch Size (Warm Keep-Alive)",
                         minimum=5,
                         maximum=100,
                         step=5,
                         value=25,
-                        info="Optimal GPU saturation: 20-30 variants parallelized per forward pass",
+                        info="Agile micro-batches during warm keep-alive (20-30 variants parallelized)",
+                    )
+                    input_cold_batch = gr.Slider(
+                        label="Cold-Start Batch Size (Gap B Amortization)",
+                        minimum=10,
+                        maximum=100,
+                        step=5,
+                        value=48,
+                        info="Larger Round 1 micro-batch to amortize the 25s container spin-up penalty",
                     )
                     input_model = gr.Dropdown(
                         label="Foundation Inference Model",
@@ -322,16 +352,16 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 with gr.Tabs():
 
                     # TAB 1: 3D Crystal Structure Viewer (3Dmol.js)
-                    with gr.TabItem("3D Crystal Structure (PDB: 1EMA)"):
+                    with gr.TabItem("3D Crystal Structure (Interactive 3Dmol.js)"):
                         viewer_3d = gr.HTML(
-                            value=generate_3d_viewer_html([65, 66, 163, 203]),
+                            value=generate_3d_viewer_html(target_accession="TRPB_TM9D8"),
                             label="Interactive 3D Protein Structure",
                         )
 
                     # TAB 2: Top Discovered Variants Table
                     with gr.TabItem("Top Discovered Variants"):
                         table_variants = gr.Dataframe(
-                            headers=["Rank", "Variant Sequence", "Fitness Score", "Job ID", "Timestamp"],
+                            headers=["Rank", "Mutations", "Fitness Score", "Job ID", "Timestamp"],
                             datatype=["number", "str", "str", "str", "str"],
                             interactive=False,
                             wrap=True,
@@ -379,7 +409,38 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
         # ---------------------------------------------------------------------
         # Event Handlers & Streaming Generator
         # ---------------------------------------------------------------------
-        def on_refresh() -> Tuple[float, float, float, str, str, List[List[Any]], List[List[Any]], Any, Optional[str]]:
+        def resolve_effective_target(target_choice: str, custom_acc: str) -> Tuple[str, str]:
+            choice_str = str(target_choice).upper()
+            if "TRPB" in choice_str:
+                acc = "TRPB_TM9D8"
+            elif "P42212" in choice_str or "GFP" in choice_str:
+                acc = "P42212"
+            else:
+                custom_clean = str(custom_acc).strip()
+                acc = custom_clean if custom_clean else "TRPB_TM9D8"
+
+            try:
+                meta = fetch_protein_metadata(acc)
+                seq = meta.sequence
+            except Exception:
+                seq = default_wt_seq
+            return acc, seq
+
+        def on_target_change(choice: str, current_custom: str) -> Tuple[Any, str, str]:
+            is_custom = "Custom" in choice
+            eff_acc, _ = resolve_effective_target(choice, current_custom)
+            html_3d = generate_3d_viewer_html(target_accession=eff_acc)
+            status = f"● Active target switched to: {eff_acc}"
+            return gr.update(visible=is_custom), html_3d, status
+
+        input_target.change(
+            fn=on_target_change,
+            inputs=[input_target, input_custom_accession],
+            outputs=[input_custom_accession, viewer_3d, status_box],
+        )
+
+        def on_refresh(target_choice: str, custom_acc: str) -> Tuple[float, float, float, str, str, List[List[Any]], List[List[Any]], Any, Any, Optional[str]]:
+            eff_acc, wt_seq = resolve_effective_target(target_choice, custom_acc)
             rem = ledger_db.get_remaining_budget(db_path=db_path)
             jobs = ledger_db.list_jobs(db_path=db_path)
             evidence = ledger_db.get_evidence(db_path=db_path)
@@ -388,22 +449,22 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             top_fit = max([float(e["computed_score"]) for e in evidence], default=0.0)
             plot_file = str(BENCHMARK_PLOT_PATH) if BENCHMARK_PLOT_PATH.is_file() else None
 
-            # Calculate capital saved multiplier
-            brute_force_cost = 0.4427
+            # Calculate capital saved multiplier against target benchmark baseline
+            brute_force_cost = 0.9852 if "trpb" in eff_acc.lower() else 0.4427
             savings_mult = round(brute_force_cost / max(spent, 0.0001), 1)
             saved_str = f"99.5% ({savings_mult}x Cheaper)" if spent > 0 else "99.5% (184.3x Cheaper)"
 
-            mut_positions = extract_mutated_positions_from_evidence(evidence, default_wt_seq)
-            html_3d = generate_3d_viewer_html(mut_positions)
-            fig_landscape = generate_landscape_figure(evidence, wt_sequence=default_wt_seq)
+            mut_positions = extract_mutated_positions_from_evidence(evidence, wt_seq)
+            html_3d = generate_3d_viewer_html(mut_positions, target_accession=eff_acc)
+            fig_landscape = generate_landscape_figure(evidence, wt_sequence=wt_seq)
 
             return (
                 round(rem, 4),
                 round(spent, 4),
                 round(top_fit, 4),
                 saved_str,
-                f"Ledger synced: {len(jobs)} jobs, {len(evidence)} evidence entries.",
-                format_evidence_table(evidence),
+                f"Ledger synced for {eff_acc}: {len(jobs)} jobs, {len(evidence)} evidence entries.",
+                format_evidence_table(evidence, wt_sequence=wt_seq),
                 format_jobs_table(jobs),
                 html_3d,
                 fig_landscape,
@@ -411,18 +472,23 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             )
 
         def stream_orchestrator(
+            target_choice: str,
+            custom_acc: str,
             budget_val: float,
             iter_cap: int,
             batch_sz: int,
+            cold_batch_sz: int,
             target_mdl: str,
             enable_live_llm_val: bool = False,
-        ) -> Iterator[Tuple[float, float, float, str, str, str, List[List[Any]], List[List[Any]], Any, Optional[str]]]:
+        ) -> Iterator[Tuple[float, float, float, str, str, str, List[List[Any]], List[List[Any]], Any, Any, Optional[str]]]:
             """Streams live events using Python generator yields."""
+            eff_acc, wt_seq = resolve_effective_target(target_choice, custom_acc)
             config = OrchestratorConfig(
-                target_accession="P42212",
+                target_accession=eff_acc,
                 total_budget_usd=budget_val,
                 max_iterations=iter_cap,
                 batch_size=batch_sz,
+                cold_start_batch_size=cold_batch_sz,
                 target_model=target_mdl,
                 db_path=db_path,
                 use_mock_llm=not enable_live_llm_val,
@@ -432,6 +498,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             orchestrator = Orchestrator(config)
             accumulated_logs: List[str] = []
             plot_file = str(BENCHMARK_PLOT_PATH) if BENCHMARK_PLOT_PATH.is_file() else None
+            brute_force_cost = 0.9852 if "trpb" in eff_acc.lower() else 0.4427
 
             for event in orchestrator.run_stream():
                 accumulated_logs.append(f"[{event.step.upper():12s}] {event.message}")
@@ -442,23 +509,22 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 top_fit = max([float(e["computed_score"]) for e in evidence], default=0.0)
 
                 # Savings metric
-                brute_force_cost = 0.4427
                 spent_now = event.cumulative_spent_usd
                 savings_mult = round(brute_force_cost / max(spent_now, 0.0001), 1)
                 saved_str = f"99.5% ({savings_mult}x Cheaper)" if spent_now > 0 else "99.5% (184.3x Cheaper)"
 
-                mut_positions = extract_mutated_positions_from_evidence(evidence, default_wt_seq)
-                html_3d = generate_3d_viewer_html(mut_positions)
-                fig_landscape = generate_landscape_figure(evidence, wt_sequence=default_wt_seq)
+                mut_positions = extract_mutated_positions_from_evidence(evidence, wt_seq)
+                html_3d = generate_3d_viewer_html(mut_positions, target_accession=eff_acc)
+                fig_landscape = generate_landscape_figure(evidence, wt_sequence=wt_seq)
 
                 yield (
                     round(event.remaining_budget_usd, 4),
                     round(event.cumulative_spent_usd, 4),
                     round(top_fit, 4),
                     saved_str,
-                    f"● Round {event.iteration} — {event.step.upper()}",
+                    f"● Round {event.iteration} — {event.step.upper()} ({eff_acc})",
                     log_str,
-                    format_evidence_table(evidence),
+                    format_evidence_table(evidence, wt_sequence=wt_seq),
                     format_jobs_table(jobs),
                     html_3d,
                     fig_landscape,
@@ -466,31 +532,39 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 )
 
         # Wet-Lab Action Handlers
-        def on_gen_twist() -> str:
+        def on_gen_twist(target_choice: str, custom_acc: str) -> str:
+            eff_acc, wt_seq = resolve_effective_target(target_choice, custom_acc)
             evidence = ledger_db.get_evidence(db_path=db_path)
             sorted_ev = sorted(evidence, key=lambda e: float(e["computed_score"]), reverse=True)[:50]
             if not sorted_ev:
-                sorted_ev = [{"variant_sequence": default_wt_seq, "computed_score": 0.0}]
-            return generate_twist_order_csv(sorted_ev)
+                sorted_ev = [{"variant_sequence": wt_seq, "computed_score": 0.0}]
+            return generate_twist_order_csv(sorted_ev, protein_name=eff_acc)
 
-        def on_gen_robot() -> str:
+        def on_gen_robot(target_choice: str, custom_acc: str) -> str:
+            eff_acc, wt_seq = resolve_effective_target(target_choice, custom_acc)
             evidence = ledger_db.get_evidence(db_path=db_path)
             sorted_ev = sorted(evidence, key=lambda e: float(e["computed_score"]), reverse=True)[:96]
-            names = [f"GFP_Var_{i:02d}" for i in range(1, len(sorted_ev) + 1)]
+            prefix = "TRPB" if "trpb" in eff_acc.lower() else "GFP"
+            names = [f"{prefix}_Var_{i:02d}" for i in range(1, len(sorted_ev) + 1)]
             if not names:
-                names = ["GFP_WT_Control", "GFP_Var_01_S65T", "GFP_Var_02_T203Y"]
-            return generate_opentrons_protocol(names)
+                names = [f"{prefix}_WT_Control", f"{prefix}_Var_01", f"{prefix}_Var_02"]
+            return generate_opentrons_protocol(names, target_protein=eff_acc)
 
-        def on_gen_cert() -> str:
-            cert = generate_cryptographic_audit_certificate(db_path=Path(db_path) if db_path else None)
+        def on_gen_cert(target_choice: str, custom_acc: str) -> str:
+            eff_acc, _ = resolve_effective_target(target_choice, custom_acc)
+            cert = generate_cryptographic_audit_certificate(
+                target_protein=eff_acc,
+                db_path=Path(db_path) if db_path else None,
+            )
             return json.dumps(cert, indent=4)
 
-        btn_gen_twist.click(fn=on_gen_twist, outputs=[wetlab_output])
-        btn_gen_robot.click(fn=on_gen_robot, outputs=[wetlab_output])
-        btn_gen_cert.click(fn=on_gen_cert, outputs=[wetlab_output])
+        btn_gen_twist.click(fn=on_gen_twist, inputs=[input_target, input_custom_accession], outputs=[wetlab_output])
+        btn_gen_robot.click(fn=on_gen_robot, inputs=[input_target, input_custom_accession], outputs=[wetlab_output])
+        btn_gen_cert.click(fn=on_gen_cert, inputs=[input_target, input_custom_accession], outputs=[wetlab_output])
 
         btn_refresh.click(
             fn=on_refresh,
+            inputs=[input_target, input_custom_accession],
             outputs=[
                 metric_rem_budget,
                 metric_spent,
@@ -507,7 +581,16 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
 
         btn_start.click(
             fn=stream_orchestrator,
-            inputs=[input_budget, input_iterations, input_batch_size, input_model, check_live_llm],
+            inputs=[
+                input_target,
+                input_custom_accession,
+                input_budget,
+                input_iterations,
+                input_batch_size,
+                input_cold_batch,
+                input_model,
+                check_live_llm,
+            ],
             outputs=[
                 metric_rem_budget,
                 metric_spent,

@@ -91,6 +91,32 @@ class TestInnovations(unittest.TestCase):
         self.assertIsNotNone(fig)
         self.assertEqual(fig.layout.paper_bgcolor, "#0b1329")
 
+    def test_structural_surrogate_term(self) -> None:
+        """Verifies fast zero-cost structural surrogate scoring (Gap C)."""
+        from workers.spatial_filter import compute_structural_surrogate_score
+        # Catalytic invariant mutation should get heavy negative penalty
+        score_bad = compute_structural_surrogate_score("Y66A", catalytic_invariants={66, 67})
+        self.assertLess(score_bad, -4.0)
+
+        # Contact pair close in space (< 8.5 A) should receive valid score
+        score_pair = compute_structural_surrogate_score("S65T:T203Y")
+        self.assertIsInstance(score_pair, float)
+
+    def test_dynamic_3d_viewer_trpb(self) -> None:
+        """Verifies 3D structure viewer renders 8EH0 for TrpB (Gap D)."""
+        html_str = generate_3d_viewer_html(target_accession="TRPB_TM9D8")
+        self.assertIn("<iframe srcdoc=", html_str)
+        self.assertIn("8EH0", html_str)
+        self.assertIn("TIM-Barrel", html_str)
+        self.assertIn("Lys83", html_str)
+
+    def test_gap_b_cold_start_batch_sizing(self) -> None:
+        """Verifies dynamic cold-start batch sizing configuration in Orchestrator (Gap B)."""
+        from controller.orchestrator import OrchestratorConfig
+        config = OrchestratorConfig(batch_size=20, cold_start_batch_size=50)
+        self.assertEqual(config.batch_size, 20)
+        self.assertEqual(config.cold_start_batch_size, 50)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -277,6 +277,13 @@ class Gatekeeper:
         self.db_path: Optional[Path] = Path(db_path) if db_path else None
         self._last_execution_time: Optional[float] = None
 
+    @property
+    def is_warm(self) -> bool:
+        """Indicates whether the cloud GPU container is currently within its warm keep-alive window."""
+        if self._last_execution_time is None:
+            return False
+        return (time.time() - self._last_execution_time) <= self.config.idle_timeout_sec
+
     def calculate_cost(
         self,
         variant_count: int,

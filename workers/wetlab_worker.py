@@ -75,6 +75,7 @@ def generate_twist_order_csv(
     top_variants: List[Dict[str, Any]],
     price_per_bp: float = 0.09,
     vector_name: str = "pET-28a(+)_N-His",
+    protein_name: str = "avGFP",
 ) -> str:
     """
     Generates a production-ready CSV string compatible with Twist Bioscience and IDT
@@ -98,6 +99,13 @@ def generate_twist_order_csv(
         "Estimated_Synthesis_USD",
     ])
 
+    if "gfp" in protein_name.lower():
+        prefix = "GFP"
+    elif "trpb" in protein_name.lower() or "tryptophan" in protein_name.lower():
+        prefix = "TRPB"
+    else:
+        prefix = "".join(c for c in protein_name[:4] if c.isalnum()).upper() or "PROT"
+
     for i, var in enumerate(top_variants, 1):
         prot_seq = var.get("variant_sequence", "")
         mut_desc = var.get("mutations", f"Variant_{i:03d}")
@@ -109,11 +117,11 @@ def generate_twist_order_csv(
         gc_pct = round((gc_count / length_bp) * 100, 1) if length_bp > 0 else 50.0
         est_cost = round(length_bp * price_per_bp, 2)
         
-        gene_id = f"VB-GFP-{i:03d}_{mut_desc.replace(':', '_')}"
+        gene_id = f"VB-{prefix}-{i:03d}_{mut_desc.replace(':', '_')}"
 
         writer.writerow([
             gene_id,
-            "avGFP",
+            protein_name,
             mut_desc,
             f"{score:.4f}",
             cdna,
@@ -131,6 +139,7 @@ def generate_twist_order_csv(
 def generate_opentrons_protocol(
     variant_names: List[str],
     plate_type: str = "corning_96_wellplate_360ul_flat",
+    target_protein: str = "Target Protein",
 ) -> str:
     """
     Auto-generates an executable Python script for Opentrons OT-2 robots
@@ -141,7 +150,7 @@ def generate_opentrons_protocol(
 
     script_template = f'''# Opentrons OT-2 Automated Mutagenesis Assembly Protocol
 # Generated automatically by VeritasBio Wet-Lab Translator on {now_iso}
-# Target: Aequorea victoria GFP Variant Library (96-well format)
+# Target: {target_protein} Variant Library (96-well format)
 
 from opentrons import protocol_api
 
@@ -196,6 +205,7 @@ def run(protocol: protocol_api.ProtocolContext):
 
 def generate_cryptographic_audit_certificate(
     db_path: Optional[Path] = None,
+    target_protein: str = "Aequorea victoria GFP (UniProt P42212)",
 ) -> Dict[str, Any]:
     """
     Generates an FDA 21 CFR Part 11 compliant audit certificate.
@@ -231,7 +241,7 @@ def generate_cryptographic_audit_certificate(
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "ledger_hash_sha256": audit_digest,
         "standard_compliance": "FDA 21 CFR Part 11 / GAMP 5 Immutability Verified",
-        "target_protein": "Aequorea victoria GFP (UniProt P42212)",
+        "target_protein": target_protein,
         "total_budget_usd": alloc_usd,
         "total_spent_usd": spent_usd,
         "total_jobs_authorized": len([j for j in jobs if j.get("status") in ("APPROVED", "COMPLETED")]),
