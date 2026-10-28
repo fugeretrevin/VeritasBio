@@ -121,6 +121,10 @@ def run_dollar_experiment(
     bench_csv = None
     if "trpb" in target_accession.lower():
         bench_csv = str(ROOT_DIR / "scripts" / "data" / "TRPB_THEMA_Johnston_2024.csv")
+    elif "gb1" in target_accession.lower() or "spg1" in target_accession.lower():
+        bench_csv = str(ROOT_DIR / "scripts" / "data" / "GB1_STRSG_Wu_2016.csv")
+    elif "trastuzumab" in target_accession.lower() or "her2" in target_accession.lower():
+        bench_csv = str(ROOT_DIR / "scripts" / "data" / "HER2_TRASTUZUMAB_Mason_2021.csv")
     elif "p42212" in target_accession.lower() or "gfp" in target_accession.lower():
         bench_csv = str(ROOT_DIR / "scripts" / "data" / "GFP_AEQVI_Sarkisyan_2016.csv")
 
