@@ -1266,6 +1266,22 @@ def compute_biological_prior(
         if pair.issubset(mut_set):
             score += bonus
 
+    # Universal biophysical pair physics: salt bridges & electrostatic repulsion
+    if len(variant.mutations) >= 2:
+        basic_aas = {"K", "R"}
+        acidic_aas = {"D", "E"}
+        for i, j in itertools.combinations(range(len(variant.mutations)), 2):
+            m1, m2 = variant.mutations[i], variant.mutations[j]
+            seq_sep = abs(m1.position - m2.position)
+            # Proximal pair (within 10 sequence residues or in adjacent loop turns)
+            if seq_sep <= 10:
+                # Salt bridge: basic + acidic
+                if (m1.mut_aa in basic_aas and m2.mut_aa in acidic_aas) or (m1.mut_aa in acidic_aas and m2.mut_aa in basic_aas):
+                    score += 0.25
+                # Electrostatic clash: like charges in close proximity
+                elif (m1.mut_aa in basic_aas and m2.mut_aa in basic_aas) or (m1.mut_aa in acidic_aas and m2.mut_aa in acidic_aas):
+                    score -= 0.30
+
     # 2. Add single-mutation biological effects and catalytic penalties
     for m in variant.mutations:
         notation = m.to_string()
@@ -1529,13 +1545,16 @@ def select_next_micro_batch(
     # Reconstruct full predicted fitness: mu(x) = m(x) + mu_res(x)
     cand_priors = np.array(
         [
-            prior_mean_fn(c, catalytic_invariants=invariants_set, pdb_path=pdb_path)
-            if hasattr(prior_mean_fn, "__code__") and "pdb_path" in prior_mean_fn.__code__.co_varnames
-            else (
-                prior_mean_fn(c, catalytic_invariants=invariants_set)
-                if hasattr(prior_mean_fn, "__code__") and "catalytic_invariants" in prior_mean_fn.__code__.co_varnames
-                else prior_mean_fn(c)
+            (
+                prior_mean_fn(c, catalytic_invariants=invariants_set, pdb_path=pdb_path)
+                if hasattr(prior_mean_fn, "__code__") and "pdb_path" in prior_mean_fn.__code__.co_varnames
+                else (
+                    prior_mean_fn(c, catalytic_invariants=invariants_set)
+                    if hasattr(prior_mean_fn, "__code__") and "catalytic_invariants" in prior_mean_fn.__code__.co_varnames
+                    else prior_mean_fn(c)
+                )
             )
+            + compute_mechanistic_cot_bonus(c, getattr(strategy, "mechanistic_hypotheses", None))
             for c in novel_candidates
         ] if prior_mean_fn else [0.0] * len(novel_candidates),
         dtype=np.float64,
