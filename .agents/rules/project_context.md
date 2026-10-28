@@ -65,10 +65,13 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
 - [x] `scripts/evaluate.py`, `scripts/data/sarkisyan_gfp_benchmark.json` (ProteinGym DMS benchmark & cloud economics metrics, 6 unit tests passing).
 - [x] Wet-lab translation & enterprise innovations: `workers/wetlab_worker.py`, `ui/structure_viewer.py`, `ui/landscape_plot.py` (codon optimization, Twist/IDT CSV, Opentrons OT-2 script, FDA 21 CFR Part 11 audit certificate, 3Dmol WebGL, 6 unit tests passing).
 - [x] Iterative lead maturation & epistatic synergy: `workers/math_worker.py`, `controller/gatekeeper.py`, `workers/mock_workers.py` (lead recombination, sequence-to-variant parsing, round-progressive directed evolution).
-- [x] Full test discovery passing: 60/60 unit tests across all test suites.
+- [x] Full test discovery passing: 117/117 unit tests across all test suites in 17.8s.
 - [x] TrpB second benchmark: `scripts/download_trpb_benchmark.py`, `scripts/run_trpb_benchmark.py`,
       `tests/test_trpb_benchmark.py` (159,999 empirical variants, dataset-integrity assertions,
       held-out evaluation + random-screening baseline, 8 unit tests passing).
+- [x] Enterprise hardening & biologics developability: `workers/math_worker.py`, `workers/wetlab_worker.py`,
+      `tests/test_enterprise_hardening.py` (Heteroscedastic Gaussian Process with replicate variance,
+      therapeutic antibody developability liability scoring, 96/384-well anti-edge evaporation barrier plate layout).
 
 ## Open questions (ask the user when relevant)
 - Numeric constants for D3: A10G $/sec, GPU-seconds/variant, cold-start seconds.
