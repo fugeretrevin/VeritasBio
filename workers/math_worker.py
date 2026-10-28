@@ -239,7 +239,7 @@ def greedy_dpp_sample(
         return list(range(n_total))
 
     # Pre-filter to the top candidates by quality to bound matrix size
-    cand_pool_size = min(n_total, max_candidates_to_consider)
+    cand_pool_size = min(n_total, max(max_candidates_to_consider, batch_size * 4))
     top_indices = np.argsort(quality_scores)[::-1][:cand_pool_size]
 
     sub_q = np.maximum(quality_scores[top_indices], 1e-6)
@@ -1495,7 +1495,7 @@ def select_next_micro_batch(
             target_aas=["T", "Y", "L", "K", "A", "R", "D", "E", "G", "V", "F", "S", "H", "N", "Q"],
             wt_sequence=wt_sequence,
             reward_fn=gfn_reward,
-            n_candidates=min(250, batch_size * 5),
+            n_candidates=max(250, min(1000, batch_size * 5)),
             max_mutations=max_gfn_depth,
             catalytic_invariants=invariants_set,
             temperature=annealed_temp,
@@ -1579,8 +1579,9 @@ def select_next_micro_batch(
     # Improvement 2: Multi-Objective Pareto Optimization Engine
     # Bounds matrix computation to top 1,000 candidates to guarantee < 100ms runtime and < 25 MB RAM
     n_cands = len(novel_candidates)
-    if n_cands > 1000:
-        prelim_top = np.argsort(acquisition_scores)[::-1][:1000]
+    pareto_pool_limit = max(1000, batch_size * 4)
+    if n_cands > pareto_pool_limit:
+        prelim_top = np.argsort(acquisition_scores)[::-1][:pareto_pool_limit]
         sub_cands = [novel_candidates[i] for i in prelim_top]
         sub_means = means[prelim_top]
         sub_priors = cand_priors[prelim_top]

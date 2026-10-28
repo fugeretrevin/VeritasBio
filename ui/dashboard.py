@@ -33,7 +33,7 @@ except ImportError:
 import gradio as gr
 
 from controller.gatekeeper import Variant
-from controller.orchestrator import Orchestrator, OrchestratorConfig, OrchestratorEvent
+from controller.orchestrator import CampaignMode, Orchestrator, OrchestratorConfig, OrchestratorEvent
 from ledger import database as ledger_db
 from ui.landscape_plot import generate_landscape_figure
 from ui.structure_viewer import generate_3d_viewer_html
@@ -42,6 +42,7 @@ from workers.rag_worker import fetch_protein_metadata
 from workers.wetlab_worker import (
     generate_cryptographic_audit_certificate,
     generate_opentrons_protocol,
+    generate_plate_layout,
     generate_twist_order_csv,
 )
 
@@ -400,6 +401,12 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                         step=1,
                         value=5,
                     )
+                    input_campaign_mode = gr.Dropdown(
+                        label="Campaign Modality (Gap 2)",
+                        choices=["In-Silico Rapid (B=25)", "Plate-Scale Wet-Lab (96-Well, B=56/88)", "Plate-Scale Wet-Lab (384-Well, B=308)"],
+                        value="In-Silico Rapid (B=25)",
+                        info="Fast cloud simulation or plate-scale robotic wet-lab batching",
+                    )
                     input_batch_size = gr.Slider(
                         label="Micro-Batch Size (Warm Keep-Alive)",
                         minimum=5,
@@ -503,6 +510,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                         with gr.Row():
                             btn_gen_twist = gr.Button("Export Twist / IDT Order Sheet (CSV)", elem_classes=["btn-action"])
                             btn_gen_robot = gr.Button("Export Opentrons OT-2 Script (.py)", elem_classes=["btn-action"])
+                            btn_gen_layout = gr.Button("Export 96-Well Plate Layout (CSV)", elem_classes=["btn-action"])
                             btn_gen_cert = gr.Button("Generate FDA 21 CFR Part 11 Audit Certificate", elem_classes=["btn-action"])
 
                         wetlab_output = gr.Code(
@@ -606,6 +614,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             custom_acc: str,
             budget_val: float,
             iter_cap: int,
+            campaign_mode_val: str,
             batch_sz: int,
             cold_batch_sz: int,
             target_mdl: str,
@@ -617,6 +626,12 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             eff_acc, wt_seq = resolve_effective_target(target_choice, custom_acc)
             # If user explicitly selected a cascade model in dropdown, also enable cascade flag
             is_cascade = enable_cascade_val or ("cascade" in target_mdl.lower())
+            camp_mode = (
+                CampaignMode.PLATE_SCALE_CRO
+                if "Plate-Scale" in str(campaign_mode_val)
+                else CampaignMode.IN_SILICO_RAPID
+            )
+            plt_fmt = "384_well" if "384" in str(campaign_mode_val) else "96_well"
             config = OrchestratorConfig(
                 target_accession=eff_acc,
                 total_budget_usd=budget_val,
@@ -629,6 +644,9 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 enable_live_llm=enable_live_llm_val,
                 enable_cloud_cascade=is_cascade,
                 enable_lead_refinement=enable_refinement_val,
+                campaign_mode=camp_mode,
+                plate_format=plt_fmt,
+                anti_edge_barrier=True,
             )
 
             orchestrator = Orchestrator(config)
@@ -691,6 +709,26 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 names = [f"{prefix}_WT_Control", f"{prefix}_Var_01", f"{prefix}_Var_02"]
             return generate_opentrons_protocol(names, target_protein=eff_acc)
 
+        def on_gen_layout(target_choice: str, custom_acc: str) -> str:
+            eff_acc, wt_seq = resolve_effective_target(target_choice, custom_acc)
+            evidence = ledger_db.get_evidence(db_path=db_path)
+            sorted_ev = sorted(evidence, key=lambda e: float(e["computed_score"]), reverse=True)[:56]
+            var_dicts = [
+                {
+                    "mutations": f"{eff_acc}_Var_{i+1:02d}",
+                    "variant_sequence": ev.get("variant_sequence"),
+                    "computed_score": ev.get("computed_score"),
+                }
+                for i, ev in enumerate(sorted_ev)
+            ]
+            layout = generate_plate_layout(
+                variants=var_dicts,
+                plate_format="96_well",
+                anti_edge_barrier=True,
+                wt_name=f"{eff_acc} WT",
+            )
+            return layout.get("csv_layout", "")
+
         def on_gen_cert(target_choice: str, custom_acc: str) -> str:
             eff_acc, _ = resolve_effective_target(target_choice, custom_acc)
             try:
@@ -707,6 +745,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
 
         btn_gen_twist.click(fn=on_gen_twist, inputs=[input_target, input_custom_accession], outputs=[wetlab_output])
         btn_gen_robot.click(fn=on_gen_robot, inputs=[input_target, input_custom_accession], outputs=[wetlab_output])
+        btn_gen_layout.click(fn=on_gen_layout, inputs=[input_target, input_custom_accession], outputs=[wetlab_output])
         btn_gen_cert.click(fn=on_gen_cert, inputs=[input_target, input_custom_accession], outputs=[wetlab_output])
 
         btn_refresh.click(
@@ -734,6 +773,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 input_custom_accession,
                 input_budget,
                 input_iterations,
+                input_campaign_mode,
                 input_batch_size,
                 input_cold_batch,
                 input_model,

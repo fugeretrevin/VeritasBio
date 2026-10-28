@@ -68,10 +68,18 @@ from workers.math_worker import (
     generate_hamming1_lead_neighbors,
     select_next_micro_batch,
 )
+from enum import Enum
 from workers.mock_workers import MockLLMWorker
 from workers.rag_worker import ProteinMetadata, fetch_protein_metadata
 
 logger = logging.getLogger(__name__)
+
+
+class CampaignMode(str, Enum):
+    """Execution modality for protein engineering campaigns (Gap 2)."""
+
+    IN_SILICO_RAPID = "in_silico_rapid"  # Micro-batches (B=10-25), 6-8 rounds, live streaming UI
+    PLATE_SCALE_CRO = "plate_scale_cro"  # Plate batches (B=56/88/308), k-DPP diversity, wet-lab export & async ingestion
 
 
 class OrchestratorConfig(BaseModel):
@@ -143,6 +151,33 @@ class OrchestratorConfig(BaseModel):
         le=10,
         description="Number of top positive and negative residual outliers to reflect upon",
     )
+    campaign_mode: Union[CampaignMode, str] = Field(
+        default=CampaignMode.IN_SILICO_RAPID,
+        description="Campaign mode: 'in_silico_rapid' (micro-batches B=10-25, 6-8 rounds) or 'plate_scale_cro' (plate batches B=56/88/308, k-DPP diversity, wet-lab export & async ingestion)",
+    )
+    plate_format: str = Field(
+        default="96_well",
+        description="Plate format: '96_well' (56/88 variants) or '384_well' (308/368 variants)",
+    )
+    anti_edge_barrier: bool = Field(
+        default=True,
+        description="Reserve outer perimeter wells for 200uL sterile buffer hydration barrier against evaporation",
+    )
+    export_wetlab_artifacts: bool = Field(
+        default=True,
+        description="Export Twist synthesis CSV, Opentrons OT-2 script, and plate layout CSV",
+    )
+    pause_for_wetlab_ingestion: bool = Field(
+        default=False,
+        description="Pause orchestrator execution after generating plate layout to wait for empirical wet-lab plate reader ingestion",
+    )
+
+    def get_plate_candidate_capacity(self) -> int:
+        """Returns the number of candidate variant wells available in the chosen plate format."""
+        if str(self.plate_format).lower() == "384_well":
+            return 308 if self.anti_edge_barrier else 368
+        return 56 if self.anti_edge_barrier else 88
+
 
 
 def _apply_structural_filter(
@@ -245,6 +280,7 @@ class Orchestrator:
         self.mock_llm = MockLLMWorker()
         self.last_metadata: Optional[ProteinMetadata] = None
         self.last_reflection: Optional[ReflectionDiagnosis] = None
+        self.last_wetlab_artifacts: Optional[Dict[str, Any]] = None
         self._http_session: Optional[requests.Session] = None
 
     @property
@@ -509,8 +545,16 @@ class Orchestrator:
             # -----------------------------------------------------------------
             # Step 3: Quant Selection (Gaussian Process Expected Improvement)
             # -----------------------------------------------------------------
-            # Gap B: Dynamic micro-batch sizing to amortize cold container spin-up overhead
-            if self.config.enable_dynamic_batch_sizing:
+            # Gap 2: Plate-scale CRO batch sizing vs In-Silico Rapid micro-batches
+            is_plate_scale = (
+                self.config.campaign_mode == CampaignMode.PLATE_SCALE_CRO
+                or str(self.config.campaign_mode).lower() == "plate_scale_cro"
+            )
+
+            if is_plate_scale:
+                effective_batch_size = self.config.get_plate_candidate_capacity()
+                sizing_note = f" (Plate-scale CRO mode: {self.config.plate_format}, barrier={self.config.anti_edge_barrier} -> {effective_batch_size} variants via k-DPP diversity)"
+            elif self.config.enable_dynamic_batch_sizing:
                 rounds_left = max(1, self.config.max_iterations - round_num + 1)
                 cost_per_var = 0.00000612 if "150m" in str(self.config.target_model) else 0.00001000
                 budget_per_round = rem_usd / rounds_left
@@ -595,6 +639,72 @@ class Orchestrator:
                 )
             except Exception as spatial_err:
                 logger.debug("Spatial filter check skipped: %s", spatial_err)
+
+            # -----------------------------------------------------------------
+            # Step 3b.2: Wet-Lab Robotics & Synthesis Protocol Generation (Gap 2)
+            # -----------------------------------------------------------------
+            wetlab_artifacts: Dict[str, Any] = {}
+            if self.config.export_wetlab_artifacts or is_plate_scale:
+                try:
+                    from workers.wetlab_worker import (
+                        generate_plate_layout,
+                        generate_twist_order_csv,
+                        generate_opentrons_protocol,
+                    )
+                    variant_dicts = [
+                        {
+                            "mutations": v.notation,
+                            "variant_sequence": v.apply_to(wt_sequence),
+                            "computed_score": mu,
+                            "expected_improvement": ei,
+                        }
+                        for v, mu, ei in zip(
+                            selected_batch.variants,
+                            selected_batch.predicted_means,
+                            selected_batch.expected_improvements,
+                        )
+                    ]
+                    plate_layout = generate_plate_layout(
+                        variants=variant_dicts,
+                        plate_format=self.config.plate_format,
+                        anti_edge_barrier=self.config.anti_edge_barrier,
+                        wt_name=f"{metadata.protein_name} WT",
+                    )
+                    twist_csv = generate_twist_order_csv(
+                        top_variants=variant_dicts,
+                        protein_name=metadata.protein_name,
+                    )
+                    opentrons_script = generate_opentrons_protocol(
+                        variant_names=[v["mutations"] for v in variant_dicts],
+                        target_protein=metadata.protein_name,
+                        anti_edge_barrier=self.config.anti_edge_barrier,
+                    )
+                    wetlab_artifacts = {
+                        "plate_layout": plate_layout,
+                        "twist_order_csv": twist_csv,
+                        "opentrons_script": opentrons_script,
+                        "plate_csv": plate_layout.get("csv_layout", ""),
+                    }
+                    self.last_wetlab_artifacts = wetlab_artifacts
+                except Exception as wl_err:
+                    logger.warning("Wet-lab artifact generation failed: %s", wl_err)
+
+            # If configured to pause for physical assay ingestion, yield event and halt
+            if is_plate_scale and self.config.pause_for_wetlab_ingestion:
+                yield OrchestratorEvent(
+                    iteration=round_num,
+                    step="waiting_for_assay",
+                    message=(
+                        f"Round {round_num}: Assembled {len(selected_batch.variants)} variants onto "
+                        f"{self.config.plate_format} plate. Exported Twist CSV & Opentrons protocol. "
+                        f"Paused for wet-lab assay execution. Ingest results via scripts/ingest_plate_data.py."
+                    ),
+                    remaining_budget_usd=rem_usd,
+                    cumulative_spent_usd=spent_usd,
+                    current_job_id=job_id,
+                    decision={"wetlab_artifacts": wetlab_artifacts},
+                )
+                break
 
             # -----------------------------------------------------------------
             # Step 3c: Enterprise Improvement 3: Bayesian Regret Stopping
