@@ -1,0 +1,94 @@
+{
+  "primaryAccession": "SCFV_9004G_CN2",
+  "uniProtkbId": "SCFV_9004G_VH",
+  "proteinDescription": {
+    "recommendedName": {
+      "fullName": {
+        "value": "Neutralizing scFv 9004G Variable Heavy Domain (Anti-Centruroides noxius Cn2 Scorpion Neurotoxin)"
+      }
+    }
+  },
+  "organism": {
+    "scientificName": "Homo sapiens / Synthetic antivenom therapeutic antibody"
+  },
+  "sequence": {
+    "value": "EVQLVESGGGLVQPGGSLRLSCTGSGFTFDNYAMHWLRQVPGEGLEWVSGISRSSGDIDYADSVKGRFTISRDDAKKTLSLQMNSLRAEDTAVYYCARGGVGSFDTWGQGTMVTVSS",
+    "length": 117
+  },
+  "uniProtKBCrossReferences": [
+    {
+      "database": "PDB",
+      "id": "2YBR"
+    }
+  ],
+  "features": [
+    {
+      "type": "Domain",
+      "description": "Variable Heavy Domain (VH)",
+      "location": {
+        "start": { "value": 1 },
+        "end": { "value": 117 }
+      }
+    },
+    {
+      "type": "Binding site",
+      "description": "CDR-H1 antigen contact sphere against Cn2 neurotoxin",
+      "location": { "start": { "value": 31 }, "end": { "value": 35 } }
+    },
+    {
+      "type": "Binding site",
+      "description": "CDR-H2 antigen contact sphere against Cn2 neurotoxin",
+      "location": { "start": { "value": 50 }, "end": { "value": 58 } }
+    },
+    {
+      "type": "Binding site",
+      "description": "CDR-H3 core paratope residue 99G contacting Cn2 cleft",
+      "location": { "start": { "value": 99 }, "end": { "value": 99 } }
+    },
+    {
+      "type": "Binding site",
+      "description": "CDR-H3 core paratope residue 100G contacting Cn2 cleft",
+      "location": { "start": { "value": 100 }, "end": { "value": 100 } }
+    },
+    {
+      "type": "Binding site",
+      "description": "CDR-H3 core paratope residue 101V buried in Cn2 binding pocket (5.19 A)",
+      "location": { "start": { "value": 101 }, "end": { "value": 101 } }
+    },
+    {
+      "type": "Binding site",
+      "description": "CDR-H3 core paratope residue 102G buried in Cn2 binding pocket (5.27 A)",
+      "location": { "start": { "value": 102 }, "end": { "value": 102 } }
+    },
+    {
+      "type": "Binding site",
+      "description": "CDR-H3 core paratope residue 103S contacting Cn2 cleft",
+      "location": { "start": { "value": 103 }, "end": { "value": 103 } }
+    },
+    {
+      "type": "Binding site",
+      "description": "CDR-H3 paratope flanking residue 104F",
+      "location": { "start": { "value": 104 }, "end": { "value": 104 } }
+    },
+    {
+      "type": "Binding site",
+      "description": "CDR-H3 paratope flanking residue 105D",
+      "location": { "start": { "value": 105 }, "end": { "value": 105 } }
+    },
+    {
+      "type": "Binding site",
+      "description": "CDR-H3 paratope flanking residue 106T",
+      "location": { "start": { "value": 106 }, "end": { "value": 106 } }
+    },
+    {
+      "type": "Active site",
+      "description": "Canonical intra-domain framework disulfide C22-C96 (must be strictly preserved)",
+      "location": { "start": { "value": 22 }, "end": { "value": 22 } }
+    },
+    {
+      "type": "Active site",
+      "description": "Canonical intra-domain framework disulfide C22-C96 (must be strictly preserved)",
+      "location": { "start": { "value": 96 }, "end": { "value": 96 } }
+    }
+  ]
+}

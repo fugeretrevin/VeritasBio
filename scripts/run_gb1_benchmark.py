@@ -84,8 +84,9 @@ def run_gb1_active_learning(
     rounds: int = 5,
     batch_size: int = 25,
     pool_size: Optional[int] = None,
+    seed: Optional[int] = 42,
     db_path: Optional[str] = None,
-) -> Dict[str, float]:
+) -> Dict[str, Any]:
     """
     Executes an autonomous active-learning simulation on the empirical GB1 landscape.
 
@@ -94,6 +95,7 @@ def run_gb1_active_learning(
         rounds: Number of active learning iterations.
         batch_size: Variants evaluated per micro-batch.
         pool_size: Optional candidate subsample (seeded) for fast evaluation.
+        seed: Random seed for candidate sampling and GP model reproducibility.
         db_path: Optional custom path for the SQLite ledger.
     """
     db_file = db_path or (ROOT_DIR / "ledger" / "gb1_ledger.db")
@@ -116,7 +118,7 @@ def run_gb1_active_learning(
     meta = fetch_protein_metadata(PARENT_ACCESSION)
     wt_seq = meta.sequence
 
-    rng = random.Random(42)
+    rng = random.Random(seed) if seed is not None else random.Random()
     items = sorted(fitness_library.items())
     # Exclude WT from candidate mutation sampling if present
     items = [it for it in items if it[0] != "WT"]
@@ -170,7 +172,7 @@ def run_gb1_active_learning(
     logger.info("STARTING GB1 ACTIVE LEARNING LOOP (%d ROUNDS)", rounds)
     logger.info("==================================================")
 
-    gp_model = build_gp_model(random_state=42)
+    gp_model = build_gp_model(random_state=seed if seed is not None else 42)
 
     consecutive_low_ei = 0
     consecutive_stagnation = 0
@@ -305,7 +307,7 @@ def run_gb1_active_learning(
 
     # Random-screening baseline
     n_screened = len(evaluated_mutants)
-    baseline_rng = random.Random(1234)
+    baseline_rng = random.Random((seed + 1200) if seed is not None else 1234)
     baseline_hits: List[int] = []
     baseline_best: List[float] = []
     for _ in range(200):
@@ -378,6 +380,12 @@ if __name__ == "__main__":
         default=None,
         help="Subsample the candidate pool to N variants for a faster demo (default: all 149,361)",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for candidate sampling and GP model (default: 42)",
+    )
     args = parser.parse_args()
 
     run_gb1_active_learning(
@@ -385,4 +393,5 @@ if __name__ == "__main__":
         rounds=args.rounds,
         batch_size=args.batch_size,
         pool_size=args.pool_size,
+        seed=args.seed,
     )

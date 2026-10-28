@@ -239,6 +239,12 @@ def parse_uniprot_response(raw_data: Dict[str, Any]) -> ProteinMetadata:
         if not binding_positions:
             binding_positions = [99, 100, 101, 102, 103, 104, 105, 106, 107, 108]
         pdb_id = pdb_id or "1N8Z"
+    elif any(k in acc_upper for k in ("9004G", "CN2", "SCORPION", "2YBR")):
+        if not catalytic_positions:
+            catalytic_positions = [22, 96]  # Invariant intra-domain framework disulfide C22-C96
+        if not binding_positions:
+            binding_positions = [99, 100, 101, 102, 103, 104, 105, 106]  # CDR-H3 paratope loop
+        pdb_id = pdb_id or "2YBR"
 
     return ProteinMetadata(
         accession=accession,

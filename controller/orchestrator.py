@@ -113,6 +113,10 @@ class OrchestratorConfig(BaseModel):
         default=False,
         description="Enable multi-fidelity 150M screening -> 650M precision verification cascade",
     )
+    random_seed: Optional[int] = Field(
+        default=None,
+        description="Optional random seed for reproducibility across active learning rounds",
+    )
     cascade_top_k_ratio: float = Field(
         default=0.20,
         ge=0.01,
@@ -618,6 +622,7 @@ class Orchestrator:
                 batch_size=effective_batch_size,
                 catalytic_invariants=set(metadata.catalytic_positions),
                 pdb_path=pdb_path,
+                random_seed=(self.config.random_seed or 42) + round_num * 1000,
             )
 
             # -----------------------------------------------------------------

@@ -392,6 +392,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                             "TRPB_TM9D8 (Tryptophan Synthase Beta · 160K DMS)",
                             "SPG1_STRSG (Protein G GB1 · 150K Combinatorial DMS)",
                             "HER2_TRASTUZUMAB (Trastuzumab Antibody CDR-H3 · 38K DMS)",
+                            "SCFV_9004G_CN2 (Scorpion Antivenom scFv 9004G : Cn2 Toxin · 2YBR)",
                             "P42212 (avGFP Fluorescent Protein · 54K DMS)",
                             "Custom UniProt Accession",
                         ],
@@ -575,6 +576,8 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 acc = "SPG1_STRSG"
             elif "TRASTUZUMAB" in choice_str or "HER2" in choice_str or "HERCEPTIN" in choice_str:
                 acc = "HER2_TRASTUZUMAB"
+            elif "SCORPION" in choice_str or "CN2" in choice_str or "9004G" in choice_str or "2YBR" in choice_str:
+                acc = "SCFV_9004G_CN2"
             elif "P42212" in choice_str or "GFP" in choice_str:
                 acc = "P42212"
             else:

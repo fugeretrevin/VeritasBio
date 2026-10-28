@@ -64,6 +64,16 @@ def resolve_target_pdb_context(
             "CDR-H3 Hypervariable Loop (Residues 99-108)",
             "#ec4899",  # Rose pink
         )
+    elif any(k in acc_lower for k in ("scorpion", "cn2", "9004g", "2ybr")):
+        scorp_pdb = data_dir / "2YBR.pdb"
+        return (
+            scorp_pdb,
+            "3D Crystal Structure (PDB: 2YBR · 2.55 Å Complex)",
+            "Neutralizing scFv 9004G : Centruroides noxius Cn2 Scorpion Toxin Complex",
+            [99, 100, 101, 102, 103, 104, 105, 106],
+            "CDR-H3 Paratope Loop (Residues 99-106 GGVGSFDT · Blocks NaV Channel Interface)",
+            "#d97706",  # Amber gold
+        )
     elif any(k in acc_lower for k in ("trpb", "tm9d8", "tryptophan", "p50909")):
         trpb_pdb = data_dir / "8EH0.pdb"
         return (

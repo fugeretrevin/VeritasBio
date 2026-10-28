@@ -39,6 +39,7 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
 | D8 | Variants & stopping | Point/multi-point mutations as strings, e.g. `S65T:Y66H`, applied to the WT sequence. Loop stops on budget exhaustion **or** a hard **max-iteration cap**. |
 | D9 | Second benchmark | **TrpB** active-site landscape (Johnston et al. 2024), combinatorially complete 20⁴ at residues 183/184/227/228 of the engineered parent Tm9D8\*. Reference sequence is the **parent, not UniProt P50909** (they differ by 10 substitutions + a His-tag). Reported metrics are **held-out** $\rho$ and **enrichment vs. a random-screening baseline**, never in-sample fit alone. |
 | D10 | Target modality & commercial roadmap | **Therapeutic biologics first** (antibodies, nanobodies, binders, folding stability) for immediate go-to-market where ESM-2 and DKL GP natively attain proven $\rho \approx 0.80$ predictive skill. Unnatural catalytic enzyme adapters, enterprise value-based pricing, and live CRO lab execution staged for post-hackathon expansion. |
+| D11 | Scorpion Antivenom Neutralizing Engine | **Scorpion antivenom scaffold-based active learning** (`SCFV_9004G_CN2`, PDB: `2YBR`), targeting *Centruroides noxius* Cn2 neurotoxin. Solves antivenom development without de novo hallucination or $30k+ unguided brute force, discovering high-potency neutralizing leads under $0.01 compute with Twist CSV and Opentrons robot protocols. |
 
 ## Changes vs. the original v3.0 §6 (now reflected in ARCHITECTURE.md v3.1)
 - Money columns are `INTEGER` micro-USD instead of `float` (D1).
@@ -77,6 +78,10 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
       (FDA 21 CFR Part 11 cryptographic Merkle hash chain with HMAC-SHA256, schema immutability triggers,
       Benchling LIMS client with cDNA registration + virtual plate layout + manifest export,
       multi-tenant PostgreSQL schema with Row-Level Security, 8 unit tests passing, full suite 148/148 passing).
+- [x] Scorpion Antivenom Neutralizing Antibody Campaign: `workers/data/SCFV_9004G_CN2.json`, `workers/data/2YBR.pdb`,
+      `scripts/run_scorpion_antivenom_campaign.py`, `ui/structure_viewer.py`, `ui/dashboard.py`, `tests/test_scorpion_antivenom.py`
+      (Authentic PDB 2YBR Cα contact graph, CDR-H3 paratope active learning, biologics developability liability screening,
+      Twist cDNA CSV, Opentrons OT-2 neutralization protocol, FDA Part 11 certificate, 5 unit tests passing, full suite 153/153 passing).
 
 ## Open questions (ask the user when relevant)
 - Numeric constants for D3: A10G $/sec, GPU-seconds/variant, cold-start seconds.

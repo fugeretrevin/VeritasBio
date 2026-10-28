@@ -1330,6 +1330,7 @@ def select_next_micro_batch(
     acquisition_mode: str = "hybrid_thompson",
     catalytic_invariants: Optional[Set[int]] = None,
     pdb_path: Optional[Any] = None,
+    random_seed: Optional[int] = None,
 ) -> SelectedBatch:
     """
     Executes the Gaussian Process active learning selection (Phases 1-4):
@@ -1490,6 +1491,9 @@ def select_next_micro_batch(
         annealed_temp = max(0.65, float(1.60 * np.exp(-n_ev / 60.0)))
         logger.info("GFlowNet sampling with annealed temperature: %.3f (evidence N=%d)", annealed_temp, n_ev)
 
+        # Dynamic round seed ensures stochastic trajectory exploration across active learning rounds
+        gfn_seed = (random_seed if random_seed is not None else 42) + (n_ev * 137)
+
         gfn_candidates = sample_gflownet_candidates(
             allowed_positions=active_positions,
             target_aas=["T", "Y", "L", "K", "A", "R", "D", "E", "G", "V", "F", "S", "H", "N", "Q"],
@@ -1499,6 +1503,7 @@ def select_next_micro_batch(
             max_mutations=max_gfn_depth,
             catalytic_invariants=invariants_set,
             temperature=annealed_temp,
+            random_state=gfn_seed,
         )
         candidates.extend(gfn_candidates)
     except Exception as gfn_err:
