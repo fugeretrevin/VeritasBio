@@ -1,0 +1,1048 @@
+<title>VeritasBio Console</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+/* Layout: public landing is a single scroll column; the console is a fixed left rail
+   plus a scrolling work area. Single dark theme, carried over from presentation.html. */
+:root {
+  --bg:          #060910;
+  --bg-panel:    #0d1321;
+  --bg-card:     #141d30;
+  --bg-card-hi:  #1c2944;
+  --border:      rgba(255,255,255,0.08);
+  --border-hi:   rgba(255,255,255,0.16);
+  --fg:          #f8fafc;
+  --fg-muted:    #94a3b8;
+  --fg-dim:      #64748b;
+  --cyan:        #00f0ff;
+  --cyan-dim:    rgba(0,240,255,0.12);
+  --emerald:     #10b981;
+  --emerald-dim: rgba(16,185,129,0.12);
+  --amber:       #f59e0b;
+  --amber-dim:   rgba(245,158,11,0.12);
+  --rose:        #f43f5e;
+  --rose-dim:    rgba(244,63,94,0.12);
+  --violet:      #8b5cf6;
+  --violet-dim:  rgba(139,92,246,0.12);
+
+  --display: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --body:    'Inter', ui-sans-serif, system-ui, sans-serif;
+  --mono:    'Fira Code', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 { font-family: var(--display); margin: 0; text-wrap: balance; line-height: 1.2; }
+p { margin: 0; }
+a { color: inherit; }
+button { font: inherit; color: inherit; cursor: pointer; }
+code, .mono { font-family: var(--mono); font-variant-ligatures: none; }
+.nums { font-variant-numeric: tabular-nums; }
+
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; border-radius: 4px; }
+
+/* ---------- prototype switcher ---------- */
+.proto-bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 60;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: #000; border-bottom: 1px solid var(--border);
+  padding-block: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.proto-tag {
+  font-family: var(--display); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--amber); background: var(--amber-dim);
+  border: 1px solid rgba(245,158,11,0.35); border-radius: 999px; padding: 3px 9px;
+}
+.proto-note { font-size: 12px; color: var(--fg-dim); min-width: 0; }
+.proto-jump { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.proto-jump button {
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--fg-muted); border-radius: 6px; padding: 4px 10px; font-size: 12px;
+}
+.proto-jump button:hover { background: var(--bg-card-hi); color: var(--fg); }
+.proto-jump button[aria-current="true"] { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
+
+/* ---------- shared primitives ---------- */
+.wrap {
+  max-width: 1080px; margin-inline: auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.eyebrow {
+  font-family: var(--display); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--cyan);
+}
+.muted { color: var(--fg-muted); }
+.dim { color: var(--fg-dim); }
+.card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 18px;
+}
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--display); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  border-radius: 999px; padding: 3px 9px; white-space: nowrap;
+}
+.pill.ok   { color: var(--emerald); background: var(--emerald-dim); border: 1px solid rgba(16,185,129,0.3); }
+.pill.run  { color: var(--cyan);    background: var(--cyan-dim);    border: 1px solid rgba(0,240,255,0.3); }
+.pill.warn { color: var(--amber);   background: var(--amber-dim);   border: 1px solid rgba(245,158,11,0.3); }
+.pill.stop { color: var(--rose);    background: var(--rose-dim);    border: 1px solid rgba(244,63,94,0.3); }
+.pill.idle { color: var(--fg-dim);  background: rgba(255,255,255,0.04); border: 1px solid var(--border); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--display); font-weight: 600; font-size: 14px;
+  border-radius: 8px; padding: 10px 18px; border: 1px solid transparent;
+  background: var(--bg-card-hi); color: var(--fg); transition: background .15s, border-color .15s;
+}
+.btn:hover { background: #253457; }
+.btn.primary { background: var(--cyan); color: #04121a; }
+.btn.primary:hover { background: #5df5ff; }
+.btn.ghost { background: transparent; border-color: var(--border-hi); color: var(--fg-muted); }
+.btn.ghost:hover { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
+.btn.sm { font-size: 12px; padding: 6px 12px; border-radius: 6px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field label { font-size: 12px; font-weight: 600; color: var(--fg-muted); }
+.field input, .field select, .field textarea {
+  background: var(--bg); border: 1px solid var(--border-hi); border-radius: 7px;
+  color: var(--fg); padding: 9px 12px; font: inherit; font-size: 14px; width: 100%;
+}
+.field input:focus, .field select:focus { border-color: var(--cyan); outline: none; }
+.field .hint { font-size: 12px; color: var(--fg-dim); }
+
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left; font-family: var(--display); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-dim);
+  padding: 8px 12px; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap; }
+tbody tr:hover { background: rgba(255,255,255,0.02); }
+
+.variant { font-family: var(--mono); font-size: 12.5px; color: var(--fg); }
+.variant .pos { color: var(--cyan); }
+
+/* ---------- landing ---------- */
+.lp-nav {
+  display: flex; align-items: center; gap: 24px; padding-block: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.logo { display: flex; align-items: baseline; gap: 2px; font-family: var(--display); font-weight: 800; font-size: 18px; letter-spacing: -0.01em; }
+.logo .b { color: var(--cyan); }
+.lp-nav .links { margin-left: auto; display: flex; gap: 20px; align-items: center; font-size: 14px; }
+.lp-nav .links a { color: var(--fg-muted); text-decoration: none; }
+.lp-nav .links a:hover { color: var(--fg); }
+
+.hero { padding-block: 72px 56px; display: grid; gap: 28px; }
+.hero h1 { font-size: clamp(38px, 7vw, 66px); font-weight: 800; letter-spacing: -0.03em; }
+.hero h1 .cy { color: var(--cyan); }
+.hero .lede { font-size: clamp(16px, 2.2vw, 19px); color: var(--fg-muted); max-width: 60ch; }
+.hero .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.stat {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-left: 2px solid var(--cyan); border-radius: 8px; padding: 16px 18px;
+}
+.stat .v { font-family: var(--display); font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+.stat .k { font-size: 12px; color: var(--fg-muted); margin-top: 2px; }
+.stat.em { border-left-color: var(--emerald); }
+.stat.vi { border-left-color: var(--violet); }
+
+.section { padding-block: 56px; border-top: 1px solid var(--border); }
+.section h2 { font-size: clamp(24px, 4vw, 34px); font-weight: 700; letter-spacing: -0.02em; }
+.section .sub { color: var(--fg-muted); margin-top: 10px; max-width: 62ch; }
+
+.steps { display: grid; gap: 10px; margin-top: 28px; }
+.step {
+  display: grid; grid-template-columns: 44px 1fr; gap: 16px; align-items: start;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 9px; padding: 16px 18px;
+}
+.step .n {
+  font-family: var(--display); font-weight: 800; font-size: 13px; color: var(--cyan);
+  background: var(--cyan-dim); border: 1px solid rgba(0,240,255,0.25);
+  border-radius: 7px; width: 34px; height: 34px;
+  display: grid; place-items: center;
+}
+.step h4 { font-size: 15px; font-weight: 600; }
+.step p { font-size: 13.5px; color: var(--fg-muted); margin-top: 3px; }
+.step .who { font-size: 11px; color: var(--fg-dim); font-family: var(--mono); margin-top: 6px; }
+
+.honest {
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-left: 2px solid var(--amber); border-radius: 9px; padding: 22px; margin-top: 28px;
+}
+.honest h4 { font-size: 15px; color: var(--amber); }
+.honest p { color: var(--fg-muted); font-size: 14px; margin-top: 8px; max-width: 70ch; }
+
+.lp-foot { padding-block: 32px 48px; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; }
+
+/* ---------- auth ---------- */
+.auth-screen { min-height: 70vh; display: grid; place-items: center; padding-block: 48px; }
+.auth-card { width: min(420px, 100%); display: grid; gap: 18px; }
+.auth-card .card { display: grid; gap: 14px; }
+
+/* ---------- console shell ---------- */
+.console { display: grid; grid-template-columns: 236px 1fr; min-height: 100vh; }
+.rail {
+  background: var(--bg-panel); border-right: 1px solid var(--border);
+  padding: 20px 14px; display: flex; flex-direction: column; gap: 22px;
+}
+.rail nav { display: grid; gap: 2px; }
+.rail nav button {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  background: transparent; border: 0; border-radius: 7px; padding: 8px 10px;
+  color: var(--fg-muted); font-size: 14px;
+}
+.rail nav button:hover { background: rgba(255,255,255,0.04); color: var(--fg); }
+.rail nav button[aria-current="true"] { background: var(--cyan-dim); color: var(--cyan); font-weight: 600; }
+.rail .grp { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fg-dim); font-family: var(--display); font-weight: 700; padding: 0 10px 6px; }
+
+.quota { margin-top: auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: 9px; padding: 14px; }
+.quota .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.quota .lab { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.1em; font-family: var(--display); font-weight: 700; }
+.quota .amt { font-family: var(--display); font-size: 19px; font-weight: 700; }
+.meter { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 9px; }
+.meter > i { display: block; height: 100%; background: linear-gradient(90deg, var(--cyan), var(--emerald)); }
+.quota .foot { font-size: 11.5px; color: var(--fg-dim); margin-top: 7px; }
+
+.work { min-width: 0; padding: 26px 26px 60px; display: grid; gap: 22px; align-content: start; }
+.work-head { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.work-head h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+.work-head .sub { font-size: 13.5px; color: var(--fg-muted); margin-top: 4px; }
+.work-head .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+@media (max-width: 860px) {
+  .console { grid-template-columns: 1fr; }
+  .rail { border-right: 0; border-bottom: 1px solid var(--border); }
+  .rail nav { grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); display: grid; }
+  .quota { margin-top: 0; }
+  .work { padding: 20px max(16px, env(safe-area-inset-left,0px)) 48px; }
+}
+
+/* ---------- campaign list ---------- */
+.camp-row td .name { font-family: var(--display); font-weight: 600; font-size: 14px; }
+.camp-row td .tgt { font-size: 12px; color: var(--fg-dim); font-family: var(--mono); }
+.camp-row { cursor: pointer; }
+
+/* ---------- stepper ---------- */
+.stepper { display: flex; gap: 8px; flex-wrap: wrap; }
+.stepper .s {
+  display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-dim);
+  border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; background: var(--bg-card);
+}
+.stepper .s b { font-family: var(--display); font-size: 11px; }
+.stepper .s.on { color: var(--cyan); border-color: rgba(0,240,255,0.4); background: var(--cyan-dim); }
+.stepper .s.done { color: var(--emerald); border-color: rgba(16,185,129,0.3); }
+
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+
+/* ---------- site review (the human-override screen) ---------- */
+.cluster {
+  border: 1px solid var(--border); border-radius: 9px; background: var(--bg-card);
+  padding: 16px; display: grid; gap: 12px;
+}
+.cluster.excluded { opacity: 0.45; }
+.cluster .ch { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cluster h4 { font-size: 14.5px; font-weight: 600; }
+.cluster .src { font-size: 12px; color: var(--fg-dim); }
+.cluster .why { font-size: 13px; color: var(--fg-muted); }
+.resgrid { display: flex; gap: 6px; flex-wrap: wrap; }
+.res {
+  font-family: var(--mono); font-size: 12.5px; border-radius: 6px; padding: 4px 9px;
+  border: 1px solid rgba(0,240,255,0.3); background: var(--cyan-dim); color: var(--cyan);
+}
+.res.off { border-color: var(--border); background: transparent; color: var(--fg-dim); text-decoration: line-through; }
+.res.ban { border-color: rgba(244,63,94,0.35); background: var(--rose-dim); color: var(--rose); }
+.toggle { margin-left: auto; display: flex; gap: 6px; }
+
+/* ---------- live run ---------- */
+.run-grid { display: grid; grid-template-columns: 1.25fr 1fr; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .run-grid { grid-template-columns: 1fr; } }
+
+.round {
+  border: 1px solid var(--border); border-radius: 9px; background: var(--bg-card);
+  padding: 14px 16px; display: grid; gap: 10px;
+}
+.round.live { border-color: rgba(0,240,255,0.35); box-shadow: 0 0 0 1px rgba(0,240,255,0.08); }
+.round.halted { border-color: rgba(244,63,94,0.3); }
+.round .rh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.round .rh h4 { font-size: 14px; font-weight: 600; }
+.round .rh .cost { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--fg-muted); }
+.chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.chip {
+  font-family: var(--display); font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; border-radius: 4px; padding: 3px 7px;
+  background: rgba(255,255,255,0.05); color: var(--fg-dim); border: 1px solid transparent;
+}
+.chip.done { color: var(--emerald); background: var(--emerald-dim); }
+.chip.now  { color: var(--cyan); background: var(--cyan-dim); border-color: rgba(0,240,255,0.3); }
+.chip.fail { color: var(--rose); background: var(--rose-dim); }
+.round .res-line { font-size: 13px; color: var(--fg-muted); }
+
+.logbox {
+  background: #03060c; border: 1px solid var(--border); border-radius: 9px;
+  padding: 14px; font-family: var(--mono); font-size: 11.5px; line-height: 1.75;
+  max-height: 290px; overflow: auto; color: var(--fg-muted);
+}
+.logbox .t { color: var(--fg-dim); }
+.logbox .ok { color: var(--emerald); }
+.logbox .cy { color: var(--cyan); }
+.logbox .rs { color: var(--rose); }
+.logbox .am { color: var(--amber); }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.tabs button {
+  background: transparent; border: 0; border-bottom: 2px solid transparent;
+  color: var(--fg-muted); padding: 9px 14px; font-size: 13.5px; font-weight: 500;
+}
+.tabs button:hover { color: var(--fg); }
+.tabs button[aria-current="true"] { color: var(--cyan); border-bottom-color: var(--cyan); }
+
+.kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 14px; }
+.kv .i .k { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.1em; font-family: var(--display); font-weight: 700; }
+.kv .i .v { font-family: var(--display); font-size: 21px; font-weight: 700; margin-top: 2px; }
+
+/* ---------- drop zone ---------- */
+.drop {
+  border: 1px dashed var(--border-hi); border-radius: 10px; padding: 30px 20px;
+  text-align: center; background: var(--bg-card); display: grid; gap: 8px; justify-items: center;
+}
+.drop h4 { font-size: 15px; font-weight: 600; }
+.drop p { font-size: 13px; color: var(--fg-muted); max-width: 48ch; }
+
+.export-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 14px; }
+.export {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 9px;
+  padding: 16px; display: grid; gap: 8px; align-content: start;
+}
+.export h4 { font-size: 14px; font-weight: 600; }
+.export p { font-size: 12.5px; color: var(--fg-muted); }
+
+[hidden] { display: none !important; }
+</style>
+
+<div class="proto-bar">
+  <span class="proto-tag">Prototype</span>
+  <span class="proto-note">Frontend only &middot; example data &middot; nothing here calls the engine yet</span>
+  <div class="proto-jump" id="jump"></div>
+</div>
+
+<!-- ============================= LANDING ============================= -->
+<div id="view-landing">
+  <div class="wrap">
+    <div class="lp-nav">
+      <div class="logo">Veritas<span class="b">Bio</span></div>
+      <div class="links">
+        <a href="#how">How it works</a>
+        <a href="#proof">Benchmarks</a>
+        <button class="btn sm ghost" data-go="signin">Sign in</button>
+      </div>
+    </div>
+
+    <div class="hero">
+      <div>
+        <div class="eyebrow">Enzyme campaign platform</div>
+        <h1 style="margin-top:14px">160,000 variants.<br><span class="cy">125 wells.</span></h1>
+      </div>
+      <p class="lede">
+        VeritasBio ranks a combinatorial mutant library before anything reaches the bench, then
+        hands you the 125 wells worth making. A hard budget gate sits in front of every GPU call,
+        so a campaign cannot cost more than you authorised.
+      </p>
+      <div class="cta">
+        <button class="btn primary" data-go="signin">Request access</button>
+        <button class="btn ghost" data-go="app">See a finished campaign</button>
+      </div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat">
+        <div class="v nums">30.9&times;</div>
+        <div class="k">Top-1% hits vs. random screening</div>
+      </div>
+      <div class="stat em">
+        <div class="v nums">0.078%</div>
+        <div class="k">Of the library actually screened</div>
+      </div>
+      <div class="stat vi">
+        <div class="v nums">$0.0018</div>
+        <div class="k">Compute to find them</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" id="how">
+    <div class="wrap">
+      <div class="eyebrow">The loop</div>
+      <h2 style="margin-top:12px">Six steps, in a fixed order, every round</h2>
+      <p class="sub">
+        The model proposes where to look. It never decides what to spend, what to run, or when to stop.
+        Those are separate components, and you can see each one's decision in the ledger.
+      </p>
+      <div class="steps">
+        <div class="step"><div class="n">1</div><div>
+          <h4>Ingest the target</h4>
+          <p>UniProt annotations for your accession &mdash; active site, binding residues, domain boundaries.</p>
+          <div class="who">rag_worker</div></div></div>
+        <div class="step"><div class="n">2</div><div>
+          <h4>Propose search boundaries</h4>
+          <p>The language model reads those annotations and nominates residue clusters worth saturating. You confirm or overrule them before anything runs.</p>
+          <div class="who">prompts &rarr; your review</div></div></div>
+        <div class="step"><div class="n">3</div><div>
+          <h4>Select the micro-batch</h4>
+          <p>A Gaussian process over physicochemical deltas ranks candidates by expected improvement per dollar.</p>
+          <div class="who">math_worker</div></div></div>
+        <div class="step"><div class="n">4</div><div>
+          <h4>Authorise the spend</h4>
+          <p>The gatekeeper prices the batch cold or warm, then asks the ledger for the money. No authorisation, no run.</p>
+          <div class="who">gatekeeper &rarr; ledger</div></div></div>
+        <div class="step"><div class="n">5</div><div>
+          <h4>Score on GPU</h4>
+          <p>ESM-2 650M on an A10G, batched inside the container keep-alive window so you pay for tensors, not boots.</p>
+          <div class="who">esm_worker</div></div></div>
+        <div class="step"><div class="n">6</div><div>
+          <h4>Record and re-fit</h4>
+          <p>Scores append to an immutable evidence log. The surrogate re-fits and the next round starts narrower.</p>
+          <div class="who">ledger &rarr; math_worker</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" id="proof">
+    <div class="wrap">
+      <div class="eyebrow">Benchmarks</div>
+      <h2 style="margin-top:12px">Measured on a library where the answer is known</h2>
+      <p class="sub">
+        The TrpB active-site landscape of Tm9D8* is combinatorially complete: all 20<sup>4</sup> combinations at
+        residues 183, 184, 227 and 228 were measured, so the global optimum is definitely in the pool.
+      </p>
+      <div class="stat-row" style="margin-top:24px">
+        <div class="stat"><div class="v nums">125 / 159,999</div><div class="k">Variants screened</div></div>
+        <div class="stat em"><div class="v nums">36</div><div class="k">Top-1% hits found (random: 1.17)</div></div>
+        <div class="stat vi"><div class="v nums">0.8005</div><div class="k">Best fitness (parent 0.4081)</div></div>
+      </div>
+      <div class="honest">
+        <h4>What this does not show</h4>
+        <p>
+          Held-out Spearman on TrpB is &minus;0.037. The surrogate's global ranking does not generalise
+          across an epistatic active site from 125 measurements. Expected improvement still concentrates
+          sampling in good regions, which is why the hit rate rises while the correlation does not. We
+          report it because a lab deciding what to make deserves to know which claim is load-bearing:
+          the enrichment is, the correlation is not.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="wrap">
+      <div class="eyebrow">Access</div>
+      <h2 style="margin-top:12px">Invite-only while we are in private beta</h2>
+      <p class="sub">
+        Accounts run on our Modal and model credits with a per-account spend cap, so there is nothing
+        to configure and no key for you to hold. Tell us the protein you want to work on and we will
+        set a quota that fits it.
+      </p>
+      <div style="margin-top:22px"><button class="btn primary" data-go="signin">Request access</button></div>
+    </div>
+  </div>
+
+  <div class="wrap"><div class="lp-foot">
+    <span>VeritasBio</span><span>&middot;</span>
+    <span>Benchmarks: Sarkisyan 2016, Johnston 2024</span><span>&middot;</span>
+    <span>Apache 2.0</span>
+  </div></div>
+</div>
+
+<!-- ============================= SIGN IN ============================= -->
+<div id="view-signin" hidden>
+  <div class="wrap">
+    <div class="lp-nav">
+      <div class="logo">Veritas<span class="b">Bio</span></div>
+      <div class="links"><button class="btn sm ghost" data-go="landing">Back</button></div>
+    </div>
+    <div class="auth-screen">
+      <div class="auth-card">
+        <div>
+          <div class="eyebrow">Private beta</div>
+          <h2 style="font-size:26px;margin-top:10px">Sign in to the console</h2>
+          <p class="muted" style="font-size:14px;margin-top:8px">
+            Sign in with your institutional Google account, or have a one-time link sent to your inbox.
+          </p>
+        </div>
+        <div class="card">
+          <button class="btn" data-go="app" style="width:100%">Continue with Google</button>
+          <div style="display:flex;align-items:center;gap:12px;color:var(--fg-dim);font-size:11px;
+                      font-family:var(--display);font-weight:700;letter-spacing:0.12em">
+            <span style="flex:1;height:1px;background:var(--border)"></span>OR<span style="flex:1;height:1px;background:var(--border)"></span>
+          </div>
+          <div class="field">
+            <label for="auth-email">Work email</label>
+            <input id="auth-email" type="email" value="r.okafor@example.edu" autocomplete="email">
+          </div>
+          <button class="btn primary" data-go="app" style="width:100%">Email me a sign-in link</button>
+          <p class="dim" style="font-size:12px">
+            Signing in does not grant access. Your address is checked against the beta list, and your
+            spend quota is attached on our side &mdash; not in the browser.
+          </p>
+        </div>
+        <p class="dim" style="font-size:12.5px">
+          No access yet? Ask for an invite and tell us your target protein and rough library size.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================= CONSOLE ============================= -->
+<div id="view-app" hidden>
+  <div class="console">
+    <aside class="rail">
+      <div class="logo" style="padding:0 10px">Veritas<span class="b">Bio</span></div>
+      <nav id="railnav">
+        <div class="grp">Work</div>
+        <button data-pane="campaigns" aria-current="true">Campaigns</button>
+        <button data-pane="new">New campaign</button>
+        <div class="grp" style="padding-top:14px">Account</div>
+        <button data-pane="account">Quota &amp; keys</button>
+        <button data-go="landing">Sign out</button>
+      </nav>
+      <div class="quota">
+        <div class="top">
+          <span class="lab">Quota left</span>
+          <span class="amt nums">$22.41</span>
+        </div>
+        <div class="meter"><i style="width:89.6%"></i></div>
+        <div class="foot nums">$2.59 of $25.00 used &middot; resets 1 Nov</div>
+      </div>
+    </aside>
+
+    <main class="work" id="work">
+
+      <!-- ---------- pane: campaigns ---------- -->
+      <section data-pane-body="campaigns">
+        <div class="work-head">
+          <div>
+            <h2>Campaigns</h2>
+            <p class="sub">Each campaign is one protein, one objective and one budget.</p>
+          </div>
+          <div class="actions"><button class="btn primary sm" data-pane-go="new">New campaign</button></div>
+        </div>
+
+        <div class="card" style="padding:0;margin-top:22px">
+          <div class="table-scroll"><table>
+            <thead><tr>
+              <th>Campaign</th><th>Status</th><th>Rounds</th><th>Measured</th>
+              <th>Best fitness</th><th>Spent</th><th>Updated</th>
+            </tr></thead>
+            <tbody>
+              <tr class="camp-row" data-pane-go="run">
+                <td><div class="name">avGFP brightness</div><div class="tgt">P42212 &middot; 238 aa</div></td>
+                <td><span class="pill run">Round 3 running</span></td>
+                <td class="nums">3</td><td class="nums">75</td>
+                <td class="nums">1.2818</td><td class="nums">$0.000512</td><td class="dim">just now</td>
+              </tr>
+              <tr class="camp-row" data-pane-go="run">
+                <td><div class="name">TrpB active site</div><div class="tgt">Tm9D8* &middot; 183/184/227/228</div></td>
+                <td><span class="pill ok">Complete</span></td>
+                <td class="nums">5</td><td class="nums">125</td>
+                <td class="nums">0.8005</td><td class="nums">$0.001750</td><td class="dim">26 Oct</td>
+              </tr>
+              <tr class="camp-row" data-pane-go="run">
+                <td><div class="name">TrpB &mdash; assay round 2</div><div class="tgt">Tm9D8* &middot; awaiting plate data</div></td>
+                <td><span class="pill warn">Waiting on bench</span></td>
+                <td class="nums">2</td><td class="nums">48</td>
+                <td class="nums">0.7310</td><td class="nums">$0.000640</td><td class="dim">24 Oct</td>
+              </tr>
+              <tr class="camp-row" data-pane-go="run">
+                <td><div class="name">avGFP thermostability</div><div class="tgt">P42212 &middot; draft</div></td>
+                <td><span class="pill idle">Draft</span></td>
+                <td class="nums">0</td><td class="nums">0</td>
+                <td class="dim">&mdash;</td><td class="nums">$0.000000</td><td class="dim">23 Oct</td>
+              </tr>
+            </tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- ---------- pane: new campaign ---------- -->
+      <section data-pane-body="new" hidden>
+        <div class="work-head">
+          <div>
+            <h2>New campaign</h2>
+            <p class="sub">Three decisions: what you are optimising, where to look, and what you will spend.</p>
+          </div>
+        </div>
+
+        <div class="stepper" style="margin-top:18px">
+          <div class="s done"><b>1</b> Target</div>
+          <div class="s on"><b>2</b> Search scope</div>
+          <div class="s"><b>3</b> Budget</div>
+        </div>
+
+        <div class="card" style="margin-top:18px">
+          <div class="form-grid">
+            <div class="field">
+              <label for="nc-acc">UniProt accession</label>
+              <input id="nc-acc" class="mono" value="P42212">
+              <span class="hint">Green fluorescent protein &middot; <em>Aequorea victoria</em> &middot; 238 aa</span>
+            </div>
+            <div class="field">
+              <label for="nc-obj">Objective</label>
+              <select id="nc-obj">
+                <option>Brightness / fluorescence</option>
+                <option>Thermostability</option>
+                <option>Catalytic activity</option>
+                <option>Expression yield</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="nc-max">Max mutations per variant</label>
+              <select id="nc-max"><option>2</option><option selected>3</option><option>4</option></select>
+              <span class="hint">Higher orders grow the library combinatorially.</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:26px">
+          <div class="eyebrow">Step 2 &middot; your call</div>
+          <h3 style="font-size:19px;margin-top:8px">The model proposed four clusters. Confirm what it may touch.</h3>
+          <p class="muted" style="font-size:13.5px;margin-top:6px;max-width:66ch">
+            Read from UniProt P42212 annotations. Nothing is saturated until you accept it, and anything
+            you ban here is refused by the validator for the whole campaign, not just this round.
+          </p>
+        </div>
+
+        <div style="display:grid;gap:12px;margin-top:16px">
+          <div class="cluster">
+            <div class="ch">
+              <h4>Chromophore environment</h4>
+              <span class="pill ok">Accepted</span>
+              <div class="toggle"><button class="btn sm ghost" data-excl>Exclude</button></div>
+            </div>
+            <div class="resgrid">
+              <span class="res">64</span><span class="res">65</span><span class="res">66</span>
+              <span class="res">67</span><span class="res">68</span>
+            </div>
+            <p class="why">Residues 65&ndash;67 form the chromophore triad; 64 and 68 set its local packing. Substitutions here shift both brightness and emission maximum.</p>
+            <p class="src mono">uniprot: MOD_RES 66 &middot; proposed by planner, confidence 0.91</p>
+          </div>
+
+          <div class="cluster">
+            <div class="ch">
+              <h4>Dimer interface</h4>
+              <span class="pill ok">Accepted</span>
+              <div class="toggle"><button class="btn sm ghost" data-excl>Exclude</button></div>
+            </div>
+            <div class="resgrid">
+              <span class="res">206</span><span class="res">221</span><span class="res">223</span>
+            </div>
+            <p class="why">Interface positions associated with oligomerisation. Useful if monomeric behaviour matters downstream.</p>
+            <p class="src mono">uniprot: REGION 206..223 &middot; proposed by planner, confidence 0.74</p>
+          </div>
+
+          <div class="cluster excluded">
+            <div class="ch">
+              <h4>Barrel strand 7</h4>
+              <span class="pill idle">Excluded by you</span>
+              <div class="toggle"><button class="btn sm ghost" data-excl>Re-include</button></div>
+            </div>
+            <div class="resgrid">
+              <span class="res off">145</span><span class="res off">148</span><span class="res off">150</span>
+            </div>
+            <p class="why">Planner suggested it for packing effects. Excluded &mdash; strand mutations destabilised this construct in your 2025 screen.</p>
+            <p class="src mono">proposed by planner, confidence 0.52</p>
+          </div>
+
+          <div class="cluster">
+            <div class="ch">
+              <h4>Never mutate</h4>
+              <span class="pill stop">Hard ban</span>
+            </div>
+            <div class="resgrid">
+              <span class="res ban">65</span><span class="res ban">222</span>
+              <span class="res ban">+ add position</span>
+            </div>
+            <p class="why">Positions the validator must refuse regardless of what any round proposes. Yours to set; the planner cannot remove them.</p>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:22px;flex-wrap:wrap">
+          <button class="btn primary" data-pane-go="run">Accept scope and set budget</button>
+          <button class="btn ghost" data-pane-go="campaigns">Save as draft</button>
+        </div>
+      </section>
+
+      <!-- ---------- pane: campaign detail ---------- -->
+      <section data-pane-body="run" hidden>
+        <div class="work-head">
+          <div>
+            <div class="eyebrow">Campaign</div>
+            <h2 style="margin-top:6px">avGFP brightness</h2>
+            <p class="sub mono">P42212 &middot; 238 aa &middot; max 3 mutations &middot; ESM-2 650M on A10G</p>
+          </div>
+          <div class="actions">
+            <span class="pill run">Round 3 running</span>
+            <button class="btn sm ghost">Pause</button>
+          </div>
+        </div>
+
+        <div class="kv card">
+          <div class="i"><div class="k">Authorised</div><div class="v nums">$0.0500</div></div>
+          <div class="i"><div class="k">Spent</div><div class="v nums">$0.000512</div></div>
+          <div class="i"><div class="k">Measured</div><div class="v nums">75</div></div>
+          <div class="i"><div class="k">Best fitness</div><div class="v nums" style="color:var(--emerald)">1.2818</div></div>
+        </div>
+
+        <div class="tabs" id="runtabs">
+          <button data-tab="rounds" aria-current="true">Rounds</button>
+          <button data-tab="variants">Variants</button>
+          <button data-tab="ledger">Ledger</button>
+          <button data-tab="bench">Wet-lab handoff</button>
+          <button data-tab="measure">Measurements</button>
+        </div>
+
+        <!-- tab: rounds -->
+        <div data-tab-body="rounds">
+          <div class="run-grid">
+            <div style="display:grid;gap:10px;min-width:0">
+              <div class="round live">
+                <div class="rh">
+                  <h4>Round 3</h4><span class="pill run">Running</span>
+                  <span class="cost nums">$0.000192 authorised</span>
+                </div>
+                <div class="chips">
+                  <span class="chip done">Ingest</span><span class="chip done">Propose</span>
+                  <span class="chip done">Select</span><span class="chip done">Authorise</span>
+                  <span class="chip now">Score</span><span class="chip">Record</span>
+                </div>
+                <p class="res-line">25 variants on GPU, container warm. Expected improvement per dollar: 41.2.</p>
+              </div>
+
+              <div class="round">
+                <div class="rh">
+                  <h4>Round 2</h4><span class="pill ok">Complete</span>
+                  <span class="cost nums">$0.000192</span>
+                </div>
+                <div class="chips">
+                  <span class="chip done">Ingest</span><span class="chip done">Propose</span>
+                  <span class="chip done">Select</span><span class="chip done">Authorise</span>
+                  <span class="chip done">Score</span><span class="chip done">Record</span>
+                </div>
+                <p class="res-line">25 measured &middot; best <span class="variant">T203F<span class="pos">:</span>E222G</span> at 1.2818, up from 0.9140.</p>
+              </div>
+
+              <div class="round halted">
+                <div class="rh">
+                  <h4>Round 2 &middot; first attempt</h4><span class="pill stop">Refused</span>
+                  <span class="cost nums">$0.004100 requested</span>
+                </div>
+                <div class="chips">
+                  <span class="chip done">Ingest</span><span class="chip done">Propose</span>
+                  <span class="chip done">Select</span><span class="chip fail">Authorise</span>
+                  <span class="chip">Score</span><span class="chip">Record</span>
+                </div>
+                <p class="res-line">
+                  Batch of 400 priced cold at $0.004100, over the $0.000500 per-round cap.
+                  Ledger refused. Re-planned at 25 variants inside the warm window.
+                </p>
+              </div>
+
+              <div class="round">
+                <div class="rh">
+                  <h4>Round 1</h4><span class="pill ok">Complete</span>
+                  <span class="cost nums">$0.000128</span>
+                </div>
+                <div class="chips">
+                  <span class="chip done">Ingest</span><span class="chip done">Propose</span>
+                  <span class="chip done">Select</span><span class="chip done">Authorise</span>
+                  <span class="chip done">Score</span><span class="chip done">Record</span>
+                </div>
+                <p class="res-line">25 measured &middot; seeded from chromophore cluster &middot; best 0.9140.</p>
+              </div>
+            </div>
+
+            <div style="display:grid;gap:12px;min-width:0">
+              <div>
+                <div class="eyebrow" style="margin-bottom:8px">Event stream</div>
+                <div class="logbox">
+<span class="t">14:22:01</span> <span class="cy">[INGEST]</span>   P42212 from cache &middot; 238 aa<br>
+<span class="t">14:22:01</span> <span class="cy">[PROPOSE]</span>  2 clusters, 8 positions in scope<br>
+<span class="t">14:22:02</span> <span class="cy">[SELECT]</span>   ranked 4,522 candidates &rarr; top 25<br>
+<span class="t">14:22:02</span> <span class="am">[PRICE]</span>    warm container, 25 &times; 0.31s @ $1.10/hr<br>
+<span class="t">14:22:02</span> <span class="ok">[AUTHORISE]</span> 192 &micro;USD approved &middot; job 7f3a9c<br>
+<span class="t">14:22:03</span> <span class="cy">[SCORE]</span>    batch submitted to A10G<br>
+<span class="t">14:22:14</span> <span class="ok">[RECORD]</span>   18 of 25 returned<br>
+<span class="t">14:21:40</span> <span class="rs">[REFUSED]</span>  4100 &micro;USD &gt; 500 &micro;USD round cap<br>
+<span class="t">14:21:40</span> <span class="am">[REPLAN]</span>   batch 400 &rarr; 25, cold &rarr; warm<br>
+<span class="t">14:19:55</span> <span class="ok">[RECORD]</span>   round 2 closed &middot; best 1.2818<br>
+                </div>
+              </div>
+              <div class="card">
+                <div class="eyebrow">Stop conditions</div>
+                <div style="display:grid;gap:7px;margin-top:10px;font-size:13px">
+                  <div style="display:flex;gap:10px"><span class="muted" style="flex:1">Budget exhausted</span><span class="mono dim">$0.0500</span></div>
+                  <div style="display:flex;gap:10px"><span class="muted" style="flex:1">Round cap</span><span class="mono dim">8 rounds</span></div>
+                  <div style="display:flex;gap:10px"><span class="muted" style="flex:1">No improvement for</span><span class="mono dim">3 rounds</span></div>
+                  <div style="display:flex;gap:10px"><span class="muted" style="flex:1">Per-round ceiling</span><span class="mono dim">$0.000500</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- tab: variants -->
+        <div data-tab-body="variants" hidden>
+          <div class="work-head" style="margin-bottom:0">
+            <p class="sub" style="margin:0">75 scored in silico. Select what goes to the bench.</p>
+            <div class="actions"><button class="btn sm primary">Send 12 selected to handoff</button></div>
+          </div>
+          <div class="card" style="padding:0;margin-top:14px">
+            <div class="table-scroll"><table>
+              <thead><tr><th>Rank</th><th>Variant</th><th>Predicted fitness</th><th>Uncertainty</th><th>Round</th><th>Job</th></tr></thead>
+              <tbody>
+                <tr><td class="nums">1</td><td><span class="variant">T203F<span class="pos">:</span>E222G</span></td><td class="nums" style="color:var(--emerald)">1.2818</td><td class="nums dim">&plusmn;0.082</td><td class="nums">2</td><td class="mono dim">7f3a9c</td></tr>
+                <tr><td class="nums">2</td><td><span class="variant">S65T<span class="pos">:</span>T203Y</span></td><td class="nums">1.1904</td><td class="nums dim">&plusmn;0.071</td><td class="nums">2</td><td class="mono dim">7f3a9c</td></tr>
+                <tr><td class="nums">3</td><td><span class="variant">S65T<span class="pos">:</span>Y66H</span></td><td class="nums">1.0442</td><td class="nums dim">&plusmn;0.094</td><td class="nums">1</td><td class="mono dim">2b81e4</td></tr>
+                <tr><td class="nums">4</td><td><span class="variant">T203Y<span class="pos">:</span>E222G</span></td><td class="nums">0.9871</td><td class="nums dim">&plusmn;0.110</td><td class="nums">2</td><td class="mono dim">7f3a9c</td></tr>
+                <tr><td class="nums">5</td><td><span class="variant">S65T</span></td><td class="nums">0.9140</td><td class="nums dim">&plusmn;0.045</td><td class="nums">1</td><td class="mono dim">2b81e4</td></tr>
+                <tr><td class="nums">6</td><td><span class="variant">Y66H<span class="pos">:</span>T203F</span></td><td class="nums">0.8755</td><td class="nums dim">&plusmn;0.131</td><td class="nums">2</td><td class="mono dim">7f3a9c</td></tr>
+                <tr><td class="nums">7</td><td><span class="variant">S65G<span class="pos">:</span>T203Y</span></td><td class="nums">0.8102</td><td class="nums dim">&plusmn;0.088</td><td class="nums">1</td><td class="mono dim">2b81e4</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+        </div>
+
+        <!-- tab: ledger -->
+        <div data-tab-body="ledger" hidden>
+          <p class="sub muted" style="font-size:13.5px">
+            Every paid call, approved or refused. Rows are append-only &mdash; the database refuses updates.
+          </p>
+          <div class="card" style="padding:0;margin-top:14px">
+            <div class="table-scroll"><table>
+              <thead><tr><th>Job</th><th>Model</th><th>Variants</th><th>Priced</th><th>Cost</th><th>Decision</th><th>Time</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">7f3a9c</td><td class="mono dim">esm2_650m</td><td class="nums">25</td><td class="dim">warm</td><td class="nums">$0.000192</td><td><span class="pill ok">Approved</span></td><td class="dim nums">14:22:02</td></tr>
+                <tr><td class="mono">&mdash;</td><td class="mono dim">esm2_650m</td><td class="nums">400</td><td class="dim">cold</td><td class="nums">$0.004100</td><td><span class="pill stop">Refused</span></td><td class="dim nums">14:21:40</td></tr>
+                <tr><td class="mono">5c02d7</td><td class="mono dim">esm2_650m</td><td class="nums">25</td><td class="dim">warm</td><td class="nums">$0.000192</td><td><span class="pill ok">Approved</span></td><td class="dim nums">14:19:31</td></tr>
+                <tr><td class="mono">2b81e4</td><td class="mono dim">esm2_650m</td><td class="nums">25</td><td class="dim">cold</td><td class="nums">$0.000128</td><td><span class="pill ok">Approved</span></td><td class="dim nums">14:17:12</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <p class="dim" style="font-size:12.5px;margin-top:10px">
+            Stored as integer micro-USD. Refusals are recorded with the same weight as approvals.
+          </p>
+        </div>
+
+        <!-- tab: wet-lab handoff -->
+        <div data-tab-body="bench" hidden>
+          <p class="sub muted" style="font-size:13.5px">
+            12 variants selected. Everything below is generated from those sequences.
+          </p>
+          <div class="export-grid" style="margin-top:16px">
+            <div class="export">
+              <h4>Synthesis order sheet</h4>
+              <p>Codon-optimised cDNA for <em>E. coli</em> K12, Gibson overhangs for pET-28a(+). Twist and IDT column formats.</p>
+              <button class="btn sm ghost">Download CSV</button>
+            </div>
+            <div class="export">
+              <h4>Opentrons OT-2 protocol</h4>
+              <p>96-well plate map and pipetting script for the selected mutagenesis set.</p>
+              <button class="btn sm ghost">Download .py</button>
+            </div>
+            <div class="export">
+              <h4>Audit certificate</h4>
+              <p>SHA-256 over the ledger rows behind this selection, for 21 CFR Part 11 records.</p>
+              <button class="btn sm ghost">Download certificate</button>
+            </div>
+            <div class="export">
+              <h4>Plate template</h4>
+              <p>Blank result sheet matching the plate map, ready to fill in once the assay reads out.</p>
+              <button class="btn sm ghost">Download CSV</button>
+            </div>
+          </div>
+          <div class="card" style="margin-top:18px">
+            <div class="eyebrow">Selected for synthesis</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+              <span class="res">T203F:E222G</span><span class="res">S65T:T203Y</span>
+              <span class="res">S65T:Y66H</span><span class="res">T203Y:E222G</span>
+              <span class="res">S65T</span><span class="res">Y66H:T203F</span>
+              <span class="res">S65G:T203Y</span><span class="res dim" style="border-color:var(--border);background:transparent;color:var(--fg-dim)">+5 more</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- tab: measurements -->
+        <div data-tab-body="measure" hidden>
+          <div class="work-head" style="margin-bottom:0">
+            <div>
+              <p class="sub" style="margin:0;max-width:64ch">
+                Upload what the assay actually measured. Measured values enter the evidence log at
+                higher fidelity than predictions and the surrogate re-fits around them.
+              </p>
+            </div>
+          </div>
+
+          <div class="drop" style="margin-top:16px">
+            <h4>Drop the plate results here</h4>
+            <p>CSV with <code>variant, measured_value, assay, date</code>. Variants are checked against this campaign's notation and the campaign's banned positions before anything is written.</p>
+            <button class="btn sm primary">Choose file</button>
+          </div>
+
+          <div class="card" style="margin-top:16px">
+            <div class="eyebrow">Last import &middot; 24 Oct</div>
+            <div class="kv" style="margin-top:12px">
+              <div class="i"><div class="k">Rows accepted</div><div class="v nums" style="color:var(--emerald)">44</div></div>
+              <div class="i"><div class="k">Rejected</div><div class="v nums" style="color:var(--rose)">4</div></div>
+              <div class="i"><div class="k">Rank agreement</div><div class="v nums">&rho; 0.61</div></div>
+              <div class="i"><div class="k">Surrogate</div><div class="v nums" style="font-size:16px">re-fitted</div></div>
+            </div>
+            <div class="table-scroll" style="margin-top:14px"><table>
+              <thead><tr><th>Row</th><th>Variant</th><th>Measured</th><th>Predicted</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td class="nums dim">7</td><td><span class="variant">T203F<span class="pos">:</span>E222G</span></td><td class="nums">1.3402</td><td class="nums dim">1.2818</td><td><span class="pill ok">Accepted</span></td></tr>
+                <tr><td class="nums dim">8</td><td><span class="variant">S65T<span class="pos">:</span>T203Y</span></td><td class="nums">0.9955</td><td class="nums dim">1.1904</td><td><span class="pill ok">Accepted</span></td></tr>
+                <tr><td class="nums dim">9</td><td><span class="variant">S65X<span class="pos">:</span>T203Y</span></td><td class="dim">&mdash;</td><td class="dim">&mdash;</td><td><span class="pill stop">X is not an amino acid</span></td></tr>
+                <tr><td class="nums dim">12</td><td><span class="variant">G222E</span></td><td class="dim">&mdash;</td><td class="dim">&mdash;</td><td><span class="pill stop">222 is on your ban list</span></td></tr>
+                <tr><td class="nums dim">19</td><td><span class="variant">Y66H<span class="pos">:</span>T203F</span></td><td class="nums">0.4120</td><td class="nums dim">0.8755</td><td><span class="pill warn">Accepted &middot; large miss</span></td></tr>
+              </tbody>
+            </table></div>
+            <p class="dim" style="font-size:12.5px;margin-top:12px">
+              Rejected rows are never partially written. Fix the file and re-upload, or export the
+              rejects to correct them in place.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- pane: account ---------- -->
+      <section data-pane-body="account" hidden>
+        <div class="work-head">
+          <div>
+            <h2>Quota &amp; keys</h2>
+            <p class="sub">Compute runs on VeritasBio credentials. There is no key for you to hold.</p>
+          </div>
+        </div>
+        <div class="kv card">
+          <div class="i"><div class="k">Monthly quota</div><div class="v nums">$25.00</div></div>
+          <div class="i"><div class="k">Used</div><div class="v nums">$2.59</div></div>
+          <div class="i"><div class="k">Campaigns</div><div class="v nums">4</div></div>
+          <div class="i"><div class="k">Resets</div><div class="v nums" style="font-size:17px">1 Nov</div></div>
+        </div>
+        <div class="card">
+          <div class="eyebrow">How spending is capped</div>
+          <p class="muted" style="font-size:13.5px;margin-top:10px;max-width:68ch">
+            Every GPU call is priced before it runs and charged against your quota as an integer number
+            of micro-dollars. A call that would exceed the quota is refused rather than trimmed, and the
+            refusal is written to the ledger. When the quota is gone, campaigns stop; nothing queues up
+            and nothing overdraws.
+          </p>
+          <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+            <button class="btn sm ghost">Request quota increase</button>
+            <button class="btn sm ghost">Export all ledger rows</button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script>
+(function () {
+  var views = { landing: 'view-landing', signin: 'view-signin', app: 'view-app' };
+  var labels = { landing: 'Landing', signin: 'Sign in', app: 'Console' };
+  var current = 'landing';
+
+  function show(name) {
+    current = name;
+    Object.keys(views).forEach(function (k) {
+      document.getElementById(views[k]).hidden = (k !== name);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#jump button'), function (b) {
+      b.setAttribute('aria-current', String(b.dataset.view === name));
+    });
+    window.scrollTo(0, 0);
+  }
+
+  // prototype jump bar
+  var jump = document.getElementById('jump');
+  Object.keys(views).forEach(function (k) {
+    var b = document.createElement('button');
+    b.textContent = labels[k];
+    b.dataset.view = k;
+    b.addEventListener('click', function () { show(k); });
+    jump.appendChild(b);
+  });
+
+  function showPane(name) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pane-body]'), function (s) {
+      s.hidden = (s.dataset.paneBody !== name);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#railnav button[data-pane]'), function (b) {
+      b.setAttribute('aria-current', String(b.dataset.pane === name));
+    });
+    document.getElementById('work').scrollIntoView({ block: 'start' });
+  }
+
+  document.addEventListener('click', function (e) {
+    var go = e.target.closest('[data-go]');
+    if (go) { show(go.dataset.go); if (go.dataset.go === 'app') showPane('campaigns'); return; }
+
+    var pane = e.target.closest('[data-pane]');
+    if (pane) { showPane(pane.dataset.pane); return; }
+
+    var paneGo = e.target.closest('[data-pane-go]');
+    if (paneGo) { showPane(paneGo.dataset.paneGo); return; }
+
+    var tab = e.target.closest('#runtabs button[data-tab]');
+    if (tab) {
+      Array.prototype.forEach.call(document.querySelectorAll('#runtabs button'), function (b) {
+        b.setAttribute('aria-current', String(b === tab));
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-tab-body]'), function (d) {
+        d.hidden = (d.dataset.tabBody !== tab.dataset.tab);
+      });
+      return;
+    }
+
+    var excl = e.target.closest('[data-excl]');
+    if (excl) {
+      var cl = excl.closest('.cluster');
+      var off = cl.classList.toggle('excluded');
+      excl.textContent = off ? 'Re-include' : 'Exclude';
+      var pill = cl.querySelector('.pill');
+      pill.className = 'pill ' + (off ? 'idle' : 'ok');
+      pill.textContent = off ? 'Excluded by you' : 'Accepted';
+      Array.prototype.forEach.call(cl.querySelectorAll('.res'), function (r) { r.classList.toggle('off', off); });
+      return;
+    }
+  });
+
+  document.addEventListener('submit', function (e) { e.preventDefault(); });
+
+  show('landing');
+})();
+</script>
