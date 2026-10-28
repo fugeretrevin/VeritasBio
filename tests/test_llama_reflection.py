@@ -173,10 +173,10 @@ class TestLlamaReflection(unittest.TestCase):
         self.assertIsInstance(orch.last_reflection, ReflectionDiagnosis)
         self.assertTrue(len(orch.last_reflection.mechanistic_diagnosis) > 10)
 
-        # Confirm that in round 2, strategy had hypotheses enriched by reflection
+        # Confirm that in subsequent strategy, hypotheses are enriched by reflection
         strategy = orch._generate_strategy(orch.last_metadata, round_number=2, top_evidence=[])
         hyp_names = [h.pocket_name for h in strategy.mechanistic_hypotheses]
-        self.assertTrue(any("reflection_round_1" in name for name in hyp_names))
+        self.assertTrue(any(f"reflection_round_{orch.last_reflection.round_number}" in name for name in hyp_names))
 
 
 if __name__ == "__main__":
