@@ -1,12 +1,12 @@
 {
-  "certificate_id": "VB-AUDIT-99A300F988EA544D",
-  "timestamp_utc": "2026-10-28T01:12:20.722959+00:00",
-  "ledger_hash_sha256": "99a300f988ea544d2ee28e0fcacdfb9e6397bb0219f944d56674ff6045280657",
+  "certificate_id": "VB-AUDIT-AE3B3603DED2CD00",
+  "timestamp_utc": "2026-10-28T02:23:13.281582+00:00",
+  "ledger_hash_sha256": "ae3b3603ded2cd0071b9310cd77593b77379e0d2f67cf3ac76ee765625e50154",
   "standard_compliance": "FDA 21 CFR Part 11 / GAMP 5 Immutability Verified",
   "target_protein": "Green fluorescent protein (P42212)",
   "total_budget_usd": 1.0,
-  "total_spent_usd": 0.007972,
+  "total_spent_usd": 0.014062,
   "total_jobs_authorized": 6,
-  "total_evidence_records": 622,
+  "total_evidence_records": 611,
   "deterministic_verification": "PASS: All spends follow ACID ledger lock with zero unbudgeted GPU bypass."
 }

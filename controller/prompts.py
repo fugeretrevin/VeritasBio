@@ -142,6 +142,9 @@ CRITICAL RULES:
    - Reference distance and spatial orientation relative to the catalytic core or bound cofactor (e.g. Lys87 PLP cofactor in TrpB or Tyr66-Gly67 chromophore in GFP).
    - Propose specific recommended amino acid chemistry classes (e.g. branched hydrophobics [I, V, L], small neutrals [A, G, S], polar amides [Q, N], or aromatics [Y, F, W]) in "suggested_chemistries".
    - Predict positive or negative epistatic coupling between interacting positions in "epistatic_coupling".
+9. SURFACE SHELL & ALLOSTERIC COOPERATIVITY EXPANSION:
+   - When core active-site pockets have converged across iterations or when optimizing folding cooperativity, propose a secondary cluster of high-flexibility, solvent-exposed surface residues (e.g. outer loop, beta-sheet turn, or outer scaffold residues) that modulate folding kinetics and global stability without mutating core catalytic residues.
+   - Surface positions tolerate diverse substitutions without disrupting the primary hydrophobic core, serving as key stability-rescuing permissive mutations for multi-mutant designs.
 """
 
 FEW_SHOT_EXAMPLE_JSON = {
@@ -326,6 +329,8 @@ def build_strategy_user_prompt(
         for ev in top_evidence[:5]:
             lines.append(f"- Variant: {ev.get('variant_sequence', 'N/A')} | Score: {ev.get('computed_score', 0.0):.4f}")
         lines.append("- Refine your mechanistic hypotheses to build on validated beneficial substitutions.")
+        if round_number >= 3:
+            lines.append("- STRATEGIC DIRECTIVE: Core active-site mutations have begun to converge. Consider proposing a secondary surface cluster or outer-loop flexible shell to unlock allosteric folding cooperativity.")
         lines.append("")
 
     example_json = generate_few_shot_example(protein_metadata)

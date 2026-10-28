@@ -56,34 +56,33 @@ MODEL_MAP: Dict[str, str] = {
 }
 
 
-@app.function(
-    image=esm_image,
-    gpu="A10G",
-    timeout=300,
-    scaledown_window=45,  # 45 seconds keep-alive: amortizes cold boot across rounds without lingering idle costs
-)
-def score_variants_remote(
+_LOADED_MODELS: Dict[str, Any] = {}
+_LOADED_TOKENIZERS: Dict[str, Any] = {}
+
+
+def _score_variants_core(
     wt_sequence: str,
     variant_sequences: List[str],
     hf_model_id: str = "facebook/esm2_t33_650M_UR50D",
     batch_size: int = 32,
 ) -> List[float]:
-    """
-    Remote Modal GPU function: executes batched masked-marginal log-likelihood scoring.
-    Batches sequences into tensor mini-batches for maximum A10G throughput.
-
-    For each variant, computes:
-        Score = sum_{i in mut_pos} [ log P(mut_token_i | seq) - log P(wt_token_i | seq) ]
-    """
     import torch
     from transformers import AutoModelForMaskedLM, AutoTokenizer
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    logger.info("Modal GPU Worker loading model %s on %s...", hf_model_id, device)
+    if hf_model_id not in _LOADED_MODELS:
+        logger.info("Modal GPU Worker loading model %s on %s...", hf_model_id, device)
+        tok = AutoTokenizer.from_pretrained(hf_model_id)
+        mod = AutoModelForMaskedLM.from_pretrained(hf_model_id).to(device)
+        mod.eval()
+        _LOADED_TOKENIZERS[hf_model_id] = tok
+        _LOADED_MODELS[hf_model_id] = mod
+    else:
+        tok = _LOADED_TOKENIZERS[hf_model_id]
+        mod = _LOADED_MODELS[hf_model_id]
 
-    tokenizer = AutoTokenizer.from_pretrained(hf_model_id)
-    model = AutoModelForMaskedLM.from_pretrained(hf_model_id).to(device)
-    model.eval()
+    tokenizer = tok
+    model = mod
 
     # Pre-encode WT reference
     wt_tokens = tokenizer(wt_sequence, return_tensors="pt").to(device)
@@ -136,6 +135,28 @@ def score_variants_remote(
     image=esm_image,
     gpu="A10G",
     timeout=300,
+    scaledown_window=45,  # 45 seconds keep-alive: amortizes cold boot across rounds without lingering idle costs
+)
+def score_variants_remote(
+    wt_sequence: str,
+    variant_sequences: List[str],
+    hf_model_id: str = "facebook/esm2_t33_650M_UR50D",
+    batch_size: int = 32,
+) -> List[float]:
+    """
+    Remote Modal GPU function: executes batched masked-marginal log-likelihood scoring.
+    Batches sequences into tensor mini-batches for maximum A10G throughput.
+
+    For each variant, computes:
+        Score = sum_{i in mut_pos} [ log P(mut_token_i | seq) - log P(wt_token_i | seq) ]
+    """
+    return _score_variants_core(wt_sequence, variant_sequences, hf_model_id, batch_size)
+
+
+@app.function(
+    image=esm_image,
+    gpu="A10G",
+    timeout=300,
     scaledown_window=45,
 )
 def score_variants_cascade_remote(
@@ -153,7 +174,7 @@ def score_variants_cascade_remote(
     import math
 
     logger.info("Modal Cascade: Screening %d variants via Tier 1 (150M)...", len(variant_sequences))
-    t1_scores = score_variants_remote(
+    t1_scores = _score_variants_core(
         wt_sequence=wt_sequence,
         variant_sequences=variant_sequences,
         hf_model_id="facebook/esm2_t30_150M_UR50D",
@@ -165,7 +186,7 @@ def score_variants_cascade_remote(
     promoted_seqs = [variant_sequences[i] for i in promoted_indices]
 
     logger.info("Modal Cascade: Verifying %d promoted variants via Tier 2 (650M)...", len(promoted_seqs))
-    t2_scores = score_variants_remote(
+    t2_scores = _score_variants_core(
         wt_sequence=wt_sequence,
         variant_sequences=promoted_seqs,
         hf_model_id="facebook/esm2_t33_650M_UR50D",
