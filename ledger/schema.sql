@@ -139,3 +139,41 @@ BEFORE DELETE ON Evidence
 BEGIN
     SELECT RAISE(ABORT, 'ledger: Evidence rows cannot be deleted');
 END;
+
+-- -----------------------------------------------------------------------------
+-- AuditLedgerBlocks (FDA 21 CFR Part 11 Cryptographic Merkle Hash Chain)
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS AuditLedgerBlocks (
+    block_index       INTEGER PRIMARY KEY,
+    timestamp         TEXT    NOT NULL,
+    action_type       TEXT    NOT NULL
+                      CHECK (action_type IN (
+                          'GENESIS',
+                          'BUDGET_CREATED',
+                          'SPEND_AUTHORIZED',
+                          'JOB_COMPLETED',
+                          'JOB_FAILED',
+                          'EVIDENCE_BATCH_RECORDED',
+                          'LIMS_SYNC'
+                      )),
+    payload_json      TEXT    NOT NULL,
+    prev_block_hash   TEXT    NOT NULL,
+    block_hash        TEXT    NOT NULL UNIQUE,
+    signature         TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_prev_hash ON AuditLedgerBlocks (prev_block_hash);
+
+-- Audit blocks are strictly immutable: no updates and no deletes
+CREATE TRIGGER IF NOT EXISTS trg_audit_no_update
+BEFORE UPDATE ON AuditLedgerBlocks
+BEGIN
+    SELECT RAISE(ABORT, 'ledger: AuditLedgerBlocks are cryptographically immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_audit_no_delete
+BEFORE DELETE ON AuditLedgerBlocks
+BEGIN
+    SELECT RAISE(ABORT, 'ledger: AuditLedgerBlocks cannot be deleted');
+END;
+

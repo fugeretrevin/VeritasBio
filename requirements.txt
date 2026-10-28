@@ -9,3 +9,5 @@ scipy
 numpy
 requests
 matplotlib
+plotly
+python-dotenv

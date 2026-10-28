@@ -21,10 +21,15 @@ Money units:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import logging
 import math
+import os
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
@@ -52,6 +57,11 @@ STATUS_FAILED = "FAILED"
 JOB_STATUSES = frozenset(
     {STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED, STATUS_COMPLETED, STATUS_FAILED}
 )
+
+HMAC_AUDIT_SECRET: bytes = os.environ.get(
+    "VERITAS_AUDIT_SECRET", "veritasbio-fda-21cfr11-genesis-secret-key"
+).encode("utf-8")
+GENESIS_PREV_HASH: str = "0" * 64
 
 DbPath = Union[str, Path]
 
@@ -147,6 +157,59 @@ def _job_row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
     return job
 
 
+def _compute_block_hash(
+    block_index: int,
+    timestamp: str,
+    action_type: str,
+    payload_json: str,
+    prev_block_hash: str,
+) -> str:
+    raw = f"{block_index}|{timestamp}|{action_type}|{payload_json}|{prev_block_hash}".encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _compute_block_signature(block_hash: str) -> str:
+    return hmac.new(HMAC_AUDIT_SECRET, block_hash.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _append_audit_block_tx(
+    conn: sqlite3.Connection,
+    action_type: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Appends an immutable, cryptographic hash-linked block to AuditLedgerBlocks within the active transaction."""
+    row = conn.execute(
+        "SELECT block_index, block_hash FROM AuditLedgerBlocks ORDER BY block_index DESC LIMIT 1;"
+    ).fetchone()
+
+    if row is None:
+        block_index = 0
+        prev_block_hash = GENESIS_PREV_HASH
+    else:
+        block_index = int(row["block_index"]) + 1
+        prev_block_hash = str(row["block_hash"])
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    payload_json = json.dumps(payload, sort_keys=True)
+    block_hash = _compute_block_hash(block_index, timestamp, action_type, payload_json, prev_block_hash)
+    signature = _compute_block_signature(block_hash)
+
+    conn.execute(
+        "INSERT INTO AuditLedgerBlocks (block_index, timestamp, action_type, payload_json, prev_block_hash, block_hash, signature) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?);",
+        (block_index, timestamp, action_type, payload_json, prev_block_hash, block_hash, signature),
+    )
+
+    return {
+        "block_index": block_index,
+        "timestamp": timestamp,
+        "action_type": action_type,
+        "prev_block_hash": prev_block_hash,
+        "block_hash": block_hash,
+        "signature": signature,
+    }
+
+
 # -----------------------------------------------------------------------------
 # Initialization
 # -----------------------------------------------------------------------------
@@ -157,6 +220,15 @@ def init_db(db_path: Optional[DbPath] = None) -> Path:
     schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
     with _connect(path) as conn:
         conn.executescript(schema_sql)
+        with _transaction(conn):
+            # Ensure FDA 21 CFR Part 11 Genesis Block is present
+            row = conn.execute("SELECT COUNT(*) as cnt FROM AuditLedgerBlocks;").fetchone()
+            if row and row["cnt"] == 0:
+                _append_audit_block_tx(
+                    conn,
+                    action_type="GENESIS",
+                    payload={"system": "VeritasBio", "standard": "FDA 21 CFR Part 11", "version": "1.0"},
+                )
     logger.info("Ledger initialized at %s", path)
     return path
 
@@ -182,6 +254,15 @@ def create_budget(
             conn.execute(
                 "INSERT INTO Budget (id, total_allocation, cumulative_spent) VALUES (?, ?, 0);",
                 (budget_id, allocation_micro),
+            )
+            _append_audit_block_tx(
+                conn,
+                action_type="BUDGET_CREATED",
+                payload={
+                    "budget_id": budget_id,
+                    "total_allocation_usd": total_allocation,
+                    "allocation_micro_usd": allocation_micro,
+                },
             )
         except sqlite3.IntegrityError as exc:
             raise LedgerError(f"Budget {budget_id} already exists") from exc
@@ -305,6 +386,18 @@ def authorize_spend(
                 "VALUES (?, ?, ?, ?, ?);",
                 (job_id, target_model, variant_count, cost_micro, STATUS_APPROVED),
             )
+            _append_audit_block_tx(
+                conn,
+                action_type="SPEND_AUTHORIZED",
+                payload={
+                    "job_id": job_id,
+                    "target_model": target_model,
+                    "variant_count": variant_count,
+                    "cost_micro_usd": cost_micro,
+                    "cost_usd": _micro_to_usd(cost_micro),
+                    "budget_id": budget_id,
+                },
+            )
 
         logger.info("authorize_spend APPROVED job %r: $%.6f for %d variants on %s",
                     job_id, _micro_to_usd(cost_micro), variant_count, target_model)
@@ -328,6 +421,11 @@ def _transition_approved_job(job_id: str, new_status: str, db_path: Optional[DbP
         )
         if cur.rowcount != 1:
             raise LedgerError(f"Job {job_id!r} is not APPROVED (or does not exist)")
+        _append_audit_block_tx(
+            conn,
+            action_type="JOB_COMPLETED" if new_status == STATUS_COMPLETED else "JOB_FAILED",
+            payload={"job_id": job_id, "new_status": new_status},
+        )
 
 
 def mark_job_completed(job_id: str, db_path: Optional[DbPath] = None) -> None:
@@ -401,6 +499,16 @@ def record_evidence(
                 "INSERT INTO Evidence (job_id, variant_sequence, computed_score) VALUES (?, ?, ?);",
                 rows,
             )
+            # Append cryptographic audit block for the recorded evidence batch
+            _append_audit_block_tx(
+                conn,
+                action_type="EVIDENCE_BATCH_RECORDED",
+                payload={
+                    "job_id": job_id,
+                    "variant_count": len(rows),
+                    "sample_variants": [r[1] for r in rows[:5]],
+                },
+            )
         except sqlite3.DatabaseError as exc:
             raise LedgerError(f"Could not record evidence for job {job_id!r}: {exc}") from exc
     return len(rows)
@@ -419,3 +527,108 @@ def get_evidence(
                 "SELECT * FROM Evidence WHERE job_id = ? ORDER BY evidence_id;", (job_id,)
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+# -----------------------------------------------------------------------------
+# FDA 21 CFR Part 11 Audit Ledger Verification & Operations
+# -----------------------------------------------------------------------------
+def record_lims_sync_audit(
+    entity_type: str,
+    entity_id: str,
+    benchling_id: str,
+    details: Optional[Dict[str, Any]] = None,
+    db_path: Optional[DbPath] = None,
+) -> Dict[str, Any]:
+    """
+    Record an FDA 21 CFR Part 11 compliant audit block for a Benchling LIMS sync event.
+    """
+    if not _is_non_empty_str(entity_type):
+        raise ValueError("entity_type must be a non-empty string")
+    if not _is_non_empty_str(entity_id):
+        raise ValueError("entity_id must be a non-empty string")
+    if not _is_non_empty_str(benchling_id):
+        raise ValueError("benchling_id must be a non-empty string")
+
+    payload = {
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "benchling_id": benchling_id,
+        "details": details or {},
+    }
+    with _connect(db_path) as conn, _transaction(conn):
+        return _append_audit_block_tx(conn, action_type="LIMS_SYNC", payload=payload)
+
+
+def list_audit_blocks(db_path: Optional[DbPath] = None) -> List[Dict[str, Any]]:
+    """
+    Return all cryptographic audit blocks in chronological order.
+    """
+    with _connect(db_path) as conn:
+        rows = conn.execute("SELECT * FROM AuditLedgerBlocks ORDER BY block_index ASC;").fetchall()
+    return [dict(r) for r in rows]
+
+
+def verify_audit_integrity(db_path: Optional[DbPath] = None) -> Tuple[bool, int, str]:
+    """
+    Cryptographically verify the entire FDA 21 CFR Part 11 audit block chain.
+
+    Checks:
+        1. Monotonic block_index sequence starting at 0.
+        2. Block 0 is GENESIS with prev_block_hash = '0'*64.
+        3. Strict SHA-256 hash chaining: block[k].prev_block_hash == block[k-1].block_hash.
+        4. Block hash authenticity: recomputed SHA-256 matches stored block_hash.
+        5. HMAC-SHA256 digital signature authenticity: signature matches stored signature.
+
+    Returns:
+        (is_valid: bool, verified_count: int, message: str)
+    """
+    blocks = list_audit_blocks(db_path)
+    if not blocks:
+        return False, 0, "Audit ledger is empty (missing Genesis block)"
+
+    for k, block in enumerate(blocks):
+        idx = block["block_index"]
+        if idx != k:
+            return False, k, f"Block index discontinuity: expected {k}, found {idx}"
+
+        prev_hash = block["prev_block_hash"]
+        if k == 0:
+            if block["action_type"] != "GENESIS":
+                return False, 0, f"Block 0 action_type must be GENESIS, found {block['action_type']}"
+            if prev_hash != GENESIS_PREV_HASH:
+                return False, 0, f"Block 0 prev_block_hash must be {GENESIS_PREV_HASH}, found {prev_hash}"
+        else:
+            expected_prev = blocks[k - 1]["block_hash"]
+            if prev_hash != expected_prev:
+                return (
+                    False,
+                    k,
+                    f"Hash chain broken at block {k}: prev_block_hash {prev_hash[:12]}... != parent hash {expected_prev[:12]}...",
+                )
+
+        # Verify SHA-256 block hash
+        expected_hash = _compute_block_hash(
+            idx,
+            block["timestamp"],
+            block["action_type"],
+            block["payload_json"],
+            prev_hash,
+        )
+        if block["block_hash"] != expected_hash:
+            return (
+                False,
+                k,
+                f"Data tampering detected at block {k} ({block['action_type']}): block_hash mismatch",
+            )
+
+        # Verify HMAC digital signature
+        expected_sig = _compute_block_signature(block["block_hash"])
+        if block["signature"] != expected_sig:
+            return (
+                False,
+                k,
+                f"Digital signature forgery detected at block {k} ({block['action_type']})",
+            )
+
+    return True, len(blocks), f"Audit chain verified intact: {len(blocks)} blocks cryptographically validated"
+

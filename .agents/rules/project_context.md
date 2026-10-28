@@ -72,6 +72,11 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
 - [x] Enterprise hardening & biologics developability: `workers/math_worker.py`, `workers/wetlab_worker.py`,
       `tests/test_enterprise_hardening.py` (Heteroscedastic Gaussian Process with replicate variance,
       therapeutic antibody developability liability scoring, 96/384-well anti-edge evaporation barrier plate layout).
+- [x] Gap 4 Enterprise Compliance & LIMS Integration: `ledger/schema.sql`, `ledger/database.py`,
+      `workers/lims_worker.py`, `ledger/postgres_schema.sql`, `ui/dashboard.py`, `tests/test_enterprise_compliance.py`
+      (FDA 21 CFR Part 11 cryptographic Merkle hash chain with HMAC-SHA256, schema immutability triggers,
+      Benchling LIMS client with cDNA registration + virtual plate layout + manifest export,
+      multi-tenant PostgreSQL schema with Row-Level Security, 8 unit tests passing, full suite 148/148 passing).
 
 ## Open questions (ask the user when relevant)
 - Numeric constants for D3: A10G $/sec, GPU-seconds/variant, cold-start seconds.

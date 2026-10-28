@@ -135,8 +135,15 @@ def main() -> None:
         print("=" * 60)
     else:
         logger.info("Launching VeritasBio Gradio Dashboard on port %d...", args.port)
+        import gradio as gr
         demo = create_dashboard(db_path=args.db)
-        demo.launch(server_name="127.0.0.1", server_port=args.port, inbrowser=False)
+        demo.launch(
+            server_name="127.0.0.1",
+            server_port=args.port,
+            inbrowser=False,
+            css=getattr(demo, "custom_css", None),
+            theme=gr.themes.Default(),
+        )
 
 
 if __name__ == "__main__":

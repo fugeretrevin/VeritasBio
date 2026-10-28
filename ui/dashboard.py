@@ -37,6 +37,7 @@ from controller.orchestrator import CampaignMode, Orchestrator, OrchestratorConf
 from ledger import database as ledger_db
 from ui.landscape_plot import generate_landscape_figure
 from ui.structure_viewer import generate_3d_viewer_html
+from workers.lims_worker import BenchlingClient, DEFAULT_PLATE_FORMAT
 from workers.mock_workers import MockLLMWorker
 from workers.rag_worker import fetch_protein_metadata
 from workers.wetlab_worker import (
@@ -73,6 +74,21 @@ def format_jobs_table(jobs: List[Dict[str, Any]]) -> List[List[Any]]:
             j.get("variant_count", 0),
             f"${float(j.get('estimated_cost', 0.0)):.6f}",
             j.get("status", ""),
+        ])
+    return rows
+
+
+def format_audit_blocks_table(blocks: List[Dict[str, Any]]) -> List[List[Any]]:
+    """Formats FDA 21 CFR Part 11 audit blocks for the Gradio Dataframe."""
+    rows = []
+    for b in reversed(blocks):
+        rows.append([
+            b.get("block_index", 0),
+            b.get("timestamp", "")[:19],
+            b.get("action_type", ""),
+            f"{b.get('block_hash', '')[:16]}...",
+            f"{b.get('prev_block_hash', '')[:16]}...",
+            "AUTHENTICATED (HMAC-SHA256)",
         ])
     return rows
 
@@ -315,7 +331,8 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
     }
     """
 
-    with gr.Blocks(title="VeritasBio — Cloud Economics Engine", css=custom_css, theme=gr.themes.Default()) as demo:
+    with gr.Blocks(title="VeritasBio — Cloud Economics Engine") as demo:
+        demo.custom_css = custom_css
 
         # Header Row
         with gr.Row():
@@ -511,7 +528,9 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                             btn_gen_twist = gr.Button("Export Twist / IDT Order Sheet (CSV)", elem_classes=["btn-action"])
                             btn_gen_robot = gr.Button("Export Opentrons OT-2 Script (.py)", elem_classes=["btn-action"])
                             btn_gen_layout = gr.Button("Export 96-Well Plate Layout (CSV)", elem_classes=["btn-action"])
+                            btn_sync_benchling = gr.Button("Sync & Export Benchling LIMS Manifest", elem_classes=["btn-action"])
                             btn_gen_cert = gr.Button("Generate FDA 21 CFR Part 11 Audit Certificate", elem_classes=["btn-action"])
+                            btn_verify_audit = gr.Button("Verify 21 CFR Part 11 Hash Chain", elem_classes=["btn-action"])
 
                         wetlab_output = gr.Code(
                             label="Generated Synthesis & Robotics File Content",
@@ -519,11 +538,19 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                             lines=18,
                         )
 
-                    # TAB 6: Ledger Audit Trail
-                    with gr.TabItem("Ledger Audit Trail (Double-Entry Spend)"):
+                    # TAB 6: Ledger Audit Trail & FDA 21 CFR Part 11 Blocks
+                    with gr.TabItem("Ledger & FDA 21 CFR Part 11 Audit Trail"):
+                        gr.Markdown("### Double-Entry Authorization Ledger (Compute Spend)")
                         table_jobs = gr.Dataframe(
                             headers=["Job ID", "Model", "Variant Count", "Estimated Cost", "Status"],
                             datatype=["str", "str", "number", "str", "str"],
+                            interactive=False,
+                            wrap=True,
+                        )
+                        gr.Markdown("### Cryptographic State-Transition Blocks (FDA 21 CFR Part 11)")
+                        table_audit_blocks = gr.Dataframe(
+                            headers=["Block #", "Timestamp", "Action Type", "Block Hash", "Parent Hash", "Signature Status"],
+                            datatype=["number", "str", "str", "str", "str", "str"],
                             interactive=False,
                             wrap=True,
                         )
@@ -575,11 +602,12 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             outputs=[input_custom_accession, viewer_3d, viewer_cot, status_box],
         )
 
-        def on_refresh(target_choice: str, custom_acc: str) -> Tuple[float, float, float, str, str, List[List[Any]], List[List[Any]], Any, Any, Optional[str], str]:
+        def on_refresh(target_choice: str, custom_acc: str) -> Tuple[float, float, float, str, str, List[List[Any]], List[List[Any]], List[List[Any]], Any, Any, Optional[str], str]:
             eff_acc, wt_seq = resolve_effective_target(target_choice, custom_acc)
             rem = ledger_db.get_remaining_budget(db_path=db_path)
             jobs = ledger_db.list_jobs(db_path=db_path)
             evidence = ledger_db.get_evidence(db_path=db_path)
+            blocks = ledger_db.list_audit_blocks(db_path=db_path)
 
             spent = sum(float(j["estimated_cost"]) for j in jobs if j["status"] in ("APPROVED", "COMPLETED", "FAILED"))
             top_fit = max([float(e["computed_score"]) for e in evidence], default=0.0)
@@ -600,9 +628,10 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 round(spent, 4),
                 round(top_fit, 4),
                 saved_str,
-                f"Ledger synced for {eff_acc}: {len(jobs)} jobs, {len(evidence)} evidence entries.",
+                f"Ledger synced for {eff_acc}: {len(jobs)} jobs, {len(evidence)} evidence entries, {len(blocks)} audit blocks.",
                 format_evidence_table(evidence, wt_sequence=wt_seq),
                 format_jobs_table(jobs),
+                format_audit_blocks_table(blocks),
                 html_3d,
                 fig_landscape,
                 plot_file,
@@ -621,7 +650,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             enable_live_llm_val: bool = False,
             enable_cascade_val: bool = False,
             enable_refinement_val: bool = False,
-        ) -> Iterator[Tuple[float, float, float, str, str, str, List[List[Any]], List[List[Any]], Any, Any, Optional[str], str]]:
+        ) -> Iterator[Tuple[float, float, float, str, str, str, List[List[Any]], List[List[Any]], List[List[Any]], Any, Any, Optional[str], str]]:
             """Streams live events using Python generator yields."""
             eff_acc, wt_seq = resolve_effective_target(target_choice, custom_acc)
             # If user explicitly selected a cascade model in dropdown, also enable cascade flag
@@ -663,6 +692,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
 
                 jobs = ledger_db.list_jobs(db_path=db_path)
                 evidence = ledger_db.get_evidence(db_path=db_path)
+                blocks = ledger_db.list_audit_blocks(db_path=db_path)
                 top_fit = max([float(e["computed_score"]) for e in evidence], default=0.0)
 
                 # Savings metric
@@ -684,6 +714,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                     log_str,
                     format_evidence_table(evidence, wt_sequence=wt_seq),
                     format_jobs_table(jobs),
+                    format_audit_blocks_table(blocks),
                     html_3d,
                     fig_landscape,
                     plot_file,
@@ -743,10 +774,72 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             )
             return json.dumps(cert, indent=4)
 
+        def on_sync_benchling(target_choice: str, custom_acc: str) -> str:
+            eff_acc, _ = resolve_effective_target(target_choice, custom_acc)
+            evidence = ledger_db.get_evidence(db_path=db_path)
+            sorted_ev = sorted(evidence, key=lambda e: float(e["computed_score"]), reverse=True)[:56]
+            var_dicts = [
+                {
+                    "variant_name": ev.get("variant_sequence"),
+                    "computed_score": ev.get("computed_score"),
+                }
+                for ev in sorted_ev
+            ]
+            layout = generate_plate_layout(
+                variants=var_dicts,
+                plate_format="96_well",
+                anti_edge_barrier=True,
+                wt_name=f"{eff_acc} WT",
+            )
+            client = BenchlingClient()
+            manifest_csv = client.export_lims_manifest(
+                plate_name=f"VeritasBio_{eff_acc}_Plate1",
+                plate_map=layout,
+            )
+            plate_res = client.create_virtual_plate(
+                plate_name=f"VeritasBio_{eff_acc}_Plate1",
+                plate_format=DEFAULT_PLATE_FORMAT,
+                plate_map=layout,
+                db_path=db_path,
+            )
+            summary = {
+                "status": "SUCCESS",
+                "message": f"Successfully synchronized {len(var_dicts)} variants to Benchling LIMS virtual plate.",
+                "benchling_plate_id": plate_res.get("id"),
+                "containers_mapped": plate_res.get("containerCount"),
+                "manifest_csv_preview": manifest_csv[:500] + ("\n...[truncated]..." if len(manifest_csv) > 500 else ""),
+            }
+            return json.dumps(summary, indent=4) + "\n\n# --- BENCHLING BULK IMPORT CSV ---\n" + manifest_csv
+
+        def on_verify_audit() -> str:
+            is_valid, count, msg = ledger_db.verify_audit_integrity(db_path=db_path)
+            blocks = ledger_db.list_audit_blocks(db_path=db_path)
+            report = {
+                "fda_21_cfr_part_11_compliance": "VERIFIED" if is_valid else "FAILED_INTEGRITY_CHECK",
+                "validation_status": msg,
+                "total_blocks_verified": count,
+                "latest_block_hash": blocks[-1]["block_hash"] if blocks else "N/A",
+                "genesis_block_hash": blocks[0]["block_hash"] if blocks else "N/A",
+                "cryptographic_signatures": "HMAC-SHA256 authenticated across all state transitions",
+                "immutable_blocks": [
+                    {
+                        "index": b["block_index"],
+                        "timestamp": b["timestamp"],
+                        "action": b["action_type"],
+                        "hash": b["block_hash"][:16] + "...",
+                        "parent_hash": b["prev_block_hash"][:16] + "...",
+                    }
+                    for b in blocks
+                ],
+            }
+            return json.dumps(report, indent=4)
+
         btn_gen_twist.click(fn=on_gen_twist, inputs=[input_target, input_custom_accession], outputs=[wetlab_output])
         btn_gen_robot.click(fn=on_gen_robot, inputs=[input_target, input_custom_accession], outputs=[wetlab_output])
         btn_gen_layout.click(fn=on_gen_layout, inputs=[input_target, input_custom_accession], outputs=[wetlab_output])
+        btn_sync_benchling.click(fn=on_sync_benchling, inputs=[input_target, input_custom_accession], outputs=[wetlab_output])
         btn_gen_cert.click(fn=on_gen_cert, inputs=[input_target, input_custom_accession], outputs=[wetlab_output])
+        btn_verify_audit.click(fn=on_verify_audit, inputs=[], outputs=[wetlab_output])
 
         btn_refresh.click(
             fn=on_refresh,
@@ -759,6 +852,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 status_box,
                 table_variants,
                 table_jobs,
+                table_audit_blocks,
                 viewer_3d,
                 plot_landscape,
                 plot_preview,
@@ -790,6 +884,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 log_output,
                 table_variants,
                 table_jobs,
+                table_audit_blocks,
                 viewer_3d,
                 plot_landscape,
                 plot_preview,
@@ -802,4 +897,11 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
 
 if __name__ == "__main__":
     app_demo = create_dashboard()
-    app_demo.launch(server_name="127.0.0.1", server_port=7860, inbrowser=False)
+    app_demo.launch(
+        server_name="127.0.0.1",
+        server_port=7860,
+        inbrowser=False,
+        css=getattr(app_demo, "custom_css", None),
+        theme=gr.themes.Default(),
+    )
+

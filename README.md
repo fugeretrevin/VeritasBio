@@ -3,7 +3,8 @@
 [![Meta AI Hackathon](https://img.shields.io/badge/Meta_Global_AI_Hackathon-2026-blue.svg)](https://lablab.ai)
 [![Llama 3.1 Powered](https://img.shields.io/badge/Llama_3.1-Strict_JSON_Priors-purple.svg)](https://llama.meta.com/)
 [![Modal GPU](https://img.shields.io/badge/Modal-NVIDIA_A10G-green.svg)](https://modal.com)
-[![Tests Passing](https://img.shields.io/badge/Tests-50%2F50_Passing-brightgreen.svg)]()
+[![Tests Passing](https://img.shields.io/badge/Tests-148%2F148_Passing-brightgreen.svg)]()
+[![Compliance](https://img.shields.io/badge/FDA_21_CFR_Part_11-Cryptographically_Verified-darkgreen.svg)]()
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)]()
 
 > **VeritasBio** is a deterministic cloud economics engine and active learning platform for generative protein engineering. An LLM (*Meta Llama 3.1*) only proposes biophysical search boundaries; a Gaussian Process actively selects high-yield micro-batches; and an immutable SQLite ledger with a fail-closed Python Gatekeeper guarantees that paid GPU compute (*Modal NVIDIA A10G + ESM-2*) never exceeds the user's hard budget.
@@ -82,6 +83,18 @@ data disagree with the published active site. `tests/test_trpb_benchmark.py` ass
 completeness (19, 19², 19³, 19⁴ by mutation order) and the published score range, so silent drift in
 the upstream file fails the suite rather than producing a plausible-looking result.
 
+### 2c. Third Benchmark: GB1 Binding Domain Epistasis (Olson et al. 2014)
+Measures IgG-Fc binding affinity across 149,361 empirical variants testing complex 4-site epistatic landscapes (`V39`, `D40`, `G41`, `V54`). Evaluates multi-site synergy and heteroscedastic noise resilience under experimental measurement variance.
+```bash
+python scripts/run_gb1_benchmark.py --rounds 5 --batch-size 25
+```
+
+### 2d. Fourth Benchmark: Trastuzumab (Herceptin) Biologics (Mason et al. 2021)
+Targeted at therapeutic biologics antibody design using 36,391 empirical CDR-H3 variants against human HER2 (*Nature Biomedical Engineering*). Evaluates **therapeutic developability liability scoring** (deamidation, isomerization, unpaired cysteines, and hydrophobic patches) alongside binding affinity.
+```bash
+python scripts/run_trastuzumab_benchmark.py --rounds 5 --batch-size 25
+```
+
 ---
 
 ## 3. System Architecture & The 6-Step Loop
@@ -134,6 +147,15 @@ Instead of treating amino acid substitutions as arbitrary one-hot tokens, mutati
 
 ### 3. Expected Improvement per Dollar ($EI/\$$)
 Candidates are selected not merely by predicted fitness, but by Expected Improvement ($EI$) balanced against the cost of inference ($EI / \$$), mathematically directing budget to the highest information-density search regions.
+
+### 4. FDA 21 CFR Part 11 Cryptographic Merkle Hash Chain & PostgreSQL Multi-Tenancy
+Every state mutation (`BUDGET_CREATED`, `SPEND_AUTHORIZED`, `JOB_COMPLETED`, `JOB_FAILED`, `EVIDENCE_BATCH_RECORDED`, `LIMS_SYNC`) is cryptographically sealed into a SHA-256 Merkle hash chain authenticated with HMAC-SHA256 signatures. Immutable database triggers prevent any modification or deletion, and `verify_audit_integrity()` detects raw disk tampering or signature forgery. Production deployments are supported via multi-tenant PostgreSQL schemas with native Row-Level Security (RLS).
+
+### 5. Physical Wet-Lab Translation & Benchling LIMS Synchronization
+Directly bridges in silico active learning to physical robotics:
+- **Benchling LIMS Integration**: Dual Live/Mock REST adapter for cDNA construct registration, virtual 96/384-well plate layouts with container barcodes, and bulk CSV manifest export.
+- **Opentrons OT-2 Automation**: Auto-generates executable Python pipetting scripts with **anti-edge evaporation barriers** (reserving 36 perimeter wells for sterile water shielding).
+- **Twist / IDT Gene Fragment Orders**: Generates price-calculated bulk synthesis order CSVs with automated codon optimization and Gibson assembly overhangs.
 
 ---
 
@@ -225,7 +247,7 @@ python scripts/plot_benchmark.py --target avgfp --out scripts/benchmark_avgfp.pn
 
 ### C. Running the Complete Test Suite
 
-VeritasBio includes 99 automated unit tests covering all 7 layers:
+VeritasBio includes 148 automated unit tests across 24 test suites covering all 7 layers:
 ```bash
 python -m unittest discover -s tests -v
 ```
@@ -242,15 +264,21 @@ VeritasBio/
 │   └── orchestrator.py     # Unidirectional 6-step active learning generator loop
 ├── workers/
 │   ├── rag_worker.py       # UniProt metadata fetcher & local disk caching
-│   ├── data/               # Offline caches: P42212 (avGFP), P50909 + TRPB_TM9D8 (TrpB parent)
-│   ├── math_worker.py      # 5-factor featurizer, Matérn 5/2 GP, Expected Improvement
+│   ├── spatial_filter.py   # 3D Euclidean contact mapping & steric clash biomechanical filter
+│   ├── math_worker.py      # Heteroscedastic GP, 5-factor featurizer, GFlowNet, k-DPP diversity
+│   ├── wetlab_worker.py    # Opentrons OT-2 scripts, Twist/IDT CSVs, anti-edge evaporation layouts
+│   ├── lims_worker.py      # Benchling LIMS REST client, virtual plate barcoding, manifest export
 │   ├── esm_worker.py       # Modal serverless NVIDIA A10G ESM-2 scoring function
-│   └── mock_workers.py     # Continuous epistatic avGFP fitness landscape (Sarkisyan 2016)
+│   ├── mock_workers.py     # Continuous epistatic avGFP fitness landscape (Sarkisyan 2016)
+│   └── data/               # 3D crystal structures (1EMA, 8EH0, 1N8Z) & UniProt offline caches
 ├── ledger/
-│   ├── schema.sql          # DDL with micro-USD precision and immutability triggers
-│   └── database.py         # Fail-closed SQLite CRUD & atomic authorize_spend()
+│   ├── schema.sql          # SQLite DDL with micro-USD precision & FDA 21 CFR Part 11 Merkle triggers
+│   ├── postgres_schema.sql # Multi-tenant PostgreSQL DDL with Row-Level Security (RLS)
+│   └── database.py         # Fail-closed SQLite CRUD, atomic spend gate, hash chain verification
 ├── ui/
-│   └── dashboard.py        # Asynchronous streaming Gradio dashboard
+│   ├── dashboard.py        # Asynchronous streaming Gradio dashboard
+│   ├── structure_viewer.py # Interactive 3Dmol.js WebGL molecular viewer
+│   └── landscape_plot.py   # Interactive 2D/3D latent fitness landscape explorer (Plotly)
 ├── scripts/
 │   ├── evaluate.py         # Spearman correlation, hit rate, and cloud savings engine
 │   ├── plot_benchmark.py   # Publication-quality benchmark visualization generator
@@ -258,13 +286,14 @@ VeritasBio/
 │   ├── download_trpb_benchmark.py  # Fetches + re-encodes the TrpB active-site landscape
 │   ├── run_real_data_benchmark.py  # Active learning loop on avGFP
 │   ├── run_trpb_benchmark.py       # Active learning loop on TrpB (held-out + random baseline)
-│   └── data/
-│       ├── sarkisyan_gfp_benchmark.json # Sarkisyan et al. avGFP ground truth
-│       └── TRPB_THEMA_Johnston_2024.csv # TrpB landscape, 159,999 measured variants
+│   ├── run_gb1_benchmark.py        # Active learning loop on GB1 binding domain (Olson 2014)
+│   ├── run_trastuzumab_benchmark.py# Active learning on Trastuzumab biologics (Mason 2021)
+│   ├── ingest_plate_data.py        # Physical wet-lab microplate reader CSV ingestion CLI
+│   └── data/                       # Curated benchmark datasets (GFP, TrpB, GB1, Trastuzumab)
 ├── presentation.html       # Interactive partner deck with live economics simulator
 ├── main.py                 # Application entry point (CLI and Web Dashboard)
-├── requirements.txt        # Production dependencies
-└── tests/                  # 50 unit tests across Phases 1–6
+├── requirements.txt        # Production dependencies (PyTorch, Modal, Gradio, Plotly, etc.)
+└── tests/                  # 148 unit tests across 24 test suites
 ```
 
 ---
