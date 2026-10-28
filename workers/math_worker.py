@@ -351,10 +351,18 @@ class DeepKernelLearner:
             h2 = np.zeros((len(X), self.latent_dim))
         return np.hstack([h2, 0.05 * X])
 
-    def fit(self, X: np.ndarray, y: np.ndarray, epochs: int = 400, lr: float = 0.02) -> DeepKernelLearner:
+    def fit(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        sample_variance: Optional[np.ndarray] = None,
+        epochs: int = 400,
+        lr: float = 0.02,
+    ) -> DeepKernelLearner:
         """
         Jointly trains the neural projection weights phi(x; w) and fits
         the Gaussian Process covariance on the projected manifold.
+        Supports heteroscedastic noise modeling when sample_variance is provided.
         """
         N = len(X)
         if N >= 3:
@@ -371,6 +379,18 @@ class DeepKernelLearner:
                 pass
 
         Z = self.project(X)
+        if sample_variance is not None and len(sample_variance) == len(Z):
+            # Heteroscedastic noise modeling: observation-specific technical assay variances
+            gp_alpha = np.maximum(sample_variance, 1e-4)
+            self.gp = GaussianProcessRegressor(
+                kernel=ConstantKernel(1.0, constant_value_bounds="fixed") * Matern(
+                    length_scale=1.0, length_scale_bounds=(1e-2, 1e2), nu=2.5
+                ),
+                alpha=gp_alpha,
+                n_restarts_optimizer=1,
+                normalize_y=True,
+                random_state=self.random_state,
+            )
         self.gp.fit(Z, y)
         self.is_fitted = True
         return self
@@ -582,7 +602,83 @@ def evaluate_synthesizability_score(
     if mut_cys > wt_cys:
         score -= 0.10 * (mut_cys - wt_cys)
 
+    # Therapeutic Biologics Developability Liabilities (D10)
+    # Deamidation, isomerization, and odd cysteine thiol reactivity
+    for motif in ["NG", "NS", "NA", "NH"]:
+        delta_m = mutated_seq.count(motif) - wt_sequence.count(motif)
+        if delta_m > 0:
+            score -= 0.08 * delta_m
+
+    for motif in ["DG", "DS", "DT"]:
+        delta_m = mutated_seq.count(motif) - wt_sequence.count(motif)
+        if delta_m > 0:
+            score -= 0.08 * delta_m
+
+    if mut_cys % 2 == 1:
+        score -= 0.12
+
     return float(np.clip(score, 0.05, 1.0))
+
+
+def analyze_biologics_developability(sequence: str, wt_sequence: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Analyzes therapeutic biologics developability liabilities (D10):
+      - Asn deamidation hotspots (NG, NS, NA, NH)
+      - Asp isomerization hotspots (DG, DS, DT)
+      - Methionine oxidation sites
+      - Unpaired cysteines (thiol scrambling)
+      - N-glycosylation consensus sequons (N-X-[S/T] where X != P)
+      - Aggregation-prone hydrophobic clusters
+    """
+    seq = sequence.upper()
+
+    deamidation_sites: List[str] = []
+    for i in range(len(seq) - 1):
+        di = seq[i : i + 2]
+        if di in ("NG", "NS", "NA", "NH"):
+            deamidation_sites.append(f"{di}@{i+1}")
+
+    isomerization_sites: List[str] = []
+    for i in range(len(seq) - 1):
+        di = seq[i : i + 2]
+        if di in ("DG", "DS", "DT"):
+            isomerization_sites.append(f"{di}@{i+1}")
+
+    met_oxidation_sites: List[str] = [f"M@{i+1}" for i, aa in enumerate(seq) if aa == "M"]
+
+    cys_count = seq.count("C")
+    unpaired_cys = (cys_count % 2 == 1)
+
+    glyco_sites: List[str] = []
+    for i in range(len(seq) - 2):
+        if seq[i] == "N" and seq[i + 1] != "P" and seq[i + 2] in ("S", "T"):
+            glyco_sites.append(f"{seq[i : i + 3]}@{i+1}")
+
+    score = 1.0
+    liabilities: List[str] = []
+
+    if deamidation_sites:
+        score -= 0.08 * min(len(deamidation_sites), 4)
+        liabilities.append(f"{len(deamidation_sites)} Asn deamidation motif(s): {', '.join(deamidation_sites[:3])}")
+    if isomerization_sites:
+        score -= 0.08 * min(len(isomerization_sites), 4)
+        liabilities.append(f"{len(isomerization_sites)} Asp isomerization motif(s): {', '.join(isomerization_sites[:3])}")
+    if unpaired_cys:
+        score -= 0.15
+        liabilities.append(f"Odd cysteine count ({cys_count} Cys): unpaired thiol risks covalent aggregation")
+    if glyco_sites:
+        score -= 0.10 * min(len(glyco_sites), 2)
+        liabilities.append(f"{len(glyco_sites)} N-linked glycosylation sequon(s): {', '.join(glyco_sites)}")
+
+    return {
+        "developability_score": float(np.clip(score, 0.05, 1.0)),
+        "deamidation_sites": deamidation_sites,
+        "isomerization_sites": isomerization_sites,
+        "met_oxidation_sites": met_oxidation_sites,
+        "unpaired_cysteine": unpaired_cys,
+        "glycosylation_sites": glyco_sites,
+        "clinical_liabilities": liabilities,
+    }
 
 
 def extract_mutations_from_sequence(mutated_seq: str, wt_seq: str) -> List[SingleMutation]:
@@ -1267,6 +1363,7 @@ def select_next_micro_batch(
     y_train_list: List[float] = []
     y_train_direct_list: List[float] = []
     train_priors_list: List[float] = []
+    sample_variances_list: List[float] = [1e-4]  # WT sequence reference variance
 
     # Include WT sequence baseline as score 0.0 (reference)
     wt_var = Variant(notation="WT", mutations=[])
@@ -1298,6 +1395,15 @@ def select_next_micro_batch(
                     y_train_direct_list.append(float(score))
                     train_priors_list.append(float(prior_val))
 
+                    # Replicate variance for heteroscedastic noise estimation
+                    raw_var = ev.get("variance") or ev.get("score_variance")
+                    if raw_var is not None:
+                        sample_variances_list.append(max(float(raw_var), 1e-4))
+                    elif ev.get("std") is not None:
+                        sample_variances_list.append(max(float(ev["std"]) ** 2, 1e-4))
+                    else:
+                        sample_variances_list.append(1e-2)
+
                     if float(score) > f_best:
                         f_best = float(score)
                 except Exception as exc:
@@ -1305,6 +1411,7 @@ def select_next_micro_batch(
 
     X_train = np.array(X_train_list, dtype=np.float64)
     y_train = np.array(y_train_list, dtype=np.float64)
+    sample_variances_arr = np.array(sample_variances_list, dtype=np.float64) if len(sample_variances_list) == len(X_train) else None
 
     # Improvement 1: Fit Assay-Adapted Head on accumulated evidence
     assay_adapter = AssayAdaptedHead(feature_dim=X_train.shape[1], random_state=42)
@@ -1319,9 +1426,10 @@ def select_next_micro_batch(
             logger.debug("AssayAdaptedHead fit error: %s", ad_err)
 
     # Step 2: Fit Deep Kernel Learning (DKL) surrogate on residuals (Pillar 2)
+    # Incorporates heteroscedastic noise modeling from experimental replicates
     surrogate = DeepKernelLearner(input_dim=X_train.shape[1], random_state=42)
     try:
-        surrogate.fit(X_train, y_train)
+        surrogate.fit(X_train, y_train, sample_variance=sample_variances_arr)
     except Exception as exc:
         logger.warning("DKL fit failed (%s). Retrying with base GP...", exc)
         surrogate = build_gp_model()

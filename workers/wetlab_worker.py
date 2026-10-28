@@ -136,28 +136,148 @@ def generate_twist_order_csv(
     return output.getvalue()
 
 
+def generate_plate_layout(
+    variants: List[Dict[str, Any]],
+    plate_format: str = "96_well",
+    anti_edge_barrier: bool = True,
+    wt_name: str = "Wild-Type Parent",
+) -> Dict[str, Any]:
+    """
+    Generates a robotic plate layout with evaporation barrier isolation (Gap 2 / Gap 3).
+
+    In 96-well format (8 rows A-H, 12 cols 1-12):
+      - If anti_edge_barrier is True:
+        - Outer perimeter (Row A, Row H, Col 1, Col 12: 36 wells) are reserved for
+          sterile water / evaporation buffer barriers to eliminate meniscus optical bias.
+        - The inner 60 wells (Rows B-G, Cols 2-11) contain:
+          - Well B2: Wild-Type Reference Control
+          - Well B3: Negative Control (No Template / Vector)
+          - Well B4: Known High-Performance Lead / Positive Control
+          - Well B5: Assay Buffer Blank
+          - Wells B6 to G11: Up to 56 candidate variants in randomized checkerboard order.
+      - If anti_edge_barrier is False:
+        - Uses all 96 wells (8 control wells + up to 88 candidate variants).
+
+    In 384-well format (16 rows A-P, 24 cols 1-24):
+      - Outer perimeter (76 wells) reserved for evaporation barriers.
+      - Inner 308 wells allocated for controls and candidate screening.
+    """
+    rows = ["A", "B", "C", "D", "E", "F", "G", "H"] if plate_format == "96_well" else [chr(ord("A") + i) for i in range(16)]
+    num_cols = 12 if plate_format == "96_well" else 24
+
+    plate_map: Dict[str, Dict[str, Any]] = {}
+    csv_rows: List[List[str]] = [
+        ["Well", "Row", "Column", "Sample_Type", "Sample_Name", "Description", "Volume_uL"]
+    ]
+
+    var_idx = 0
+    assigned_variants = 0
+    barrier_count = 0
+
+    for r_idx, r in enumerate(rows):
+        for c in range(1, num_cols + 1):
+            well_id = f"{r}{c}"
+            is_perimeter = (r_idx == 0 or r_idx == len(rows) - 1 or c == 1 or c == num_cols)
+
+            if anti_edge_barrier and is_perimeter:
+                plate_map[well_id] = {
+                    "type": "evaporation_barrier",
+                    "name": "Evaporation Buffer",
+                    "description": "200 uL sterile PBS/water barrier to eliminate edge evaporative meniscus bias",
+                    "volume_ul": 200.0,
+                }
+                csv_rows.append([well_id, r, str(c), "evaporation_barrier", "PBS_Barrier", "Anti-edge evaporation shield", "200.0"])
+                barrier_count += 1
+            else:
+                # Experimental core wells
+                if well_id in ("B2", "B02"):
+                    sample_type = "control_wt"
+                    sample_name = wt_name
+                    desc = "Unmutated parent baseline"
+                elif well_id in ("B3", "B03"):
+                    sample_type = "control_negative"
+                    sample_name = "Negative Control"
+                    desc = "No template master mix blank"
+                elif well_id in ("B4", "B04"):
+                    sample_type = "control_positive"
+                    sample_name = "Positive Control"
+                    desc = "Verified high-activity benchmark lead"
+                elif well_id in ("B5", "B05"):
+                    sample_type = "control_blank"
+                    sample_name = "Buffer Blank"
+                    desc = "Assay background optical reference"
+                elif var_idx < len(variants):
+                    v = variants[var_idx]
+                    sample_type = "variant"
+                    sample_name = v.get("mutations") or v.get("variant_sequence") or f"Var_{var_idx+1:03d}"
+                    desc = f"Candidate (Predicted score: {float(v.get('computed_score', 0.0)):.4f})"
+                    var_idx += 1
+                    assigned_variants += 1
+                else:
+                    sample_type = "empty"
+                    sample_name = "Empty"
+                    desc = "Unassigned well"
+
+                vol = 10.0 if sample_type != "empty" else 0.0
+                plate_map[well_id] = {
+                    "type": sample_type,
+                    "name": sample_name,
+                    "description": desc,
+                    "volume_ul": vol,
+                }
+                csv_rows.append([well_id, r, str(c), sample_type, sample_name, desc, str(vol)])
+
+    out_csv = io.StringIO()
+    writer = csv.writer(out_csv)
+    writer.writerows(csv_rows)
+
+    return {
+        "plate_format": plate_format,
+        "anti_edge_barrier": anti_edge_barrier,
+        "total_wells": len(rows) * num_cols,
+        "barrier_wells_count": barrier_count,
+        "assigned_variants_count": assigned_variants,
+        "plate_map": plate_map,
+        "csv_layout": out_csv.getvalue(),
+    }
+
+
 def generate_opentrons_protocol(
     variant_names: List[str],
     plate_type: str = "corning_96_wellplate_360ul_flat",
     target_protein: str = "Target Protein",
+    anti_edge_barrier: bool = True,
 ) -> str:
     """
     Auto-generates an executable Python script for Opentrons OT-2 robots
-    to automate 96-well plate mutagenesis master-mix and primer transfers.
+    to automate 96-well plate mutagenesis master-mix, primer transfers,
+    and anti-edge evaporation barrier setup.
     """
     now_iso = datetime.now(timezone.utc).isoformat()
-    variants_repr = json.dumps(variant_names[:96], indent=4)
+    variants_repr = json.dumps(variant_names[:56 if anti_edge_barrier else 96], indent=4)
+
+    perimeter_wells = [
+        f"{r}{c}"
+        for r in ["A", "H"]
+        for c in range(1, 13)
+    ] + [
+        f"{r}{c}"
+        for r in ["B", "C", "D", "E", "F", "G"]
+        for c in [1, 12]
+    ]
+    perimeter_repr = json.dumps(sorted(perimeter_wells), indent=4)
 
     script_template = f'''# Opentrons OT-2 Automated Mutagenesis Assembly Protocol
 # Generated automatically by VeritasBio Wet-Lab Translator on {now_iso}
 # Target: {target_protein} Variant Library (96-well format)
+# Anti-Edge Evaporation Barrier: {anti_edge_barrier}
 
 from opentrons import protocol_api
 
 metadata = {{
     "protocolName": "VeritasBio High-Throughput Mutagenesis Assembly",
     "author": "VeritasBio Robotics Engine",
-    "description": "Automated distribution of Gibson master mix, mutant primers, and linear template.",
+    "description": "Automated distribution of evaporation barriers, Gibson master mix, and mutant primers.",
     "apiLevel": "2.14"
 }}
 
@@ -174,26 +294,42 @@ def run(protocol: protocol_api.ProtocolContext):
     p300 = protocol.load_instrument("p300_multi_gen2", "left", tip_racks=[tips_300ul])
 
     variants = {variants_repr}
+    perimeter_barrier_wells = {perimeter_repr}
 
     protocol.comment(f"Starting VeritasBio automated assembly for {{len(variants)}} variants...")
 
-    # Step 1: Distribute 10 uL 2X Gibson Assembly Master Mix to all active wells
+    # Step 1: Dispense 200 uL sterile water/buffer evaporation barriers to eliminate edge effects
+    barrier_reservoir_well = reagent_reservoir.wells()[1]
+    p20_single = p20
+    if {anti_edge_barrier}:
+        protocol.comment("Dispensing 200 uL evaporation barrier to 36 perimeter wells...")
+        p300.pick_up_tip()
+        for well_name in perimeter_barrier_wells:
+            dest_w = destination_plate[well_name]
+            p300.transfer(200.0, barrier_reservoir_well, dest_w, new_tip="never")
+        p300.drop_tip()
+
+    # Step 2: Distribute 10 uL 2X Gibson Assembly Master Mix to active interior experimental wells
     master_mix_well = reagent_reservoir.wells()[0]
     p300.pick_up_tip()
-    for i in range(0, len(variants), 8):
-        col_index = i // 8
-        if col_index < 12:
-            dest_col = destination_plate.columns()[col_index]
-            p300.transfer(10, master_mix_well, dest_col, new_tip="never")
+    # Fill interior columns (2 through 11)
+    for col_idx in range(1, 11):
+        dest_col = destination_plate.columns()[col_idx]
+        p300.transfer(10, master_mix_well, dest_col, new_tip="never")
     p300.drop_tip()
 
-    # Step 2: Transfer 2 uL of unique mutated primer / cDNA fragment to each destination well
+    # Step 3: Transfer 2 uL of unique mutated primer / cDNA fragment to each interior destination well
+    # Experimental core starts at B6 (after B2:WT, B3:Neg, B4:Pos, B5:Blank)
+    interior_rows = ["B", "C", "D", "E", "F", "G"]
+    interior_wells = [f"{{r}}{{c}}" for r in interior_rows for c in range(2, 12)]
+    candidate_wells = interior_wells[4:]  # Reserve first 4 for WT, Neg, Pos, Blank
+
     for idx, var_name in enumerate(variants):
-        if idx >= 96:
+        if idx >= len(candidate_wells):
             break
         src_well = primer_plate.wells()[idx]
-        dst_well = destination_plate.wells()[idx]
-        
+        dst_well = destination_plate[candidate_wells[idx]]
+
         p20.pick_up_tip()
         p20.transfer(2.0, src_well, dst_well, mix_after=(3, 5), new_tip="never")
         p20.drop_tip()
