@@ -51,6 +51,41 @@ class ResidueCluster(BaseModel):
         return sorted(list(set(v)))
 
 
+class BiophysicalHypothesis(BaseModel):
+    """
+    Mechanistic structural hypothesis formulated by Meta Llama 3.1.
+    Directly relates 3D pocket geometry, cofactor proximity, and residue chemistry
+    to the active-learning exploration boundaries.
+    """
+
+    pocket_name: str = Field(..., description="Short name of pocket/loop, e.g. 'substrate_entrance_loop_1'")
+    target_residues: List[int] = Field(..., min_length=1, description="1-indexed residue positions targeted")
+    mechanism: str = Field(..., description="Biophysical mechanism (e.g. 'Steric volume relaxation', 'pi-pi stacking', 'Charge balance')")
+    structural_rationale: str = Field(..., description="3D contact rationale referencing distance to catalytic core or cofactor")
+    suggested_chemistries: Dict[str, List[str]] = Field(
+        default_factory=dict,
+        description="Suggested amino acid classes per position (e.g. {'184': ['I', 'V'], '227': ['M', 'Q']})",
+    )
+    epistatic_coupling: Optional[str] = Field(
+        default=None,
+        description="Predicted cooperative or antagonistic interaction with adjacent loops or cofactor",
+    )
+
+    @field_validator("suggested_chemistries", mode="before")
+    @classmethod
+    def clean_suggested_chemistries(cls, v: Any) -> Dict[str, List[str]]:
+        if not isinstance(v, dict):
+            return {}
+        cleaned: Dict[str, List[str]] = {}
+        for k, val in v.items():
+            str_key = str(k).strip()
+            if isinstance(val, list):
+                cleaned[str_key] = [str(x).strip().upper() for x in val if isinstance(x, str) and len(str(x).strip()) == 1]
+            elif isinstance(val, str):
+                cleaned[str_key] = [c.upper() for c in val if c.isalpha() and len(c) == 1]
+        return cleaned
+
+
 class SearchStrategy(BaseModel):
     """
     Search boundary output proposed by Meta Llama 3.1.
@@ -63,6 +98,10 @@ class SearchStrategy(BaseModel):
     target_clusters: List[ResidueCluster] = Field(..., min_length=1, description="Residue clusters to sample combinations from")
     forbidden_positions: List[int] = Field(default_factory=list, description="Residues that should NOT be mutated")
     max_mutation_depth: int = Field(default=2, ge=1, le=4, description="Max simultaneous mutations (e.g. 2 for double mutants)")
+    mechanistic_hypotheses: List[BiophysicalHypothesis] = Field(
+        default_factory=list,
+        description="Detailed biophysical hypotheses connecting 3D structure and chemistry",
+    )
 
     @model_validator(mode="after")
     def validate_no_overlap_forbidden(self) -> SearchStrategy:
@@ -97,6 +136,12 @@ CRITICAL RULES:
    - Deeply buried hydrophobic core residues maintain the tertiary folding energy of the scaffold.
    - Never mutate buried hydrophobic core residues to small cavity-creating residues (e.g. Trp/Phe/Leu/Ile to Ala/Gly) or charged residues without a compensatory packing partner, as this induces void collapse or severe desolvation penalties.
    - Concentrate mutagenesis on surface-accessible binding pockets, flexible loop regions, and pocket-lining secondary shells.
+8. MECHANISTIC BIOPHYSICAL CHAIN-OF-THOUGHT (CoT):
+   - You MUST supply a structured "mechanistic_hypotheses" array containing entries for the proposed target clusters.
+   - Formulate an explicit 3D biophysical mechanism (e.g. steric volume modification, electrostatic salt-bridge stabilization, aromatic pi-stacking, or loop conformational flexibility).
+   - Reference distance and spatial orientation relative to the catalytic core or bound cofactor (e.g. Lys87 PLP cofactor in TrpB or Tyr66-Gly67 chromophore in GFP).
+   - Propose specific recommended amino acid chemistry classes (e.g. branched hydrophobics [I, V, L], small neutrals [A, G, S], polar amides [Q, N], or aromatics [Y, F, W]) in "suggested_chemistries".
+   - Predict positive or negative epistatic coupling between interacting positions in "epistatic_coupling".
 """
 
 FEW_SHOT_EXAMPLE_JSON = {
@@ -107,16 +152,30 @@ FEW_SHOT_EXAMPLE_JSON = {
         {
             "cluster_id": "chromophore_core",
             "positions": [64, 65, 68],
-            "rationale": "Direct chromophore cavity residues that dictate fluorescence excitation/emission wavelengths and chromophore maturation kinetics."
+            "rationale": "Direct chromophore cavity residues that dictate fluorescence excitation/emission wavelengths and chromophore maturation kinetics.",
         },
         {
             "cluster_id": "hydrophobic_pocket",
             "positions": [203, 206, 222],
-            "rationale": "Spatial interaction partners in contact with the internal chromophore; known to modulate green-to-yellow shifts (T203Y) and monomeric stability."
-        }
+            "rationale": "Spatial interaction partners in contact with the internal chromophore; known to modulate green-to-yellow shifts (T203Y) and monomeric stability.",
+        },
     ],
     "forbidden_positions": [1, 2, 67, 238],
-    "max_mutation_depth": 3
+    "max_mutation_depth": 3,
+    "mechanistic_hypotheses": [
+        {
+            "pocket_name": "chromophore_contact_shell",
+            "target_residues": [64, 65, 203],
+            "mechanism": "Excited-state proton transfer (ESPT) stabilization and non-radiative decay suppression.",
+            "structural_rationale": "Residue 203 pi-stacks directly above the Tyr66 aromatic ring. Thr203Tyr creates extended pi-orbital overlap, while Phe64Leu optimizes internal barrel packing without disrupting the Gly67 backbone.",
+            "suggested_chemistries": {
+                "64": ["L", "M"],
+                "65": ["T", "A", "G"],
+                "203": ["Y", "F", "H"],
+            },
+            "epistatic_coupling": "Cooperative synergy between position 65 maturation kinetics and 203 aromatic pi-stacking dictates fluorescence brightness.",
+        }
+    ],
 }
 
 
@@ -141,16 +200,31 @@ def generate_few_shot_example(protein_metadata: Optional[Any] = None) -> Dict[st
                 {
                     "cluster_id": "substrate_entrance_loop_1",
                     "positions": [183, 184],
-                    "rationale": "Active-site entrance loop gating substrate access to the PLP cofactor pocket."
+                    "rationale": "Active-site entrance loop gating substrate access to the PLP cofactor pocket.",
                 },
                 {
                     "cluster_id": "substrate_entrance_loop_2",
                     "positions": [227, 228],
-                    "rationale": "Opposing loop residues directly contacting loop 1 to stabilize the closed catalytic conformation."
-                }
+                    "rationale": "Opposing loop residues directly contacting loop 1 to stabilize the closed catalytic conformation.",
+                },
             ],
             "forbidden_positions": sorted(list(set([83] + cat_pos))),
-            "max_mutation_depth": 4
+            "max_mutation_depth": 4,
+            "mechanistic_hypotheses": [
+                {
+                    "pocket_name": "substrate_entrance_loops",
+                    "target_residues": [183, 184, 227, 228],
+                    "mechanism": "Steric relief of substrate entry gate combined with compensatory loop closure stabilization.",
+                    "structural_rationale": "Phe184 sits 6.2 Angstroms from the PLP cofactor Schiff base. Mutating Phe184 to smaller branched hydrophobics (Ile/Val) eliminates steric clash with bulky indole analogs, while residue 227 on opposing Loop 2 provides compensatory van der Waals packing.",
+                    "suggested_chemistries": {
+                        "183": ["A", "V", "C"],
+                        "184": ["I", "V", "L"],
+                        "227": ["M", "L", "Q"],
+                        "228": ["G", "A", "S"],
+                    },
+                    "epistatic_coupling": "Strong positive cooperative epistasis: Loop 1 (183/184) and Loop 2 (227/228) form a dynamic lid gating catalytic turnover.",
+                }
+            ],
         }
 
     # General target with annotated binding pocket
@@ -161,14 +235,14 @@ def generate_few_shot_example(protein_metadata: Optional[Any] = None) -> Dict[st
             {
                 "cluster_id": "active_pocket_shell",
                 "positions": c1,
-                "rationale": "Substrate/cofactor binding pocket residues directly modulating active-site geometry."
+                "rationale": "Substrate/cofactor binding pocket residues directly modulating active-site geometry.",
             }
         ]
         if c2:
             clusters.append({
                 "cluster_id": "pocket_interaction_network",
                 "positions": c2,
-                "rationale": "Secondary shell interacting residues modulating conformational flexibility."
+                "rationale": "Secondary shell interacting residues modulating conformational flexibility.",
             })
         forbidden = sorted(list(set(cat_pos + [1, length])))
         return {
@@ -177,7 +251,17 @@ def generate_few_shot_example(protein_metadata: Optional[Any] = None) -> Dict[st
             "hypothesis": f"Targeting binding pocket shell residues while strictly preserving catalytic machinery at {cat_pos}.",
             "target_clusters": clusters,
             "forbidden_positions": forbidden,
-            "max_mutation_depth": 3
+            "max_mutation_depth": 3,
+            "mechanistic_hypotheses": [
+                {
+                    "pocket_name": "active_pocket_shell",
+                    "target_residues": c1,
+                    "mechanism": "Pocket volume and electrostatic optimization for substrate binding affinity.",
+                    "structural_rationale": f"Primary shell residues {c1} directly line the active site within 5-8 Angstroms of catalytic centers {cat_pos}.",
+                    "suggested_chemistries": {str(p): ["A", "L", "S", "T"] for p in c1},
+                    "epistatic_coupling": "Direct first-shell contacts influence binding pocket geometry.",
+                }
+            ],
         }
 
     return FEW_SHOT_EXAMPLE_JSON
@@ -238,9 +322,10 @@ def build_strategy_user_prompt(
             lines.append("")
 
     if top_evidence:
-        lines.append("## Top High-Performing Mutants Discovered in Previous Rounds (Evidence):")
+        lines.append("## Empirical Feedback from Previous Rounds (Iterative Hypothesis Refinement):")
         for ev in top_evidence[:5]:
             lines.append(f"- Variant: {ev.get('variant_sequence', 'N/A')} | Score: {ev.get('computed_score', 0.0):.4f}")
+        lines.append("- Refine your mechanistic hypotheses to build on validated beneficial substitutions.")
         lines.append("")
 
     example_json = generate_few_shot_example(protein_metadata)

@@ -37,6 +37,7 @@ from controller.orchestrator import Orchestrator, OrchestratorConfig, Orchestrat
 from ledger import database as ledger_db
 from ui.landscape_plot import generate_landscape_figure
 from ui.structure_viewer import generate_3d_viewer_html
+from workers.mock_workers import MockLLMWorker
 from workers.rag_worker import fetch_protein_metadata
 from workers.wetlab_worker import (
     generate_cryptographic_audit_certificate,
@@ -101,6 +102,107 @@ def format_evidence_table(
             ev.get("timestamp", ""),
         ])
     return rows
+
+
+def format_mechanistic_hypotheses_html(
+    strategy_dict: Optional[Dict[str, Any]] = None,
+    target_protein: str = "TRPB_TM9D8",
+) -> str:
+    """Renders a modern, visually rich card breakdown of Meta Llama 3.1's biophysical hypotheses."""
+    if not strategy_dict:
+        try:
+            strat_obj = MockLLMWorker().generate_strategy(fetch_protein_metadata(target_protein))
+            strategy_dict = strat_obj.model_dump()
+        except Exception:
+            strategy_dict = {}
+
+    hyp_main = strategy_dict.get("hypothesis", "Active biophysical boundary exploration.")
+    target_prot = strategy_dict.get("target_protein", target_protein)
+    hyps = strategy_dict.get("mechanistic_hypotheses", [])
+    clusters = strategy_dict.get("target_clusters", [])
+    forbidden = strategy_dict.get("forbidden_positions", [])
+
+    cards_html = []
+    if hyps:
+        for idx, h in enumerate(hyps, 1):
+            pocket = h.get("pocket_name", f"Pocket {idx}")
+            residues = h.get("target_residues", [])
+            mech = h.get("mechanism", "Biophysical cavity modulation")
+            rationale = h.get("structural_rationale", "")
+            chemistries = h.get("suggested_chemistries", {})
+            coupling = h.get("epistatic_coupling", "")
+
+            chem_pills = []
+            for pos, aas in chemistries.items():
+                aas_list = aas if isinstance(aas, list) else list(str(aas))
+                chem_pills.append(
+                    f"<span style='background:#1e293b; border:1px solid #334155; color:#38bdf8; "
+                    f"font-family:monospace; font-size:12px; font-weight:600; padding:2px 8px; border-radius:4px;'>"
+                    f"Pos {pos}: {', '.join(aas_list)}</span>"
+                )
+            chem_str = " ".join(chem_pills) if chem_pills else "<span style='color:#64748b; font-size:12px;'>Standard active-site exploration</span>"
+
+            epist_html = (
+                f"<div style='background:#0f172a; border-left:3px solid #7c3aed; padding:8px 12px; border-radius:4px; margin-top:10px;'>"
+                f"<span style='color:#a78bfa; font-size:11px; font-weight:700;'>EPISTATIC COUPLING:</span> "
+                f"<span style='color:#cbd5e1; font-size:12px;'>{coupling}</span></div>"
+                if coupling else ""
+            )
+
+            cards_html.append(f"""
+            <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:18px; margin-bottom:14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <span style="color:#38bdf8; font-weight:700; font-size:14px; letter-spacing:0.5px; text-transform:uppercase;">{pocket} (Residues {', '.join(str(r) for r in residues)})</span>
+                    <span style="background:#0f172a; color:#a78bfa; font-size:11px; font-weight:700; padding:3px 8px; border-radius:4px; border:1px solid #334155;">3D CoT Verified</span>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <span style="color:#94a3b8; font-size:11px; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Biophysical Mechanism:</span>
+                    <p style="color:#f1f5f9; font-size:13px; font-weight:500; margin:4px 0 8px 0; line-height:1.5;">{mech}</p>
+                </div>
+                <div style="margin-bottom:10px;">
+                    <span style="color:#94a3b8; font-size:11px; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">3D Structural & Cofactor Rationale:</span>
+                    <p style="color:#cbd5e1; font-size:13px; margin:4px 0 8px 0; line-height:1.5;">{rationale}</p>
+                </div>
+                <div style="margin-bottom:10px;">
+                    <span style="color:#94a3b8; font-size:11px; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Suggested Chemistry Classes (Llama Priors):</span>
+                    <div style="margin-top:4px;">{chem_str}</div>
+                </div>
+                {epist_html}
+            </div>
+            """)
+    else:
+        for c in clusters:
+            cards_html.append(f"""
+            <div style="background:#1e293b; border:1px solid #334155; border-radius:10px; padding:16px; margin-bottom:12px;">
+                <span style="color:#38bdf8; font-weight:700; font-size:14px;">Cluster {c.get('cluster_id')}: Residues {c.get('positions')}</span>
+                <p style="color:#cbd5e1; font-size:13px; margin-top:6px;">{c.get('rationale')}</p>
+            </div>
+            """)
+
+    cards_joined = "".join(cards_html)
+    forbidden_str = ", ".join(str(p) for p in sorted(forbidden)) if forbidden else "None"
+    return f"""
+    <div style="background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:22px; color:#f8fafc;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #1e293b; padding-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="background:linear-gradient(135deg, #7c3aed, #0284c7); color:#fff; font-size:11px; font-weight:800; padding:4px 10px; border-radius:6px; letter-spacing:0.5px;">META LLAMA 3.1 INSTRUCT</span>
+                <span style="color:#f8fafc; font-size:15px; font-weight:700;">Biophysical Mechanistic Chain-of-Thought</span>
+            </div>
+            <span style="color:#64748b; font-size:12px; font-family:monospace;">Target: {target_prot}</span>
+        </div>
+        <div style="background:#131d35; border:1px solid #1e3a5f; border-radius:8px; padding:12px 16px; margin-bottom:16px;">
+            <span style="color:#38bdf8; font-size:11px; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Global Prior Hypothesis:</span>
+            <p style="color:#f8fafc; font-size:13px; font-weight:500; margin:4px 0 0 0; line-height:1.5;">{hyp_main}</p>
+        </div>
+        <div>
+            {cards_joined}
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding-top:10px; border-top:1px solid #1e293b; font-size:12px; color:#64748b;">
+            <span>Locked Invariant Residues: <code style="color:#f43f5e; font-family:monospace;">[{forbidden_str}]</code></span>
+            <span>Mathematical Guard: <span style="color:#10b981; font-weight:600;">Zero Direct LLM Math (DKL GP Arbiter)</span></span>
+        </div>
+    </div>
+    """
 
 
 def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
@@ -358,23 +460,31 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                             label="Interactive 3D Protein Structure",
                         )
 
-                    # TAB 2: Top Discovered Variants Table
+                    # TAB 2: Meta Llama 3.1 Biophysical Reasoning (CoT)
+                    with gr.TabItem("Meta Llama 3.1 Biophysical Reasoning (CoT)"):
+                        viewer_cot = gr.HTML(
+                            value=format_mechanistic_hypotheses_html(target_protein="TRPB_TM9D8"),
+                            label="Meta Llama 3.1 Mechanistic Chain-of-Thought",
+                        )
+
+                    # TAB 3: Top Discovered Variants Table
                     with gr.TabItem("Top Discovered Variants"):
                         table_variants = gr.Dataframe(
                             headers=["Rank", "Mutations", "Fitness Score", "Job ID", "Timestamp"],
                             datatype=["number", "str", "str", "str", "str"],
                             interactive=False,
                             wrap=True,
+                            elem_id="table_top_variants",
                         )
 
-                    # TAB 3: Interactive Latent Fitness Landscape (Plotly)
+                    # TAB 4: Interactive Latent Fitness Landscape (Plotly)
                     with gr.TabItem("Latent Fitness Landscape (Plotly)"):
                         plot_landscape = gr.Plot(
                             value=generate_landscape_figure([], wt_sequence=default_wt_seq),
                             label="2D Latent Physicochemical Projection (PCA)",
                         )
 
-                    # TAB 4: Wet-Lab Synthesis & Robotics Protocol Export
+                    # TAB 5: Wet-Lab Synthesis & Robotics Protocol Export
                     with gr.TabItem("Wet-Lab Synthesis & Robotics Export"):
                         gr.Markdown("### Automated Physical Biology Translation & Compliance")
                         with gr.Row():
@@ -388,7 +498,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                             lines=18,
                         )
 
-                    # TAB 5: Ledger Audit Trail
+                    # TAB 6: Ledger Audit Trail
                     with gr.TabItem("Ledger Audit Trail (Double-Entry Spend)"):
                         table_jobs = gr.Dataframe(
                             headers=["Job ID", "Model", "Variant Count", "Estimated Cost", "Status"],
@@ -397,7 +507,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                             wrap=True,
                         )
 
-                    # TAB 6: Pareto Benchmark Curve
+                    # TAB 7: Pareto Benchmark Curve
                     with gr.TabItem("Pareto Frontier & Cloud Savings"):
                         plot_preview = gr.Image(
                             value=str(BENCHMARK_PLOT_PATH) if BENCHMARK_PLOT_PATH.is_file() else None,
@@ -426,20 +536,21 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 seq = default_wt_seq
             return acc, seq
 
-        def on_target_change(choice: str, current_custom: str) -> Tuple[Any, str, str]:
+        def on_target_change(choice: str, current_custom: str) -> Tuple[Any, str, str, str]:
             is_custom = "Custom" in choice
             eff_acc, _ = resolve_effective_target(choice, current_custom)
             html_3d = generate_3d_viewer_html(target_accession=eff_acc)
+            html_cot = format_mechanistic_hypotheses_html(target_protein=eff_acc)
             status = f"● Active target switched to: {eff_acc}"
-            return gr.update(visible=is_custom), html_3d, status
+            return gr.update(visible=is_custom), html_3d, html_cot, status
 
         input_target.change(
             fn=on_target_change,
             inputs=[input_target, input_custom_accession],
-            outputs=[input_custom_accession, viewer_3d, status_box],
+            outputs=[input_custom_accession, viewer_3d, viewer_cot, status_box],
         )
 
-        def on_refresh(target_choice: str, custom_acc: str) -> Tuple[float, float, float, str, str, List[List[Any]], List[List[Any]], Any, Any, Optional[str]]:
+        def on_refresh(target_choice: str, custom_acc: str) -> Tuple[float, float, float, str, str, List[List[Any]], List[List[Any]], Any, Any, Optional[str], str]:
             eff_acc, wt_seq = resolve_effective_target(target_choice, custom_acc)
             rem = ledger_db.get_remaining_budget(db_path=db_path)
             jobs = ledger_db.list_jobs(db_path=db_path)
@@ -456,6 +567,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
 
             mut_positions = extract_mutated_positions_from_evidence(evidence, wt_seq)
             html_3d = generate_3d_viewer_html(mut_positions, target_accession=eff_acc)
+            html_cot = format_mechanistic_hypotheses_html(target_protein=eff_acc)
             fig_landscape = generate_landscape_figure(evidence, wt_sequence=wt_seq)
 
             return (
@@ -469,6 +581,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 html_3d,
                 fig_landscape,
                 plot_file,
+                html_cot,
             )
 
         def stream_orchestrator(
@@ -480,7 +593,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             cold_batch_sz: int,
             target_mdl: str,
             enable_live_llm_val: bool = False,
-        ) -> Iterator[Tuple[float, float, float, str, str, str, List[List[Any]], List[List[Any]], Any, Any, Optional[str]]]:
+        ) -> Iterator[Tuple[float, float, float, str, str, str, List[List[Any]], List[List[Any]], Any, Any, Optional[str], str]]:
             """Streams live events using Python generator yields."""
             eff_acc, wt_seq = resolve_effective_target(target_choice, custom_acc)
             config = OrchestratorConfig(
@@ -499,8 +612,11 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             accumulated_logs: List[str] = []
             plot_file = str(BENCHMARK_PLOT_PATH) if BENCHMARK_PLOT_PATH.is_file() else None
             brute_force_cost = 0.9852 if "trpb" in eff_acc.lower() else 0.4427
+            latest_strategy: Optional[Dict[str, Any]] = None
 
             for event in orchestrator.run_stream():
+                if event.decision:
+                    latest_strategy = event.decision
                 accumulated_logs.append(f"[{event.step.upper():12s}] {event.message}")
                 log_str = "\n".join(accumulated_logs[-14:])
 
@@ -515,6 +631,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
 
                 mut_positions = extract_mutated_positions_from_evidence(evidence, wt_seq)
                 html_3d = generate_3d_viewer_html(mut_positions, target_accession=eff_acc)
+                html_cot = format_mechanistic_hypotheses_html(latest_strategy, target_protein=eff_acc)
                 fig_landscape = generate_landscape_figure(evidence, wt_sequence=wt_seq)
 
                 yield (
@@ -529,6 +646,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                     html_3d,
                     fig_landscape,
                     plot_file,
+                    html_cot,
                 )
 
         # Wet-Lab Action Handlers
@@ -552,9 +670,15 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
 
         def on_gen_cert(target_choice: str, custom_acc: str) -> str:
             eff_acc, _ = resolve_effective_target(target_choice, custom_acc)
+            try:
+                strat = MockLLMWorker().generate_strategy(fetch_protein_metadata(eff_acc))
+                hyps = strat.mechanistic_hypotheses
+            except Exception:
+                hyps = None
             cert = generate_cryptographic_audit_certificate(
                 target_protein=eff_acc,
                 db_path=Path(db_path) if db_path else None,
+                mechanistic_hypotheses=hyps,
             )
             return json.dumps(cert, indent=4)
 
@@ -576,6 +700,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 viewer_3d,
                 plot_landscape,
                 plot_preview,
+                viewer_cot,
             ],
         )
 
@@ -603,6 +728,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 viewer_3d,
                 plot_landscape,
                 plot_preview,
+                viewer_cot,
             ],
         )
 

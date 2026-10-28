@@ -32,7 +32,7 @@ from sklearn.linear_model import Ridge
 from sklearn.neural_network import MLPRegressor
 
 from controller.gatekeeper import CANONICAL_AMINO_ACIDS, SingleMutation, Variant
-from controller.prompts import SearchStrategy
+from controller.prompts import BiophysicalHypothesis, SearchStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -680,6 +680,29 @@ def recombine_lead_variants(
     return recombinants
 
 
+def compute_mechanistic_cot_bonus(
+    variant: Variant,
+    hypotheses: Optional[Sequence[BiophysicalHypothesis]] = None,
+) -> float:
+    """
+    Computes a grounded prior reward bonus (0.0 to 0.36) for candidates matching
+    Meta Llama 3.1's 3D structural and chemical hypotheses.
+    """
+    if not hypotheses or not variant.mutations:
+        return 0.0
+    bonus = 0.0
+    for hyp in hypotheses:
+        if not getattr(hyp, "suggested_chemistries", None):
+            continue
+        for mut in variant.mutations:
+            pos_str = str(mut.position)
+            if pos_str in hyp.suggested_chemistries:
+                allowed_aas = hyp.suggested_chemistries[pos_str]
+                if mut.mut_aa in allowed_aas:
+                    bonus += 0.12
+    return min(0.36, bonus)
+
+
 def generate_candidate_variants(
     strategy: SearchStrategy,
     wt_sequence: str,
@@ -726,6 +749,22 @@ def generate_candidate_variants(
             pos_target_aas = [aa for aa in target_aas if aa in ("Y", "H", "W")]
         else:
             pos_target_aas = target_aas
+
+        # Mechanistic Chain-of-Thought: Prioritize suggested amino acid chemistries from Meta Llama 3.1
+        if getattr(strategy, "mechanistic_hypotheses", None):
+            suggested: List[str] = []
+            pos_str = str(pos)
+            for hyp in strategy.mechanistic_hypotheses:
+                if hyp.suggested_chemistries and pos_str in hyp.suggested_chemistries:
+                    suggested.extend(hyp.suggested_chemistries[pos_str])
+            if suggested:
+                seen_aas = set()
+                reordered = []
+                for aa in suggested + pos_target_aas:
+                    if aa in target_aas and aa not in seen_aas:
+                        seen_aas.add(aa)
+                        reordered.append(aa)
+                pos_target_aas = reordered
 
         wt_aa = wt_sequence[pos - 1]
         for mut_aa in pos_target_aas:
@@ -1192,6 +1231,10 @@ def select_next_micro_batch(
                     else (prior_mean_fn(v) if prior_mean_fn else 0.0)
                 )
             )
+            # Add Mechanistic Biophysical Chain-of-Thought prior bonus from Meta Llama 3.1
+            cot_bonus = compute_mechanistic_cot_bonus(v, getattr(strategy, "mechanistic_hypotheses", None))
+            base_prior += cot_bonus
+
             if evidence and len(evidence) >= 5:
                 try:
                     feat = featurize_variant_on_positions(v, active_positions, wt_sequence, spatial_map=spatial_map)

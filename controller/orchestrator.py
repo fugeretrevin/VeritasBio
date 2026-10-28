@@ -334,6 +334,16 @@ class Orchestrator:
 
             strategy = self._generate_strategy(metadata, round_num, top_evidence_sorted, current_hop=current_hop)
 
+            yield OrchestratorEvent(
+                iteration=round_num,
+                step="strategy_complete",
+                message=f"Round {round_num}: Strategy defined: {strategy.hypothesis}",
+                remaining_budget_usd=rem_usd,
+                cumulative_spent_usd=spent_usd,
+                current_job_id=job_id,
+                decision=strategy.model_dump(),
+            )
+
             # -----------------------------------------------------------------
             # Step 3: Quant Selection (Gaussian Process Expected Improvement)
             # -----------------------------------------------------------------

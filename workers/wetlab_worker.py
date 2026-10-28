@@ -206,10 +206,12 @@ def run(protocol: protocol_api.ProtocolContext):
 def generate_cryptographic_audit_certificate(
     db_path: Optional[Path] = None,
     target_protein: str = "Aequorea victoria GFP (UniProt P42212)",
+    mechanistic_hypotheses: Optional[Sequence[Any]] = None,
 ) -> Dict[str, Any]:
     """
     Generates an FDA 21 CFR Part 11 compliant audit certificate.
-    Calculates SHA-256 chain hash over all budget allocations, jobs, and evidence in SQLite.
+    Calculates SHA-256 chain hash over all budget allocations, jobs, evidence,
+    and Meta Llama 3.1 mechanistic biophysical hypotheses in SQLite.
     """
     from ledger import database as ledger_db
 
@@ -234,9 +236,17 @@ def generate_cryptographic_audit_certificate(
         chunk = f"ev:{e.get('variant_sequence')}:{e.get('computed_score')}:{e.get('job_id')}"
         hasher.update(chunk.encode("utf-8"))
 
+    # Hash mechanistic hypotheses if provided
+    hyps_dump: List[Dict[str, Any]] = []
+    if mechanistic_hypotheses:
+        for h in mechanistic_hypotheses:
+            dump = h if isinstance(h, dict) else (h.model_dump() if hasattr(h, "model_dump") else str(h))
+            hyps_dump.append(dump)
+            hasher.update(f"hyp:{dump.get('pocket_name')}:{dump.get('mechanism')}".encode("utf-8"))
+
     audit_digest = hasher.hexdigest()
 
-    return {
+    cert_data: Dict[str, Any] = {
         "certificate_id": f"VB-AUDIT-{audit_digest[:16].upper()}",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "ledger_hash_sha256": audit_digest,
@@ -248,3 +258,7 @@ def generate_cryptographic_audit_certificate(
         "total_evidence_records": len(evidence),
         "deterministic_verification": "PASS: All spends follow ACID ledger lock with zero unbudgeted GPU bypass.",
     }
+    if hyps_dump:
+        cert_data["mechanistic_biophysical_rationale"] = hyps_dump
+
+    return cert_data

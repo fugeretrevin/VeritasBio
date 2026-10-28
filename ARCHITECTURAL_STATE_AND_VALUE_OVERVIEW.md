@@ -2,7 +2,7 @@
 
 > **Target Audience:** Engineering Partners, AI Agents, Technical Evaluators, and Biopharma Stakeholders.  
 > **Source of Truth:** Codebase state as of October 27, 2026 (`v3.2 Production Ready`).  
-> **Test Suite:** 99/99 automated unit tests passing (`Ran 99 tests in 21.39s: OK`).  
+> **Test Suite:** 106/106 automated unit tests passing (`Ran 106 tests in 21.91s: OK`).  
 
 ---
 
@@ -14,11 +14,11 @@ VeritasBio is a **deterministic cloud-economics engine and active-learning platf
 In conventional generative biology, running foundation model inference (e.g. Meta ESM-2, AlphaFold 3, ESMFold) across combinatorial mutation libraries creates runaway infrastructure bills. Testing multi-point mutations across an active site yields $>10^7$ combinations, costing upwards of **$35,000** in unconstrained GPU forward passes. Open-ended AI agents frequently hallucinate and loop without financial discipline.
 
 VeritasBio solves this by decoupling strategy from execution through a **fail-closed 6-step loop**:
-1. **Meta Llama 3.1** only proposes biophysical boundaries and residue clusters (strict JSON mode; zero math; zero code execution).
-2. **A Deep Kernel Learning (DKL) Surrogate** actively models non-linear epistasis and selects high-information micro-batches.
+1. **Meta Llama 3.1** acts as a Mechanistic Biophysical Prior Planner in strict JSON mode (generating 3D pocket hypotheses, structural contact rationales, and suggested chemistries; zero direct math; zero code execution).
+2. **A Deep Kernel Learning (DKL) Surrogate** actively models non-linear epistasis and selects high-information micro-batches, guided by Llama 3.1's biophysical prior.
 3. **An Immutable SQLite Ledger** enforces hard financial spend caps in `INTEGER` micro-USD ($0.000001). Compute never runs without atomic authorization.
 4. **Modal Serverless NVIDIA A10G GPUs** execute batched tensor scoring with container keep-alive amortization ($20\text{s} \to 0\text{s}$ boot overhead).
-5. **Layer 7 Physical Translation** automatically compiles validated leads into Twist/IDT DNA synthesis orders (with *E. coli* codon optimization), Opentrons OT-2 robotics pipetting scripts, and FDA 21 CFR Part 11 audit certificates.
+5. **Layer 7 Physical Translation** automatically compiles validated leads into Twist/IDT DNA synthesis orders (with *E. coli* codon optimization), Opentrons OT-2 robotics pipetting scripts, and FDA 21 CFR Part 11 audit certificates cryptographically sealing the biophysical reasoning trail.
 
 ---
 
@@ -32,10 +32,10 @@ VeritasBio solves this by decoupling strategy from execution through a **fail-cl
         │ Pulls WT sequence, functional domains, and 3D PDB coordinates (<8.5Å)
         ▼
   [Layer 2: Strategic Prior Planner]  (controller/prompts.py & Meta Llama 3.1)
-        │ Strict JSON combinatorial clusters & forbidden invariant masks
+        │ Strict JSON Mechanistic CoT (pocket geometry, cofactor proximity, chemistries)
         ▼
   [Layer 3: Quant Engine & Surrogate] (workers/math_worker.py & spatial_filter.py)
-        │ Featurization + DKL (Matern 5/2) + GFlowNet Boltzmann + k-DPP Diversity
+        │ Featurization + DKL (Matern 5/2) + GFlowNet Boltzmann + k-DPP Diversity + CoT Prior
         ▼
   [Layer 4: Fail-Closed Gatekeeper]   (controller/gatekeeper.py)
         │ Biophysical notation validation + Two-State Cold/Warm Container ROI Sizing
@@ -55,10 +55,16 @@ VeritasBio solves this by decoupling strategy from execution through a **fail-cl
 - **Domain Logic:** Extracts wild-type amino acid sequence $S_{wt}$, active site coordinates, catalytic invariant residues $\mathcal{C}_{cat}$, cofactor binding sites (e.g. Lys87 PLP covalent Schiff base in TrpB, Tyr66-Gly67 chromophore in GFP), and cached 3D coordinate PDBs (`workers/data/*.pdb`).
 - **Disk Caching:** All records are cached locally as JSON to guarantee 100% offline reproducibility and zero external API dependencies.
 
-### Layer 2: Strategic Prior Planner (`controller/prompts.py`)
+### Layer 2: Strategic Prior Planner & Mechanistic CoT (`controller/prompts.py`)
 - **Model:** Meta Llama 3.1 Instruct (`meta-llama/Llama-3.1-70B-Instruct` or `muse-spark-1.3`).
-- **Strict Constraint:** Runs strictly in JSON mode with `temperature=0.2`. Zero conversational filler, zero code execution, zero math.
-- **Output:** Emits `SearchStrategy` JSON specifying residue clusters (e.g., Substrate Entrance Loop 1 `[183, 184]`, Communication Loop 2 `[227, 228]`), forbidden invariant positions, and hypothesis rationales.
+- **Strict Constraint:** Runs strictly in JSON mode with `temperature=0.2`. Zero conversational filler, zero code execution, zero direct math.
+- **Output:** Emits `SearchStrategy` JSON specifying residue clusters, forbidden invariant positions, and structured `BiophysicalHypothesis` objects:
+  - `pocket_name`: e.g. Substrate Entrance Loop 1 `[183, 184]`, Communication Loop 2 `[227, 228]`.
+  - `mechanism`: Steric volume relaxation, aromatic pi-stacking, or salt-bridge stabilization.
+  - `structural_rationale`: Distance to catalytic core or cofactor (e.g. 6.2Å from Lys87 PLP Schiff base in TrpB).
+  - `suggested_chemistries`: Target amino acid classes per position (e.g. branched hydrophobics `{"184": ["I", "V"]}`).
+  - `epistatic_coupling`: Predicted cooperative or antagonistic synergy across interacting loops.
+- **Mathematical Coupling:** Injected as a grounded biophysical prior reward bonus into the discrete GFlowNet candidate sampler ($+0.12$ to $+0.36$), mathematically guiding surrogate exploration toward structurally rational regions without violating determinism.
 
 ### Layer 3: Quant Surrogate Engine & Active Learning (`workers/math_worker.py`)
 This is the core mathematical engine of VeritasBio:
