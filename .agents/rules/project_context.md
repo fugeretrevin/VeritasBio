@@ -38,6 +38,7 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
 | D7 | LLM host | **Meta Llama API** (`LLAMA_API_KEY`). |
 | D8 | Variants & stopping | Point/multi-point mutations as strings, e.g. `S65T:Y66H`, applied to the WT sequence. Loop stops on budget exhaustion **or** a hard **max-iteration cap**. |
 | D9 | Second benchmark | **TrpB** active-site landscape (Johnston et al. 2024), combinatorially complete 20⁴ at residues 183/184/227/228 of the engineered parent Tm9D8\*. Reference sequence is the **parent, not UniProt P50909** (they differ by 10 substitutions + a His-tag). Reported metrics are **held-out** $\rho$ and **enrichment vs. a random-screening baseline**, never in-sample fit alone. |
+| D10 | Target modality & commercial roadmap | **Therapeutic biologics first** (antibodies, nanobodies, binders, folding stability) for immediate go-to-market where ESM-2 and DKL GP natively attain proven $\rho \approx 0.80$ predictive skill. Unnatural catalytic enzyme adapters, enterprise value-based pricing, and live CRO lab execution staged for post-hackathon expansion. |
 
 ## Changes vs. the original v3.0 §6 (now reflected in ARCHITECTURE.md v3.1)
 - Money columns are `INTEGER` micro-USD instead of `float` (D1).
