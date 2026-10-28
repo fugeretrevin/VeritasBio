@@ -50,6 +50,8 @@ def run_dollar_experiment(
     batch_size: int = 25,
     target_model: str = "esm2_150m",
     enable_live_llm: bool = True,
+    enable_cascade: bool = True,
+    enable_lead_refinement: bool = True,
     db_path: Optional[str] = None,
 ) -> None:
     meta = fetch_protein_metadata(target_accession, use_cache=True)
@@ -71,6 +73,8 @@ def run_dollar_experiment(
     print(f"Max Rounds:               {rounds}")
     print(f"Variants Per Batch:       {batch_size}")
     print(f"Cloud Scoring Engine:     Modal Serverless A10G GPU ({target_model})")
+    print(f"Multi-Fidelity Cascade:   {'Enabled (150M Screen -> 650M Verify)' if enable_cascade else 'Disabled'}")
+    print(f"Hamming-1 Polish:         {'Enabled (Exhaustive Local Sphere)' if enable_lead_refinement else 'Disabled'}")
     print(f"Strategic Planner:        {'Meta Model API (LLAMA_API_KEY)' if enable_live_llm else 'Mock Strategic Planner'}")
     print(f"Ledger File:              {db_file}")
     print("=" * 70 + "\n")
@@ -85,6 +89,8 @@ def run_dollar_experiment(
         use_mock_llm=not enable_live_llm,
         enable_live_llm=enable_live_llm,
         enable_dynamic_batch_sizing=True,
+        enable_cloud_cascade=enable_cascade,
+        enable_lead_refinement=enable_lead_refinement,
     )
 
     orchestrator = Orchestrator(config)
@@ -178,6 +184,8 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=25, help="Batch size per round (default: 25)")
     parser.add_argument("--model", type=str, default="esm2_150m", help="Target scoring model (default: esm2_150m)")
     parser.add_argument("--mock-llm", action="store_true", help="Force mock LLM worker instead of Meta Model API")
+    parser.add_argument("--no-cascade", action="store_true", help="Disable multi-fidelity cloud cascade")
+    parser.add_argument("--no-polish", action="store_true", help="Disable Tier 3 Hamming-1 lead polish")
 
     args = parser.parse_args()
     run_dollar_experiment(
@@ -187,4 +195,6 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         target_model=args.model,
         enable_live_llm=not args.mock_llm,
+        enable_cascade=not args.no_cascade,
+        enable_lead_refinement=not args.no_polish,
     )
