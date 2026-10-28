@@ -45,9 +45,21 @@ THREE_TO_ONE: Dict[str, str] = {
     "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
 }
 
+SOLVENT_AND_BUFFER_NAMES: Set[str] = {
+    "HOH", "WAT", "EDO", "GOL", "PEG", "SO4", "PO4", "CL", "NA", "K", "MG", "CA", "ZN", "DMS", "ACT", "FMT"
+}
+
+MODIFIED_AA_NAMES: Set[str] = {
+    "MSE", "SEP", "TPO", "PTR", "CSO", "CME", "CRO", "CRQ", "CR2", "NRQ"
+}
+
+KNOWN_COFACTORS: Set[str] = {
+    "PLP", "0JO", "LLP", "PMP", "HEM", "FAD", "FMN", "NAD", "NAP", "NDP", "SAM", "SAH", "ATP", "ADP", "GTP", "GDP", "COA", "TPP", "THF"
+}
+
 
 class SpatialContactMap:
-    """Extracts and caches 3D coordinate matrices from PDB structures."""
+    """Extracts and caches 3D coordinate matrices, cofactors, and ligand spheres from PDB structures."""
 
     def __init__(
         self,
@@ -59,7 +71,11 @@ class SpatialContactMap:
         self.chain_id = chain_id
         self.reference_sequence = reference_sequence
         self.ca_coordinates: Dict[int, Tuple[str, float, float, float]] = {}
+        self.cofactor_coordinates: Dict[str, List[Tuple[str, str, float, float, float]]] = {}
+        self.ligand_coordinates: Dict[str, List[Tuple[str, str, float, float, float]]] = {}
+        self.catalytic_center_coordinates: List[Tuple[float, float, float]] = []
         self._distance_cache: Dict[Tuple[int, int], float] = {}
+        self._cofactor_distance_cache: Dict[int, float] = {}
         self.buried_core_residues: Set[int] = set()
         self._load_pdb()
         self.buried_core_residues = self._compute_buried_core_residues()
@@ -74,7 +90,7 @@ class SpatialContactMap:
         return buried if buried else AVGFP_BURIED_CORE_RESIDUES
 
     def _load_pdb(self) -> None:
-        """Parses ATOM and HETATM C-alpha coordinates from PDB."""
+        """Parses ATOM C-alpha coordinates and HETATM cofactor/ligand spheres from PDB."""
         if self.pdb_path is None:
             return
 
@@ -112,6 +128,9 @@ class SpatialContactMap:
                         # Insertion codes cannot be mapped safely by integer residue number alone
                         if self.reference_sequence and len(line) > 26 and line[26].strip():
                             self.ca_coordinates.clear()
+                            self.cofactor_coordinates.clear()
+                            self.ligand_coordinates.clear()
+                            self.catalytic_center_coordinates.clear()
                             self.chain_id = selected_chain
                             logger.warning(
                                 "Structural mapping unavailable: insertion codes in %s chain %s.",
@@ -143,6 +162,26 @@ class SpatialContactMap:
                                 self.ca_coordinates[res_seq] = (res_name, x, y, z)
                             except (ValueError, IndexError):
                                 continue
+
+                        # Gap 3: Parse HETATM cofactor and ligand heavy atoms
+                        if line.startswith("HETATM"):
+                            if (
+                                res_name not in SOLVENT_AND_BUFFER_NAMES
+                                and res_name not in MODIFIED_AA_NAMES
+                                and not atom_name.startswith("H")
+                            ):
+                                try:
+                                    x = float(line[30:38].strip())
+                                    y = float(line[38:46].strip())
+                                    z = float(line[46:54].strip())
+                                    coord_tuple = (atom_name, chain_id, x, y, z)
+                                    if res_name in KNOWN_COFACTORS:
+                                        self.cofactor_coordinates.setdefault(res_name, []).append(coord_tuple)
+                                    else:
+                                        self.ligand_coordinates.setdefault(res_name, []).append(coord_tuple)
+                                    self.catalytic_center_coordinates.append((x, y, z))
+                                except (ValueError, IndexError):
+                                    continue
         except (OSError, UnicodeError) as exc:
             logger.warning("Could not read PDB structure at %s: %s", self.pdb_path, exc)
             return
@@ -161,6 +200,9 @@ class SpatialContactMap:
             mismatch_threshold = max(3, int(0.15 * len(self.ca_coordinates)))
             if len(mismatches) > mismatch_threshold:
                 self.ca_coordinates.clear()
+                self.cofactor_coordinates.clear()
+                self.ligand_coordinates.clear()
+                self.catalytic_center_coordinates.clear()
                 logger.warning(
                     "Structural mapping unavailable for %s chain %s: residue identity mismatch count %d exceeds threshold %d (%s...).",
                     self.pdb_path,
@@ -189,6 +231,67 @@ class SpatialContactMap:
         d = math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2 + (z1 - z2) ** 2)
         self._distance_cache[pair] = d
         return d
+
+    def get_cofactor_distance(self, res_id: int) -> Optional[float]:
+        """
+        Calculates minimum Euclidean distance between residue C-alpha and any
+        catalytic cofactor atom (e.g. PLP, 0JO, HEM).
+        """
+        if res_id not in self.ca_coordinates:
+            return None
+
+        target_coords: List[Tuple[float, float, float]] = []
+        if self.cofactor_coordinates:
+            for atoms in self.cofactor_coordinates.values():
+                for _, _, x, y, z in atoms:
+                    target_coords.append((x, y, z))
+        elif self.catalytic_center_coordinates:
+            target_coords = self.catalytic_center_coordinates
+
+        if not target_coords:
+            return None
+
+        if res_id in self._cofactor_distance_cache:
+            return self._cofactor_distance_cache[res_id]
+
+        _, ca_x, ca_y, ca_z = self.ca_coordinates[res_id]
+        min_d = min(
+            math.sqrt((ca_x - x) ** 2 + (ca_y - y) ** 2 + (ca_z - z) ** 2)
+            for x, y, z in target_coords
+        )
+        self._cofactor_distance_cache[res_id] = min_d
+        return min_d
+
+    def get_catalytic_center_distance(self, res_id: int) -> Optional[float]:
+        """
+        Calculates minimum Euclidean distance between residue C-alpha and ANY
+        catalytic cofactor or bound substrate ligand heavy atom.
+        """
+        if not self.catalytic_center_coordinates or res_id not in self.ca_coordinates:
+            return None
+        _, ca_x, ca_y, ca_z = self.ca_coordinates[res_id]
+        return min(
+            math.sqrt((ca_x - x) ** 2 + (ca_y - y) ** 2 + (ca_z - z) ** 2)
+            for x, y, z in self.catalytic_center_coordinates
+        )
+
+    def get_cofactor_zone(self, res_id: int) -> str:
+        """
+        Categorizes residue into catalytic proximity zones (Gap 3):
+          - 'catalytic_core': d < 4.5 A (immediate catalytic transition-state / cofactor shell)
+          - 'entrance_channel': 4.5 A <= d <= 12.0 A (substrate accession and allosteric loop channel)
+          - 'outer_scaffold': d > 12.0 A (distal framework)
+        """
+        d = self.get_cofactor_distance(res_id)
+        if d is None:
+            d = self.get_catalytic_center_distance(res_id)
+        if d is None:
+            return "outer_scaffold"
+        if d < 4.5:
+            return "catalytic_core"
+        if d <= 12.0:
+            return "entrance_channel"
+        return "outer_scaffold"
 
     def evaluate_mutation_cluster_cohesion(self, positions: List[int]) -> Dict[str, Any]:
         """
@@ -280,6 +383,20 @@ class SpatialContactMap:
                 # Introducing charged residue into buried core
                 if wt_aa in "AILVMF" and mut_aa in "KRDENQ":
                     return False, f"Electrostatic desolvation penalty: buried hydrophobic core residue {wt_aa}{pos} mutated to charged/polar {mut_aa}"
+
+        # 1b. Cofactor / Transition-State Catalytic Core Clash Protection (Gap 3)
+        if self.cofactor_coordinates or self.catalytic_center_coordinates:
+            for pos, wt_aa, mut_aa in mutation_tuples:
+                d_cof = self.get_cofactor_distance(pos)
+                if d_cof is None:
+                    d_cof = self.get_catalytic_center_distance(pos)
+                if d_cof is not None and d_cof < 4.2:
+                    wt_vol = AA_VOLUMES.get(wt_aa, 120.0)
+                    mut_vol = AA_VOLUMES.get(mut_aa, 120.0)
+                    vol_delta = mut_vol - wt_vol
+                    # Bulky aromatic expansion colliding directly into cofactor
+                    if vol_delta > 65.0 and mut_aa in ("W", "Y", "F"):
+                        return False, f"Cofactor catalytic clash: {wt_aa}{pos}{mut_aa} is {d_cof:.1f} A from cofactor with severe steric expansion +{vol_delta:.1f} A^3"
 
         # 2. Check for spatial steric collision between neighboring mutations
         for i in range(len(mutation_tuples)):
@@ -561,6 +678,31 @@ def compute_structural_surrogate_score(
                         score -= 2.5  # Steric clash
                     if (mut_i in "KR" and mut_j in "KR") or (mut_i in "DE" and mut_j in "DE"):
                         score -= 1.5  # Electrostatic repulsion
+
+    # 4. 3D HETATM Cofactor / Transition-State Proximity & Catalytic Geometry (Gap 3)
+    if cmap.cofactor_coordinates or cmap.catalytic_center_coordinates:
+        for pos, wt_aa, mut_aa in parsed_tuples:
+            d_cof = cmap.get_cofactor_distance(pos)
+            if d_cof is None:
+                d_cof = cmap.get_catalytic_center_distance(pos)
+            if d_cof is not None:
+                # Zone 1: Immediate catalytic transition-state shell (< 4.5 A)
+                if d_cof < 4.5:
+                    vol_delta = AA_VOLUMES.get(mut_aa, 120.0) - AA_VOLUMES.get(wt_aa, 120.0)
+                    if vol_delta > 40.0:
+                        score -= 3.5  # Steric crowding of catalytic pocket / cofactor
+                    if wt_aa in "AILVMF" and mut_aa in "KRDENQ":
+                        score -= 2.5  # Inappropriate charge introduced into catalytic pocket
+                    if mut_aa == "P" and wt_aa != "P":
+                        score -= 2.0  # Backbone rigidity disrupting catalytic orientation
+                # Zone 2: Entrance channel & substrate accession (4.5 A to 12.0 A)
+                elif d_cof <= 12.0:
+                    # Steric decongestion / channel enlargement for non-natural / bulky substrates
+                    # e.g., F184I or F184A in TrpB
+                    if wt_aa in ("F", "W", "Y") and mut_aa in ("I", "V", "A", "L"):
+                        score += 0.45  # Steric decongestion bonus
+                    elif wt_aa in ("S", "T", "A") and mut_aa == "G":
+                        score += 0.25  # Channel flexibility bonus
 
     return round(score, 4)
 

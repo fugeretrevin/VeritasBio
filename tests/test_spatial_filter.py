@@ -9,6 +9,7 @@ from pathlib import Path
 
 from workers.spatial_filter import (
     SpatialContactMap,
+    compute_structural_surrogate_score,
     filter_spatially_viable_variants,
     get_spatial_contact_map,
 )
@@ -127,6 +128,70 @@ class TestSpatialFilter(unittest.TestCase):
         cmap = get_spatial_contact_map(reference_sequence=bad_ref)
         self.assertEqual(cmap.ca_coordinates, {})
 
+    def test_hetatm_cofactor_and_ligand_parsing(self) -> None:
+        """Verifies that HETATM cofactors (0JO) and ligands (QOX) in 8EH0 are parsed."""
+        trpb_pdb = Path(__file__).resolve().parents[1] / "workers" / "data" / "8EH0.pdb"
+        if not trpb_pdb.is_file():
+            self.skipTest("8EH0.pdb not available")
+
+        cmap = get_spatial_contact_map(trpb_pdb)
+        self.assertIn("0JO", cmap.cofactor_coordinates)
+        self.assertGreater(len(cmap.cofactor_coordinates["0JO"]), 15)
+        self.assertIn("QOX", cmap.ligand_coordinates)
+        self.assertGreater(len(cmap.catalytic_center_coordinates), 30)
+
+    def test_cofactor_distance_and_zones(self) -> None:
+        """Verifies 3D distance and zone classification to catalytic cofactor."""
+        trpb_pdb = Path(__file__).resolve().parents[1] / "workers" / "data" / "8EH0.pdb"
+        if not trpb_pdb.is_file():
+            self.skipTest("8EH0.pdb not available")
+
+        cmap = get_spatial_contact_map(trpb_pdb)
+        d_227 = cmap.get_cofactor_distance(227)
+        d_228 = cmap.get_cofactor_distance(228)
+        d_184 = cmap.get_cofactor_distance(184)
+
+        self.assertIsNotNone(d_227)
+        self.assertIsNotNone(d_228)
+        self.assertIsNotNone(d_184)
+
+        # 227 and 228 are in catalytic core shell (< 4.5 A)
+        self.assertLess(d_227, 4.5)
+        self.assertLess(d_228, 4.5)
+        self.assertEqual(cmap.get_cofactor_zone(227), "catalytic_core")
+        self.assertEqual(cmap.get_cofactor_zone(228), "catalytic_core")
+
+        # 184 is in substrate entrance channel (4.5 A to 12.0 A)
+        self.assertGreaterEqual(d_184, 4.5)
+        self.assertLessEqual(d_184, 12.0)
+        self.assertEqual(cmap.get_cofactor_zone(184), "entrance_channel")
+
+    def test_cofactor_catalytic_clash_rejection(self) -> None:
+        """Expanding residue 227 (< 4.2 A to 0JO) to Trp must trigger cofactor catalytic clash."""
+        trpb_pdb = Path(__file__).resolve().parents[1] / "workers" / "data" / "8EH0.pdb"
+        if not trpb_pdb.is_file():
+            self.skipTest("8EH0.pdb not available")
+
+        cmap = get_spatial_contact_map(trpb_pdb)
+        passes, reason = cmap.check_steric_and_core_clash([(227, "V", "W")])
+        self.assertFalse(passes)
+        self.assertIn("Cofactor catalytic clash", reason)
+
+    def test_cofactor_geometry_surrogate_scoring(self) -> None:
+        """Steric decongestion at entrance channel gets bonus; clash at core receives penalty."""
+        trpb_pdb = Path(__file__).resolve().parents[1] / "workers" / "data" / "8EH0.pdb"
+        if not trpb_pdb.is_file():
+            self.skipTest("8EH0.pdb not available")
+
+        # F184I relieves entrance channel steric crowding -> +0.45 bonus
+        score_decongest = compute_structural_surrogate_score("F184I", pdb_path=trpb_pdb)
+        self.assertGreater(score_decongest, 0.0)
+
+        # V227W expands into immediate cofactor pocket -> -3.5 penalty
+        score_clash = compute_structural_surrogate_score("V227W", pdb_path=trpb_pdb)
+        self.assertLess(score_clash, -3.0)
+
 
 if __name__ == "__main__":
     unittest.main()
+

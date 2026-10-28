@@ -145,6 +145,10 @@ CRITICAL RULES:
 9. SURFACE SHELL & ALLOSTERIC COOPERATIVITY EXPANSION:
    - When core active-site pockets have converged across iterations or when optimizing folding cooperativity, propose a secondary cluster of high-flexibility, solvent-exposed surface residues (e.g. outer loop, beta-sheet turn, or outer scaffold residues) that modulate folding kinetics and global stability without mutating core catalytic residues.
    - Surface positions tolerate diverse substitutions without disrupting the primary hydrophobic core, serving as key stability-rescuing permissive mutations for multi-mutant designs.
+10. COFACTOR & TRANSITION-STATE CLASH REASONING:
+   - When designing near catalytic cofactors (PLP, heme, flavin, NAD) or bound ligand spheres:
+     - Immediate Transition-State Shell (< 4.5 Angstroms from cofactor/intermediate): preserve critical catalytic geometry; avoid bulky aromatic substitutions (W, Y, F), rigid prolines, or inappropriate charges that clash with or displace the cofactor transition state.
+     - Substrate Entrance Channel (4.5 to 12.0 Angstroms): prime target for steric decongestion mutations (e.g. F/W/Y -> I/V/A/L or small neutrals) that relieve substrate bottlenecks and accommodate non-natural bulky substrates while maintaining loop closure.
 """
 
 FEW_SHOT_EXAMPLE_JSON = {
