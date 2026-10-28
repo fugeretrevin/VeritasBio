@@ -109,6 +109,16 @@ class OrchestratorConfig(BaseModel):
         default=False,
         description="Exhaustively test all Hamming-1 mutations around the champion lead",
     )
+    campaign_profile: str = Field(
+        default="fast_screen",
+        description="Campaign profile: 'fast_screen' (frugal, 70% efficiency) or 'deep_lead_optimization' (accuracy-focused, 60% accuracy, multi-lead polish)",
+    )
+    lead_refinement_top_n: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Number of top diverse leads to sweep in Tier 3 Hamming-1 polish",
+    )
 
 
 class OrchestratorEvent(BaseModel):
@@ -146,6 +156,21 @@ class Orchestrator:
 
     def __init__(self, config: Optional[OrchestratorConfig] = None) -> None:
         self.config: OrchestratorConfig = config or OrchestratorConfig()
+
+        # Apply campaign profile presets for optimal efficiency vs accuracy balance
+        if self.config.campaign_profile == "deep_lead_optimization":
+            self.config.regret_patience = max(self.config.regret_patience, 4)
+            self.config.stagnation_patience = max(self.config.stagnation_patience, 4)
+            self.config.regret_stopping_threshold = min(self.config.regret_stopping_threshold, 0.003)
+            self.config.lead_refinement_top_n = max(self.config.lead_refinement_top_n, 3)
+            self.config.cascade_top_k_ratio = max(self.config.cascade_top_k_ratio, 0.30)
+        elif self.config.campaign_profile == "fast_screen":
+            self.config.regret_patience = 2
+            self.config.stagnation_patience = 2
+            self.config.regret_stopping_threshold = 0.010
+            self.config.lead_refinement_top_n = 1
+            self.config.cascade_top_k_ratio = 0.15
+
         self.db_path: Optional[Path] = Path(self.config.db_path) if self.config.db_path else None
         self.gatekeeper = Gatekeeper(db_path=self.db_path)
         self.mock_llm = MockLLMWorker()
@@ -701,21 +726,18 @@ class Orchestrator:
             round_num += 1
 
         # ---------------------------------------------------------------------
-        # Tier 3: Hamming-1 Local Lead Refinement Phase
+        # Tier 3: Hamming-1 Local Lead Refinement Phase (Multi-Lead Polish)
         # ---------------------------------------------------------------------
         if self.config.enable_lead_refinement:
             all_ev_refine = ledger_db.get_evidence(db_path=self.db_path)
             if all_ev_refine:
-                best_ev = max(all_ev_refine, key=lambda e: float(e["computed_score"]))
-                lead_seq = best_ev["variant_sequence"]
-                lead_score = float(best_ev["computed_score"])
-                lead_muts = extract_mutations_from_sequence(lead_seq, wt_sequence)
-                lead_var = Variant(
-                    notation=":".join(m.to_string() for m in lead_muts) if lead_muts else "WT",
-                    mutations=lead_muts,
-                )
+                # Select top N diverse leads to sweep in parallel
+                sorted_ev = sorted(all_ev_refine, key=lambda e: float(e["computed_score"]), reverse=True)
+                top_n = min(self.config.lead_refinement_top_n, len(sorted_ev))
+                top_leads_ev = sorted_ev[:top_n]
+                lead_score = float(top_leads_ev[0]["computed_score"])
 
-                # Active positions for lead refinement: prioritize known active pockets or mutated positions
+                # Active positions for lead refinement
                 active_refine_pos: List[int] = []
                 if "strategy" in locals() and strategy and getattr(strategy, "target_clusters", None):
                     pos_set = set()
@@ -725,70 +747,85 @@ class Orchestrator:
                         elif isinstance(cluster, (list, tuple, set)):
                             pos_set.update(cluster)
                     active_refine_pos = sorted(list(pos_set))
-                if not active_refine_pos and lead_muts:
-                    active_refine_pos = sorted(list({m.position for m in lead_muts}))
 
-                if active_refine_pos:
-                    refine_neighbors = generate_hamming1_lead_neighbors(
-                        lead_variant=lead_var,
-                        active_positions=active_refine_pos,
-                        wt_sequence=wt_sequence,
-                        pdb_path=pdb_path if "pdb_path" in locals() else None,
+                existing_seqs = {e["variant_sequence"] for e in all_ev_refine}
+                all_novel_neighbors: List[Variant] = []
+                seen_neighbor_seqs = set()
+
+                for l_ev in top_leads_ev:
+                    lead_seq = l_ev["variant_sequence"]
+                    lead_muts = extract_mutations_from_sequence(lead_seq, wt_sequence)
+                    lead_var = Variant(
+                        notation=":".join(m.to_string() for m in lead_muts) if lead_muts else "WT",
+                        mutations=lead_muts,
                     )
-                    existing_seqs = {e["variant_sequence"] for e in all_ev_refine}
-                    novel_neighbors = [n for n in refine_neighbors if n.apply_to(wt_sequence) not in existing_seqs]
-
-                    if novel_neighbors:
-                        refine_batch = novel_neighbors[: max(20, self.config.batch_size * 2)]
-                        refine_job_id = f"job-refine-{int(time.time())}"
-                        refine_model = (
-                            "mock_esm"
-                            if self.config.target_model in ("mock_esm", "mock_cascade")
-                            else "esm2_650m"
+                    curr_pos = active_refine_pos if active_refine_pos else sorted(list({m.position for m in lead_muts}))
+                    if curr_pos:
+                        neighbors = generate_hamming1_lead_neighbors(
+                            lead_variant=lead_var,
+                            active_positions=curr_pos,
+                            wt_sequence=wt_sequence,
+                            pdb_path=pdb_path if "pdb_path" in locals() else None,
                         )
+                        for n in neighbors:
+                            n_seq = n.apply_to(wt_sequence)
+                            if n_seq not in existing_seqs and n_seq not in seen_neighbor_seqs:
+                                seen_neighbor_seqs.add(n_seq)
+                                all_novel_neighbors.append(n)
 
-                        refine_req = BatchEvaluationRequest(
-                            job_id=refine_job_id,
+                if all_novel_neighbors:
+                    max_refine_count = max(40, self.config.batch_size * 2 * top_n)
+                    refine_batch = all_novel_neighbors[:max_refine_count]
+                    refine_job_id = f"job-refine-{int(time.time())}"
+                    refine_model = (
+                        "mock_esm"
+                        if self.config.target_model in ("mock_esm", "mock_cascade")
+                        else "esm2_650m"
+                    )
+
+                    refine_req = BatchEvaluationRequest(
+                        job_id=refine_job_id,
+                        target_model=refine_model,
+                        wildtype_sequence=wt_sequence,
+                        variants=refine_batch,
+                        budget_id=self.config.budget_id,
+                    )
+                    refine_decision = self.gatekeeper.evaluate_and_authorize(refine_req)
+                    if refine_decision.approved:
+                        top_notations = ", ".join(extract_mutations_from_sequence(l["variant_sequence"], wt_sequence)[0].to_string() if extract_mutations_from_sequence(l["variant_sequence"], wt_sequence) else "WT" for l in top_leads_ev[:2])
+                        yield OrchestratorEvent(
+                            iteration=round_num,
+                            step="refinement",
+                            message=f"Tier 3 Multi-Lead Polish: Authorized ${refine_decision.estimated_cost:.4f} to sweep {len(refine_batch)} Hamming-1 neighbors across top {top_n} leads ({top_notations})...",
+                            remaining_budget_usd=ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
+                            cumulative_spent_usd=self.config.total_budget_usd - ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
+                            current_job_id=refine_job_id,
+                        )
+                        refine_scores = score_variants(
+                            wt_sequence=wt_sequence,
+                            variant_sequences=refine_decision.mutated_sequences or [],
                             target_model=refine_model,
-                            wildtype_sequence=wt_sequence,
-                            variants=refine_batch,
-                            budget_id=self.config.budget_id,
+                            use_mock_fallback=True,
                         )
-                        refine_decision = self.gatekeeper.evaluate_and_authorize(refine_req)
-                        if refine_decision.approved:
-                            yield OrchestratorEvent(
-                                iteration=round_num,
-                                step="refinement",
-                                message=f"Tier 3 Lead Polish: Authorized ${refine_decision.estimated_cost:.4f} to sweep {len(refine_batch)} Hamming-1 neighbors around lead {lead_var.notation}...",
-                                remaining_budget_usd=ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
-                                cumulative_spent_usd=self.config.total_budget_usd - ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
-                                current_job_id=refine_job_id,
-                            )
-                            refine_scores = score_variants(
-                                wt_sequence=wt_sequence,
-                                variant_sequences=refine_decision.mutated_sequences or [],
-                                target_model=refine_model,
-                                use_mock_fallback=True,
-                            )
-                            refine_pairs = list(zip(refine_decision.mutated_sequences or [], refine_scores))
-                            ledger_db.record_evidence(refine_job_id, refine_pairs, db_path=self.db_path)
-                            ledger_db.mark_job_completed(refine_job_id, db_path=self.db_path)
+                        refine_pairs = list(zip(refine_decision.mutated_sequences or [], refine_scores))
+                        ledger_db.record_evidence(refine_job_id, refine_pairs, db_path=self.db_path)
+                        ledger_db.mark_job_completed(refine_job_id, db_path=self.db_path)
 
-                            best_refine_score = max(refine_scores) if refine_scores else -1e9
-                            if best_refine_score > lead_score:
-                                refine_msg = f"Tier 3 Polish DISCOVERED NEW OPTIMUM! Fitness improved from {lead_score:.4f} to {best_refine_score:.4f}."
-                            else:
-                                refine_msg = f"Tier 3 Polish VERIFIED local optimality: no neighbor exceeded lead fitness {lead_score:.4f}."
+                        best_refine_score = max(refine_scores) if refine_scores else -1e9
+                        if best_refine_score > lead_score:
+                            refine_msg = f"Tier 3 Polish DISCOVERED NEW OPTIMUM! Fitness improved from {lead_score:.4f} to {best_refine_score:.4f}."
+                        else:
+                            refine_msg = f"Tier 3 Polish VERIFIED local optimality across top {top_n} leads: no neighbor exceeded lead fitness {lead_score:.4f}."
 
-                            yield OrchestratorEvent(
-                                iteration=round_num,
-                                step="refinement",
-                                message=refine_msg,
-                                remaining_budget_usd=ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
-                                cumulative_spent_usd=self.config.total_budget_usd - ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
-                                current_job_id=refine_job_id,
-                                top_variants=sorted(ledger_db.get_evidence(db_path=self.db_path), key=lambda e: float(e["computed_score"]), reverse=True)[:5],
-                            )
+                        yield OrchestratorEvent(
+                            iteration=round_num,
+                            step="refinement",
+                            message=refine_msg,
+                            remaining_budget_usd=ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
+                            cumulative_spent_usd=self.config.total_budget_usd - ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
+                            current_job_id=refine_job_id,
+                            top_variants=sorted(ledger_db.get_evidence(db_path=self.db_path), key=lambda e: float(e["computed_score"]), reverse=True)[:5],
+                        )
 
         # Run Completed
         budget_row = ledger_db.get_budget(self.config.budget_id, self.db_path)

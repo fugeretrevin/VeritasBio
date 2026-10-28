@@ -162,6 +162,26 @@ class TestEnterpriseHardening(unittest.TestCase):
         compiled = compile(script, "<string>", "exec")
         self.assertIsNotNone(compiled)
 
+    def test_campaign_profile_orchestrator_initialization(self):
+        """Verifies campaign profile presets configure patience, thresholds, and lead polish."""
+        from controller.orchestrator import Orchestrator, OrchestratorConfig
+
+        # Deep Lead Optimization (Accuracy-Focused)
+        cfg_deep = OrchestratorConfig(campaign_profile="deep_lead_optimization")
+        orch_deep = Orchestrator(cfg_deep)
+        self.assertEqual(orch_deep.config.regret_patience, 4)
+        self.assertEqual(orch_deep.config.stagnation_patience, 4)
+        self.assertEqual(orch_deep.config.lead_refinement_top_n, 3)
+        self.assertTrue(orch_deep.config.cascade_top_k_ratio >= 0.30)
+
+        # Fast Screen (Frugal / Efficiency-Focused)
+        cfg_fast = OrchestratorConfig(campaign_profile="fast_screen")
+        orch_fast = Orchestrator(cfg_fast)
+        self.assertEqual(orch_fast.config.regret_patience, 2)
+        self.assertEqual(orch_fast.config.stagnation_patience, 2)
+        self.assertEqual(orch_fast.config.lead_refinement_top_n, 1)
+        self.assertEqual(orch_fast.config.cascade_top_k_ratio, 0.15)
+
 
 if __name__ == "__main__":
     unittest.main()
