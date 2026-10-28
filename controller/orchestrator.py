@@ -20,6 +20,7 @@ Invariants & Constraints (ARCHITECTURE.md §3, §7; INNOVATION_ROADMAP Phase 5):
 
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 import os
@@ -54,10 +55,11 @@ from controller.prompts import (
     parse_strategy_response,
 )
 from ledger import database as ledger_db
-from workers.esm_worker import score_variants
+from workers.esm_worker import score_variants, score_variants_cascade
 from workers.math_worker import (
     SelectedBatch,
     extract_mutations_from_sequence,
+    generate_hamming1_lead_neighbors,
     select_next_micro_batch,
 )
 from workers.mock_workers import MockLLMWorker
@@ -93,6 +95,20 @@ class OrchestratorConfig(BaseModel):
     enable_pocket_hopping: bool = Field(default=True, description="Enable hierarchical pocket-hopping across coupled spatial clusters")
     max_hops: int = Field(default=2, description="Maximum pocket transitions per campaign")
     enable_dynamic_batch_sizing: bool = Field(default=False, description="Enable budget-aware dynamic micro-batch scaling")
+    enable_cloud_cascade: bool = Field(
+        default=False,
+        description="Enable multi-fidelity 150M screening -> 650M precision verification cascade",
+    )
+    cascade_top_k_ratio: float = Field(
+        default=0.20,
+        ge=0.01,
+        le=1.0,
+        description="Fraction of top candidates promoted to Tier 2 in cascade",
+    )
+    enable_lead_refinement: bool = Field(
+        default=False,
+        description="Exhaustively test all Hamming-1 mutations around the champion lead",
+    )
 
 
 class OrchestratorEvent(BaseModel):
@@ -498,9 +514,18 @@ class Orchestrator:
                 current_job_id=job_id,
             )
 
+            if self.config.enable_cloud_cascade:
+                effective_target_model = (
+                    "mock_cascade"
+                    if self.config.target_model in ("mock_esm", "mock_cascade")
+                    else "esm_cascade"
+                )
+            else:
+                effective_target_model = self.config.target_model
+
             eval_request = BatchEvaluationRequest(
                 job_id=job_id,
-                target_model=self.config.target_model,
+                target_model=effective_target_model,
                 wildtype_sequence=wt_sequence,
                 variants=selected_batch.variants,
                 expected_improvements=selected_batch.expected_improvements,
@@ -550,12 +575,30 @@ class Orchestrator:
             )
 
             try:
-                scores = score_variants(
-                    wt_sequence=wt_sequence,
-                    variant_sequences=decision.mutated_sequences or [],
-                    target_model=self.config.target_model,
-                    use_mock_fallback=True,
-                )
+                if self.config.enable_cloud_cascade:
+                    cascade_res = score_variants_cascade(
+                        wt_sequence=wt_sequence,
+                        variant_sequences=decision.mutated_sequences or [],
+                        target_model=effective_target_model,
+                        top_k_ratio=self.config.cascade_top_k_ratio,
+                        use_mock_fallback=True,
+                    )
+                    promoted_idx_set = set(cascade_res.get("promoted_indices", []))
+                    results_pairs = []
+                    for seq, score in zip(cascade_res.get("promoted_sequences", []), cascade_res.get("tier2_scores", [])):
+                        results_pairs.append((seq, score))
+                    t1_scores = cascade_res.get("tier1_scores", [])
+                    for idx, seq in enumerate(decision.mutated_sequences or []):
+                        if idx not in promoted_idx_set and idx < len(t1_scores):
+                            results_pairs.append((seq, t1_scores[idx]))
+                else:
+                    scores = score_variants(
+                        wt_sequence=wt_sequence,
+                        variant_sequences=decision.mutated_sequences or [],
+                        target_model=self.config.target_model,
+                        use_mock_fallback=True,
+                    )
+                    results_pairs = list(zip(decision.mutated_sequences or [], scores))
             except Exception as exc:
                 logger.error("Execution failed for job %s: %s", job_id, exc)
                 ledger_db.mark_job_failed(job_id, db_path=self.db_path)
@@ -573,7 +616,6 @@ class Orchestrator:
             # -----------------------------------------------------------------
             # Step 6: Evidence Update (Active Learning Logging)
             # -----------------------------------------------------------------
-            results_pairs = list(zip(decision.mutated_sequences or [], scores))
             ledger_db.record_evidence(job_id, results_pairs, db_path=self.db_path)
             ledger_db.mark_job_completed(job_id, db_path=self.db_path)
 
@@ -657,6 +699,96 @@ class Orchestrator:
                 prev_best_fitness = max(prev_best_fitness, current_best)
 
             round_num += 1
+
+        # ---------------------------------------------------------------------
+        # Tier 3: Hamming-1 Local Lead Refinement Phase
+        # ---------------------------------------------------------------------
+        if self.config.enable_lead_refinement:
+            all_ev_refine = ledger_db.get_evidence(db_path=self.db_path)
+            if all_ev_refine:
+                best_ev = max(all_ev_refine, key=lambda e: float(e["computed_score"]))
+                lead_seq = best_ev["variant_sequence"]
+                lead_score = float(best_ev["computed_score"])
+                lead_muts = extract_mutations_from_sequence(lead_seq, wt_sequence)
+                lead_var = Variant(
+                    notation=":".join(m.to_string() for m in lead_muts) if lead_muts else "WT",
+                    mutations=lead_muts,
+                )
+
+                # Active positions for lead refinement: prioritize known active pockets or mutated positions
+                active_refine_pos: List[int] = []
+                if "strategy" in locals() and strategy and getattr(strategy, "target_clusters", None):
+                    pos_set = set()
+                    for cluster in strategy.target_clusters:
+                        if hasattr(cluster, "positions"):
+                            pos_set.update(cluster.positions)
+                        elif isinstance(cluster, (list, tuple, set)):
+                            pos_set.update(cluster)
+                    active_refine_pos = sorted(list(pos_set))
+                if not active_refine_pos and lead_muts:
+                    active_refine_pos = sorted(list({m.position for m in lead_muts}))
+
+                if active_refine_pos:
+                    refine_neighbors = generate_hamming1_lead_neighbors(
+                        lead_variant=lead_var,
+                        active_positions=active_refine_pos,
+                        wt_sequence=wt_sequence,
+                        pdb_path=pdb_path if "pdb_path" in locals() else None,
+                    )
+                    existing_seqs = {e["variant_sequence"] for e in all_ev_refine}
+                    novel_neighbors = [n for n in refine_neighbors if n.apply_to(wt_sequence) not in existing_seqs]
+
+                    if novel_neighbors:
+                        refine_batch = novel_neighbors[: max(20, self.config.batch_size * 2)]
+                        refine_job_id = f"job-refine-{int(time.time())}"
+                        refine_model = (
+                            "mock_esm"
+                            if self.config.target_model in ("mock_esm", "mock_cascade")
+                            else "esm2_650m"
+                        )
+
+                        refine_req = BatchEvaluationRequest(
+                            job_id=refine_job_id,
+                            target_model=refine_model,
+                            wildtype_sequence=wt_sequence,
+                            variants=refine_batch,
+                            budget_id=self.config.budget_id,
+                        )
+                        refine_decision = self.gatekeeper.evaluate_and_authorize(refine_req)
+                        if refine_decision.approved:
+                            yield OrchestratorEvent(
+                                iteration=round_num,
+                                step="refinement",
+                                message=f"Tier 3 Lead Polish: Authorized ${refine_decision.estimated_cost:.4f} to sweep {len(refine_batch)} Hamming-1 neighbors around lead {lead_var.notation}...",
+                                remaining_budget_usd=ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
+                                cumulative_spent_usd=self.config.total_budget_usd - ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
+                                current_job_id=refine_job_id,
+                            )
+                            refine_scores = score_variants(
+                                wt_sequence=wt_sequence,
+                                variant_sequences=refine_decision.mutated_sequences or [],
+                                target_model=refine_model,
+                                use_mock_fallback=True,
+                            )
+                            refine_pairs = list(zip(refine_decision.mutated_sequences or [], refine_scores))
+                            ledger_db.record_evidence(refine_job_id, refine_pairs, db_path=self.db_path)
+                            ledger_db.mark_job_completed(refine_job_id, db_path=self.db_path)
+
+                            best_refine_score = max(refine_scores) if refine_scores else -1e9
+                            if best_refine_score > lead_score:
+                                refine_msg = f"Tier 3 Polish DISCOVERED NEW OPTIMUM! Fitness improved from {lead_score:.4f} to {best_refine_score:.4f}."
+                            else:
+                                refine_msg = f"Tier 3 Polish VERIFIED local optimality: no neighbor exceeded lead fitness {lead_score:.4f}."
+
+                            yield OrchestratorEvent(
+                                iteration=round_num,
+                                step="refinement",
+                                message=refine_msg,
+                                remaining_budget_usd=ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
+                                cumulative_spent_usd=self.config.total_budget_usd - ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
+                                current_job_id=refine_job_id,
+                                top_variants=sorted(ledger_db.get_evidence(db_path=self.db_path), key=lambda e: float(e["computed_score"]), reverse=True)[:5],
+                            )
 
         # Run Completed
         budget_row = ledger_db.get_budget(self.config.budget_id, self.db_path)

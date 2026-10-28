@@ -416,10 +416,21 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                     )
                     input_model = gr.Dropdown(
                         label="Foundation Inference Model",
-                        choices=["esm2_150m", "esm2_650m", "mock_esm"],
+                        choices=["esm2_150m", "esm2_650m", "esm_cascade", "mock_esm", "mock_cascade"],
                         value="esm2_150m",
-                        info="Fast-screening A10G tier (150M) or high-capacity (650M)",
+                        info="Fast screening (150M), precision (650M), or Multi-Fidelity Cascade",
                     )
+                    with gr.Row():
+                        check_cascade = gr.Checkbox(
+                            label="Multi-Fidelity Cloud Cascade (150M -> 650M)",
+                            value=False,
+                            interactive=True,
+                        )
+                        check_refinement = gr.Checkbox(
+                            label="Hamming-1 Lead Polish (Local Sphere)",
+                            value=False,
+                            interactive=True,
+                        )
                     check_live_llm = gr.Checkbox(
                         label="Enable Live Meta AI Strategic Planner (Calls Meta API)",
                         value=False,
@@ -593,9 +604,13 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             cold_batch_sz: int,
             target_mdl: str,
             enable_live_llm_val: bool = False,
+            enable_cascade_val: bool = False,
+            enable_refinement_val: bool = False,
         ) -> Iterator[Tuple[float, float, float, str, str, str, List[List[Any]], List[List[Any]], Any, Any, Optional[str], str]]:
             """Streams live events using Python generator yields."""
             eff_acc, wt_seq = resolve_effective_target(target_choice, custom_acc)
+            # If user explicitly selected a cascade model in dropdown, also enable cascade flag
+            is_cascade = enable_cascade_val or ("cascade" in target_mdl.lower())
             config = OrchestratorConfig(
                 target_accession=eff_acc,
                 total_budget_usd=budget_val,
@@ -606,6 +621,8 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 db_path=db_path,
                 use_mock_llm=not enable_live_llm_val,
                 enable_live_llm=enable_live_llm_val,
+                enable_cloud_cascade=is_cascade,
+                enable_lead_refinement=enable_refinement_val,
             )
 
             orchestrator = Orchestrator(config)
@@ -715,6 +732,8 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 input_cold_batch,
                 input_model,
                 check_live_llm,
+                check_cascade,
+                check_refinement,
             ],
             outputs=[
                 metric_rem_budget,

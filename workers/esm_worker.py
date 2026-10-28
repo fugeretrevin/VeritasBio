@@ -138,6 +138,54 @@ def score_variants_remote(
     timeout=300,
     scaledown_window=45,
 )
+def score_variants_cascade_remote(
+    wt_sequence: str,
+    variant_sequences: List[str],
+    top_k_ratio: float = 0.20,
+    batch_size: int = 32,
+) -> Dict[str, Any]:
+    """
+    Remote Modal GPU function: Co-located Multi-Fidelity Cloud Cascade on A10G.
+    Executes Tier-1 (150M) screening on all N candidates, promotes top quantile,
+    and runs Tier-2 (650M) precision scoring in the SAME container session.
+    Avoids duplicate cold-boot and data transfer overhead.
+    """
+    import math
+
+    logger.info("Modal Cascade: Screening %d variants via Tier 1 (150M)...", len(variant_sequences))
+    t1_scores = score_variants_remote(
+        wt_sequence=wt_sequence,
+        variant_sequences=variant_sequences,
+        hf_model_id="facebook/esm2_t30_150M_UR50D",
+        batch_size=batch_size,
+    )
+
+    k = max(1, math.ceil(len(variant_sequences) * top_k_ratio))
+    promoted_indices = sorted(range(len(t1_scores)), key=lambda i: t1_scores[i], reverse=True)[:k]
+    promoted_seqs = [variant_sequences[i] for i in promoted_indices]
+
+    logger.info("Modal Cascade: Verifying %d promoted variants via Tier 2 (650M)...", len(promoted_seqs))
+    t2_scores = score_variants_remote(
+        wt_sequence=wt_sequence,
+        variant_sequences=promoted_seqs,
+        hf_model_id="facebook/esm2_t33_650M_UR50D",
+        batch_size=batch_size,
+    )
+
+    return {
+        "tier1_scores": t1_scores,
+        "promoted_indices": promoted_indices,
+        "promoted_sequences": promoted_seqs,
+        "tier2_scores": t2_scores,
+    }
+
+
+@app.function(
+    image=esm_image,
+    gpu="A10G",
+    timeout=300,
+    scaledown_window=45,
+)
 def embed_sequences_remote(
     sequences: List[str],
     hf_model_id: str = "facebook/esm2_t33_650M_UR50D",
@@ -241,6 +289,51 @@ def score_variants(
             "Modal is not configured (MODAL_TOKEN_ID not set and ~/.modal.toml missing) "
             "and use_mock_fallback is False."
         )
+
+
+def score_variants_cascade(
+    wt_sequence: str,
+    variant_sequences: Sequence[str],
+    target_model: str = "esm_cascade",
+    top_k_ratio: float = 0.20,
+    use_mock_fallback: bool = True,
+) -> Dict[str, Any]:
+    """
+    Client entrypoint for executing multi-fidelity cloud cascade scoring.
+    Tier 1 (150M) screens all N variants; Tier 2 (650M) scores the top quantile.
+    """
+    from workers.mock_workers import MockESMWorker
+
+    clean_model = target_model.strip().lower()
+    if clean_model == "mock_cascade":
+        return MockESMWorker(wt_sequence).score_variants_cascade(
+            wt_sequence=wt_sequence,
+            variant_sequences=variant_sequences,
+            top_k_ratio=top_k_ratio,
+        )
+
+    if is_modal_configured():
+        try:
+            fn_getter = getattr(modal.Function, "from_name", getattr(modal.Function, "lookup", None))
+            if fn_getter:
+                fn = fn_getter("veritasbio-esm", "score_variants_cascade_remote")
+                return fn.remote(
+                    wt_sequence=wt_sequence,
+                    variant_sequences=list(variant_sequences),
+                    top_k_ratio=top_k_ratio,
+                )
+        except Exception as exc:
+            logger.warning("Modal remote cascade scoring failed: %s", exc)
+            if not use_mock_fallback:
+                raise RuntimeError(f"Modal cascade execution failed: {exc}") from exc
+
+    if use_mock_fallback:
+        return MockESMWorker(wt_sequence).score_variants_cascade(
+            wt_sequence=wt_sequence,
+            variant_sequences=variant_sequences,
+            top_k_ratio=top_k_ratio,
+        )
+    raise RuntimeError("Modal is not configured and use_mock_fallback is False.")
 
 
 def embed_sequences(

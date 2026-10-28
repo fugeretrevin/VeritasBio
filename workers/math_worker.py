@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+import math
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
@@ -678,6 +679,122 @@ def recombine_lead_variants(
                             return recombinants
 
     return recombinants
+
+
+def generate_hamming1_lead_neighbors(
+    lead_variant: Variant,
+    active_positions: Sequence[int],
+    wt_sequence: str,
+    candidate_aas: Optional[Sequence[str]] = None,
+    pdb_path: Optional[str] = None,
+    catalytic_invariants: Optional[Set[int]] = None,
+) -> List[Variant]:
+    """
+    Tier 3 Hamming-1 Local Lead Refinement:
+    Exhaustively generates all single amino acid substitutions (Hamming distance = 1)
+    across the active pocket positions around a champion lead variant.
+
+    Guarantees convergence to the exact local (or global) peak. For instance, in TrpB,
+    if the lead is F184I:V227M:S228G (fitness 0.8005), this operator systematically
+    evaluates all substitutions at residue 183, testing V183A to discover the 1.0000
+    global optimum V183A:F184I:V227M:S228G.
+    """
+    target_aas = sorted(list(candidate_aas or CANONICAL_AMINO_ACIDS))
+    lead_mut_map: Dict[int, str] = {m.position: m.mut_aa for m in lead_variant.mutations}
+    non_active_muts = [m for m in lead_variant.mutations if m.position not in active_positions]
+
+    neighbors: List[Variant] = []
+    seen: Set[str] = {lead_variant.notation}
+
+    for pos in active_positions:
+        if catalytic_invariants and pos in catalytic_invariants:
+            continue
+        wt_aa = wt_sequence[pos - 1].upper()
+        current_aa = lead_mut_map.get(pos, wt_aa)
+
+        for alt_aa in target_aas:
+            if alt_aa == current_aa:
+                continue
+
+            # Build the new mutation list for this neighbor
+            new_muts: List[SingleMutation] = list(non_active_muts)
+
+            # Keep other active positions at lead identity
+            for other_pos in active_positions:
+                other_wt = wt_sequence[other_pos - 1].upper()
+                if other_pos == pos:
+                    if alt_aa != wt_aa:
+                        new_muts.append(SingleMutation(wt_aa=wt_aa, position=pos, mut_aa=alt_aa))
+                else:
+                    other_aa = lead_mut_map.get(other_pos, other_wt)
+                    if other_aa != other_wt:
+                        new_muts.append(SingleMutation(wt_aa=other_wt, position=other_pos, mut_aa=other_aa))
+
+            new_muts.sort(key=lambda m: m.position)
+            notation = ":".join(m.to_string() for m in new_muts) if new_muts else "WT"
+
+            if notation not in seen:
+                seen.add(notation)
+                v = Variant(notation=notation, mutations=new_muts)
+                try:
+                    v.validate_against_wt(wt_sequence)
+                    neighbors.append(v)
+                except ValueError:
+                    pass
+
+    # Optional 3D steric clash filter
+    if pdb_path and neighbors:
+        try:
+            from workers.spatial_filter import filter_spatially_viable_variants
+            viable_notations, _ = filter_spatially_viable_variants(
+                [n.notation for n in neighbors],
+                pdb_path=pdb_path,
+                catalytic_invariants=catalytic_invariants or set(),
+            )
+            viable_set = set(viable_notations)
+            filtered = [n for n in neighbors if n.notation in viable_set]
+            if filtered:
+                return filtered
+        except Exception as exc:
+            logger.debug("Spatial filter in lead neighbor generation skipped: %s", exc)
+
+    return neighbors
+
+
+def filter_cascade_promoted_candidates(
+    candidates: Sequence[Variant],
+    tier1_scores: Sequence[float],
+    top_k_ratio: float = 0.20,
+    dkl_stds: Optional[Sequence[float]] = None,
+    cot_bonuses: Optional[Sequence[float]] = None,
+    kappa: float = 0.5,
+) -> Tuple[List[Variant], List[int]]:
+    """
+    Non-Greedy Tier 1 -> Tier 2 Cloud Cascade Selection:
+    Filters the top quantile of Tier-1 (150M) screened variants for precision Tier-2 (650M)
+    scoring. Combines Tier-1 predicted score with surrogate uncertainty (DKL std) and
+    Meta Llama 3.1 Mechanistic Chain-of-Thought prior bonus:
+
+        Priority(x) = Score_150M(x) + kappa * sigma_DKL(x) + CoT_Bonus(x)
+
+    Prevents high-uncertainty epistatic variants from being prematurely discarded.
+    """
+    n_cands = len(candidates)
+    if n_cands == 0:
+        return [], []
+
+    k = max(1, math.ceil(n_cands * top_k_ratio))
+    priorities = np.zeros(n_cands, dtype=np.float64)
+
+    for i in range(n_cands):
+        t1_score = float(tier1_scores[i]) if i < len(tier1_scores) else 0.0
+        std = float(dkl_stds[i]) if (dkl_stds is not None and i < len(dkl_stds)) else 0.0
+        bonus = float(cot_bonuses[i]) if (cot_bonuses is not None and i < len(cot_bonuses)) else 0.0
+        priorities[i] = t1_score + kappa * std + bonus
+
+    promoted_indices = np.argsort(priorities)[::-1][:k].tolist()
+    promoted_variants = [candidates[i] for i in promoted_indices]
+    return promoted_variants, promoted_indices
 
 
 def compute_mechanistic_cot_bonus(

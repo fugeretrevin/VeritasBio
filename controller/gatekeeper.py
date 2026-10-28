@@ -41,7 +41,9 @@ ALLOWED_TARGET_MODELS: Set[str] = {
     "esm2_650m",
     "esm2_t30_150M_UR50D",
     "esm2_150m",
+    "esm_cascade",
     "mock_esm",
+    "mock_cascade",
 }
 
 # Mutation regex: e.g. S65T or A123V
@@ -179,6 +181,12 @@ class GatekeeperConfig(BaseModel):
     gpu_sec_per_variant: float = Field(
         default=0.02, ge=0.0001, description="Average GPU seconds per variant for ESM forward pass"
     )
+    gpu_sec_per_variant_150m: float = Field(
+        default=0.005, ge=0.0001, description="Average GPU seconds per variant for ESM-2 150M Tier-1 forward pass"
+    )
+    cascade_top_k_ratio: float = Field(
+        default=0.20, ge=0.01, le=1.0, description="Fraction of top candidates promoted from Tier 1 to Tier 2"
+    )
     cold_start_sec: float = Field(
         default=20.0, ge=0.0, description="Estimated cold-boot & PyTorch model load time"
     )
@@ -300,6 +308,9 @@ class Gatekeeper:
         if target_model == "mock_esm":
             # Nominal synthetic cost for local/mock mode (D2)
             return self.config.mock_nominal_cost, True
+        if target_model == "mock_cascade":
+            # Nominal synthetic cost for local/mock cascade (1.5x mock_nominal_cost)
+            return round(self.config.mock_nominal_cost * 1.5, 6), True
 
         now = current_time if current_time is not None else time.time()
 
@@ -311,7 +322,21 @@ class Gatekeeper:
             is_warm = False
 
         boot_sec = 0.0 if is_warm else self.config.cold_start_sec
-        active_gpu_sec = variant_count * self.config.gpu_sec_per_variant
+
+        if target_model == "esm_cascade":
+            # Multi-fidelity cascade: Tier 1 (150M) runs on all N variants;
+            # Tier 2 (650M) runs only on top_k = ceil(N * cascade_top_k_ratio).
+            # Co-located in the same container, incurring at most one cold boot.
+            tier1_variants = variant_count
+            tier2_variants = max(1, math.ceil(variant_count * self.config.cascade_top_k_ratio))
+            active_gpu_sec = (tier1_variants * self.config.gpu_sec_per_variant_150m) + (
+                tier2_variants * self.config.gpu_sec_per_variant
+            )
+        elif target_model in ("esm2_150m", "esm2_t30_150m_ur50d"):
+            active_gpu_sec = variant_count * self.config.gpu_sec_per_variant_150m
+        else:
+            active_gpu_sec = variant_count * self.config.gpu_sec_per_variant
+
         total_gpu_sec = active_gpu_sec + boot_sec
         cost_usd = total_gpu_sec * self.config.a10g_usd_per_sec
 

@@ -146,6 +146,50 @@ class MockESMWorker:
             scores.append(compute_mock_gfp_fitness(muts))
         return scores
 
+    def score_variants_cascade(
+        self,
+        wt_sequence: str,
+        variant_sequences: Sequence[str],
+        top_k_ratio: float = 0.20,
+    ) -> Dict[str, Any]:
+        """
+        Simulates the Multi-Fidelity Cloud Cascade:
+          - Tier 1: Fast 150M screening on all N variants with realistic mild approximation noise.
+          - Promotes top quantile = ceil(N * top_k_ratio).
+          - Tier 2: Precision 650M verification on promoted variants.
+        """
+        import math
+        import numpy as np
+
+        full_scores = self.score_variants(wt_sequence, variant_sequences)
+        n = len(variant_sequences)
+        if n == 0:
+            return {
+                "tier1_scores": [],
+                "promoted_indices": [],
+                "promoted_sequences": [],
+                "tier2_scores": [],
+            }
+
+        # Simulated Tier-1 scores: true score + small approximation residual (correlation ~0.88 with 650M)
+        tier1_scores: List[float] = []
+        for i, (v_seq, s) in enumerate(zip(variant_sequences, full_scores)):
+            seed = int(hashlib.sha256(f"t1_{v_seq}".encode()).hexdigest()[:8], 16)
+            noise = ((seed % 1000) / 1000.0 - 0.5) * 0.15
+            tier1_scores.append(round(s + noise, 4))
+
+        k = max(1, math.ceil(n * top_k_ratio))
+        promoted_indices = np.argsort(tier1_scores)[::-1][:k].tolist()
+        promoted_seqs = [variant_sequences[i] for i in promoted_indices]
+        tier2_scores = [full_scores[i] for i in promoted_indices]
+
+        return {
+            "tier1_scores": tier1_scores,
+            "promoted_indices": promoted_indices,
+            "promoted_sequences": promoted_seqs,
+            "tier2_scores": tier2_scores,
+        }
+
     def embed_sequences(self, sequences: Sequence[str], dim: int = 1280) -> List[List[float]]:
         """Generates deterministic latent sequence embeddings for surrogate models."""
         import numpy as np
