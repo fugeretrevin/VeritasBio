@@ -39,6 +39,8 @@ def main() -> None:
         batch_size=20,
         target_model="esm2_150m",
         enable_live_llm=True,
+        enable_cascade=True,
+        enable_lead_refinement=True,
     )
     t1_trpb = time.perf_counter()
 
@@ -54,6 +56,8 @@ def main() -> None:
         batch_size=20,
         target_model="esm2_150m",
         enable_live_llm=True,
+        enable_cascade=True,
+        enable_lead_refinement=True,
     )
     t1_gfp = time.perf_counter()
 
@@ -101,6 +105,17 @@ def main() -> None:
     print(f"{'Cloud Capital Cost Savings':<36} | {f'{m_trpb.cloud_cost_savings_pct:.1f}%':<20} | {f'{m_gfp.cloud_cost_savings_pct:.1f}%':<20}")
     print(f"{'Cloud Efficiency Multiplier':<36} | {f'{m_trpb.cloud_efficiency_multiple:.1f}x cheaper':<20} | {f'{m_gfp.cloud_efficiency_multiple:.1f}x cheaper':<20}")
     print("=" * 80 + "\n")
+
+    try:
+        from scripts.plot_benchmark import generate_side_by_side_figures
+        fig_path = generate_side_by_side_figures(
+            trpb_db=str(trpb_db),
+            avgfp_db=str(gfp_db),
+            output_path=str(ROOT_DIR / "scripts" / "benchmark_side_by_side.png"),
+        )
+        print(f" [+] Side-by-side benchmark plot refreshed at: {fig_path}")
+    except Exception as exc:
+        print(f" [!] Benchmark plot generation note: {exc}")
 
 
 if __name__ == "__main__":

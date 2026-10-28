@@ -1,12 +1,12 @@
 {
-  "certificate_id": "VB-AUDIT-0F3BE93BB939A4A1",
-  "timestamp_utc": "2026-10-27T23:47:23.947911+00:00",
-  "ledger_hash_sha256": "0f3be93bb939a4a17fd8dfac2a7d6665c0639ab22c73080e5706641d38c12af8",
+  "certificate_id": "VB-AUDIT-9BD3D00C07D9B99F",
+  "timestamp_utc": "2026-10-28T01:09:49.498789+00:00",
+  "ledger_hash_sha256": "9bd3d00c07d9b99f0ed22c29691911e9549380bf46f164e80438a62ae89de1f5",
   "standard_compliance": "FDA 21 CFR Part 11 / GAMP 5 Immutability Verified",
   "target_protein": "Tryptophan synthase beta chain, engineered parent Tm9D8* (TRPB_TM9D8)",
   "total_budget_usd": 1.0,
-  "total_spent_usd": 0.013329,
-  "total_jobs_authorized": 11,
-  "total_evidence_records": 1178,
+  "total_spent_usd": 0.01455,
+  "total_jobs_authorized": 6,
+  "total_evidence_records": 790,
   "deterministic_verification": "PASS: All spends follow ACID ledger lock with zero unbudgeted GPU bypass."
 }

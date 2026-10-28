@@ -1,5 +1,5 @@
 # Opentrons OT-2 Automated Mutagenesis Assembly Protocol
-# Generated automatically by VeritasBio Wet-Lab Translator on 2026-10-27T23:47:23.895018+00:00
+# Generated automatically by VeritasBio Wet-Lab Translator on 2026-10-28T01:09:49.489732+00:00
 # Target: Tryptophan synthase beta chain, engineered parent Tm9D8* Variant Library (96-well format)
 
 from opentrons import protocol_api
@@ -24,16 +24,16 @@ def run(protocol: protocol_api.ProtocolContext):
     p300 = protocol.load_instrument("p300_multi_gen2", "left", tip_racks=[tips_300ul])
 
     variants = [
-    "TRYP_T179E:T180G:Y181K:V183F",
-    "TRYP_T179E:T180G:Y182G:V183W",
-    "TRYP_T179E:T180G:Y181W:V183S",
-    "TRYP_T179K:T180G:V183A",
-    "TRYP_T179E:T180G:Y181G:V183Y",
-    "TRYP_T179K:T180G:V183S",
-    "TRYP_T179E:T180G:Y182G:V183Y",
-    "TRYP_T179E:T180G:Y182A:V183Y",
-    "TRYP_T179E:T180G:Y181W:V183Y",
-    "TRYP_T179E:T180G:Y182L:V183A"
+    "TRYP_S228A:A233I",
+    "TRYP_A233I",
+    "TRYP_G229Q",
+    "TRYP_G230E",
+    "TRYP_V227Y",
+    "TRYP_G230I",
+    "TRYP_N232C",
+    "TRYP_G229F",
+    "TRYP_F184C",
+    "TRYP_F184I"
 ]
 
     protocol.comment(f"Starting VeritasBio automated assembly for {len(variants)} variants...")

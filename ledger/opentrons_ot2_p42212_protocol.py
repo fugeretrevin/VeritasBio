@@ -1,5 +1,5 @@
 # Opentrons OT-2 Automated Mutagenesis Assembly Protocol
-# Generated automatically by VeritasBio Wet-Lab Translator on 2026-10-27T23:52:22.186358+00:00
+# Generated automatically by VeritasBio Wet-Lab Translator on 2026-10-28T01:12:20.710345+00:00
 # Target: Green fluorescent protein Variant Library (96-well format)
 
 from opentrons import protocol_api
@@ -24,16 +24,16 @@ def run(protocol: protocol_api.ProtocolContext):
     p300 = protocol.load_instrument("p300_multi_gen2", "left", tip_racks=[tips_300ul])
 
     variants = [
-    "GREE_T203G:Q204S:S205V",
-    "GREE_T203L:Q204A:S205A:A206S",
-    "GREE_T203L:Q204E:S205A:A206S",
-    "GREE_T203L:Q204E:S205G:A206S",
-    "GREE_T203L:Q204V:S205D:A206S",
-    "GREE_S202E:T203V:Q204K:A206T",
-    "GREE_T203L:Q204A:S205G:A206S",
-    "GREE_T203V:Q204S:S205V",
-    "GREE_S202E:T203V:Q204T:A206T",
-    "GREE_T203L:Q204D:S205A:A206S"
+    "GREE_F64L:S65T:V68L",
+    "GREE_F64L:S65T",
+    "GREE_F64L:S65T:V68W",
+    "GREE_F64L:S65T:V68F",
+    "GREE_F64L:S65T:V68M",
+    "GREE_F64L:S65T:V68S",
+    "GREE_F64L:S65T:V68T",
+    "GREE_F64L:S65T:V68I",
+    "GREE_F64L:S65T:V68Y",
+    "GREE_F64L:S65T:V68A"
 ]
 
     protocol.comment(f"Starting VeritasBio automated assembly for {len(variants)} variants...")
