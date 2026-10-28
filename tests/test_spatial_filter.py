@@ -96,6 +96,37 @@ class TestSpatialFilter(unittest.TestCase):
         self.assertEqual(approved_syn, ["S65T:T203Y", "F64L:S65T"])
         self.assertEqual(len(pruned_syn), 0)
 
+    def test_trpb_multiloop_active_site_quadruple_passes(self) -> None:
+        """Authentic multi-loop active site quadruple hit (TrpB 183:184:227:228 at 18.95 A) passes cohesion."""
+        trpb_pdb = Path(__file__).resolve().parents[1] / "workers" / "data" / "8EH0.pdb"
+        if trpb_pdb.is_file():
+            cmap_trpb = get_spatial_contact_map(trpb_pdb)
+            cohesion = cmap_trpb.evaluate_mutation_cluster_cohesion([183, 184, 227, 228])
+            self.assertTrue(cohesion["is_cohesive"], f"Failed cohesion: max distance {cohesion.get('max_distance_angstroms')} A")
+            self.assertLess(cohesion["max_distance_angstroms"], 24.0)
+
+            approved, pruned = filter_spatially_viable_variants(
+                ["V183A:F184I:V227K:S228G"],
+                pdb_path=trpb_pdb,
+                enable_heuristics=True,
+                allowed_active_positions={183, 184, 227, 228},
+            )
+            self.assertEqual(approved, ["V183A:F184I:V227K:S228G"])
+            self.assertEqual(len(pruned), 0)
+
+    def test_enable_heuristics_false_bypasses_filtering(self) -> None:
+        """When enable_heuristics=False, filter acts as an identity function without pruning."""
+        variants = ["Y39K:F46A:M153A", "F64L:Y66A:T203L"]
+        approved, pruned = filter_spatially_viable_variants(variants, enable_heuristics=False)
+        self.assertEqual(approved, variants)
+        self.assertEqual(pruned, [])
+
+    def test_reference_sequence_mismatch_clears_defensively(self) -> None:
+        """Passing a mismatched reference sequence clears coordinates to prevent corrupt spatial mapping."""
+        bad_ref = "A" * 250  # All alanines, does not match 1EMA GFP sequence
+        cmap = get_spatial_contact_map(reference_sequence=bad_ref)
+        self.assertEqual(cmap.ca_coordinates, {})
+
 
 if __name__ == "__main__":
     unittest.main()

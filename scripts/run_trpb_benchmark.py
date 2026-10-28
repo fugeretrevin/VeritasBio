@@ -44,10 +44,13 @@ from controller.gatekeeper import Variant
 from ledger import database as ledger_db
 from workers.math_worker import (
     build_gp_model,
+    compute_biological_prior,
     compute_expected_improvement,
     featurize_variant_on_positions,
+    greedy_dpp_sample,
 )
 from workers.rag_worker import fetch_protein_metadata
+from workers.spatial_filter import SpatialContactMap
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("veritasbio.trpb_benchmark")
@@ -150,12 +153,26 @@ def run_trpb_active_learning(
         len(candidate_pool), len(fitness_library),
     )
 
-    # Featurize once; the acquisition step re-scores the same vectors every round.
-    logger.info("Featurizing candidate pool on positions %s...", ACTIVE_SITE_POSITIONS)
+    # 1. 3D Spatial contact map
+    pdb_path = ROOT_DIR / "workers" / "data" / "8EH0.pdb"
+    smap = SpatialContactMap(pdb_path=pdb_path) if pdb_path.is_file() else None
+    if smap:
+        logger.info("Loaded authentic 3D crystal structure (%s) with %d C-alpha coordinates.", pdb_path.name, len(smap.ca_coordinates))
+
+    # Featurize once with 3D Euclidean contact coupling
+    logger.info("Featurizing candidate pool on positions %s with 3D Euclidean contact coupling...", ACTIVE_SITE_POSITIONS)
     pool_feats = np.array([
-        featurize_variant_on_positions(c[2], ACTIVE_SITE_POSITIONS, wt_seq)
+        featurize_variant_on_positions(c[2], ACTIVE_SITE_POSITIONS, wt_seq, spatial_map=smap)
         for c in candidate_pool
     ])
+
+    # 2. Residual Prior: Zero-shot structural stability prior
+    logger.info("Computing zero-shot structural priors across candidate pool...")
+    pool_priors = np.array([
+        compute_biological_prior(c[2], pdb_path=pdb_path)
+        for c in candidate_pool
+    ])
+    prior_scale = 0.20 if np.std(pool_priors) > 1e-6 else 0.0
 
     evaluated_mutants: Set[str] = set()
     train_idx: List[int] = []
@@ -208,14 +225,15 @@ def run_trpb_active_learning(
                 top_1_pct_hits += 1
 
             train_idx.append(idx)
-            # Centre targets on the Tm9D8* parent so the GP models improvement over the parent.
-            train_y.append(true_score - parent_fitness)
+            # Train GP on the residual: true_score - (parent_fitness + prior)
+            residual = (true_score - parent_fitness) - (prior_scale * pool_priors[idx])
+            train_y.append(residual)
             round_evidence.append((v_obj.apply_to(wt_seq), true_score))
 
         ledger_db.record_evidence(job_id=job_id, results=round_evidence, db_path=db_file)
         ledger_db.mark_job_completed(job_id=job_id, db_path=db_file)
 
-        # Fit Gaussian Process
+        # Fit Gaussian Process on residuals
         X_mat = pool_feats[train_idx]
         y_vec = np.array(train_y)
         gp_model.fit(X_mat, y_vec)
@@ -226,9 +244,10 @@ def run_trpb_active_learning(
         if remaining_idx.size == 0 or round_num == rounds:
             break
 
-        # Score unevaluated candidates via Acquisition Function (Expected Improvement)
-        means, stds = gp_model.predict(pool_feats[remaining_idx], return_std=True)
-        f_best = float(np.max(y_vec))
+        # Predict residual mean and add prior back
+        res_means, stds = gp_model.predict(pool_feats[remaining_idx], return_std=True)
+        means = res_means + (prior_scale * pool_priors[remaining_idx])
+        f_best = float(np.max([ground_truth_values[i] - parent_fitness for i in range(len(ground_truth_values))]))
         eis = compute_expected_improvement(means, stds, f_best=f_best, xi=0.01)
 
         # 1. Regret stopping check: If Expected Improvement drops to near zero
@@ -258,7 +277,13 @@ def run_trpb_active_learning(
             consecutive_stagnation = 0
             prev_best_truth = current_best_truth
 
-        top_local = np.argsort(eis)[::-1][:batch_size]
+        # 3. Batch-Diversity k-DPP Selection: Orthogonal diversity across candidate batch
+        top_local = greedy_dpp_sample(
+            quality_scores=eis,
+            features=pool_feats[remaining_idx],
+            batch_size=min(batch_size, len(remaining_idx)),
+            sigma_feat=1.5,
+        )
         current_idx = [int(remaining_idx[i]) for i in top_local]
 
         best_in_round = max(current_idx, key=lambda i: candidate_pool[i][1])
@@ -266,7 +291,6 @@ def run_trpb_active_learning(
             "Round %02d Complete | Top EI Variant Selected: %s (Empirical Fitness: %.4f)",
             round_num, candidate_pool[best_in_round][0], candidate_pool[best_in_round][1],
         )
-
 
     if not train_idx:
         # The ledger refused the very first batch, so no model was ever fitted.
@@ -278,14 +302,9 @@ def run_trpb_active_learning(
             "cost_savings_pct": 0.0,
         }
 
-    # Evaluate Final Performance.
-    #
-    # Two numbers are reported, and the distinction matters when quoting them:
-    #   in-sample  — the GP scored on the very points it was trained on. It measures fit,
-    #                not predictive skill, and will sit near 1.0 almost regardless of the model.
-    #   held-out   — the GP scored on library members it never saw. This is the honest number.
+    # Evaluate Final Performance (held-out vs in-sample)
     truth_arr = np.array(ground_truth_values)
-    insample_means = gp_model.predict(pool_feats[train_idx])
+    insample_means = gp_model.predict(pool_feats[train_idx]) + parent_fitness + (prior_scale * pool_priors[train_idx])
     insample_rho, insample_p = stats.spearmanr(insample_means, truth_arr)
     insample_r, _ = stats.pearsonr(insample_means, truth_arr)
 
@@ -293,7 +312,7 @@ def run_trpb_active_learning(
         [i for i in range(len(candidate_pool)) if candidate_pool[i][0] not in evaluated_mutants]
     )
     if holdout_idx.size >= 2:
-        holdout_means = gp_model.predict(pool_feats[holdout_idx])
+        holdout_means = gp_model.predict(pool_feats[holdout_idx]) + parent_fitness + (prior_scale * pool_priors[holdout_idx])
         holdout_truth = np.array([candidate_pool[int(i)][1] for i in holdout_idx])
         spearman_rho, rho_p = stats.spearmanr(holdout_means, holdout_truth)
         pearson_r, r_p = stats.pearsonr(holdout_means, holdout_truth)

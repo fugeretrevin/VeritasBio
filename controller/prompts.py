@@ -129,9 +129,9 @@ CRITICAL RULES:
    - You MUST place all annotated invariant positions into "forbidden_positions".
    - Destructive non-conservative mutations to catalytic residues abolish enzyme turnover, ligand binding, or chromophore cyclization.
 6. 3D SPATIAL PROXIMITY CONSTRAINT:
-   - Residues grouped in a cluster MUST be physically adjacent in 3D tertiary space (mean C-alpha distance <= 11 to 13 Angstroms).
-   - Do NOT group residues separated across opposite sides of the protein scaffold that do not contact in 3D space.
-   - Prioritize clusters located within the same structural pocket, adjacent secondary structure elements (e.g. adjacent beta-strands or alpha-helices), or interacting loop manifolds.
+   - Residues grouped in a cluster MUST be physically or allosterically coupled in 3D tertiary space (mean C-alpha distance <= 16 Angstroms, max distance <= 24 Angstroms).
+   - Interacting residues located within the same active-site pocket, coupled loop manifolds (e.g. entrance loops 183-184 and 227-228), substrate channels, or interacting paratope CDR loops are prime targets for combinatorial epistasis.
+   - Do NOT group residues separated across opposite poles of the scaffold that share no physical coupling (> 25 to 30 Angstroms).
 7. BURIED HYDROPHOBIC CORE STABILITY:
    - Deeply buried hydrophobic core residues maintain the tertiary folding energy of the scaffold.
    - Never mutate buried hydrophobic core residues to small cavity-creating residues (e.g. Trp/Phe/Leu/Ile to Ala/Gly) or charged residues without a compensatory packing partner, as this induces void collapse or severe desolvation penalties.

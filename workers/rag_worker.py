@@ -208,21 +208,37 @@ def parse_uniprot_response(raw_data: Dict[str, Any]) -> ProteinMetadata:
             if p not in binding_positions:
                 binding_positions.append(p)
 
-    # Protein-specific canonical falls backs
-    if accession == "P42212":
+    # Extract PDB ID from UniProt cross-references if not yet found
+    if not pdb_id:
+        for xref in raw_data.get("uniProtKBCrossReferences", []):
+            if xref.get("database") == "PDB" and xref.get("id"):
+                pdb_id = xref.get("id")
+                break
+
+    # Protein-specific canonical fallbacks
+    acc_upper = accession.upper()
+    if acc_upper == "P42212":
         if not chromophore_residues:
             chromophore_residues = [65, 66, 67]
         if not catalytic_positions:
             catalytic_positions = [66, 67]
         if not binding_positions:
             binding_positions = [64, 65, 68, 203, 206, 222]
-        pdb_id = pdb_id or "1EMA"
-    elif accession in ("TRPB_TM9D8", "P50909"):
+        pdb_id = "1EMA"
+    elif acc_upper in ("TRPB_TM9D8", "P50909", "TRPB"):
         if not catalytic_positions:
             catalytic_positions = [83]  # Invariant PLP-binding lysine
         if not binding_positions:
             binding_positions = [183, 184, 227, 228]  # Saturated active site loops
         pdb_id = pdb_id or "8EH0"
+    elif any(k in acc_upper for k in ("SPG1", "GB1", "2QMT")):
+        if not binding_positions:
+            binding_positions = [39, 40, 41, 54]
+        pdb_id = pdb_id or "2QMT"
+    elif any(k in acc_upper for k in ("TRASTUZUMAB", "HER2", "1N8Z")):
+        if not binding_positions:
+            binding_positions = [99, 100, 101, 102, 103, 104, 105, 106, 107, 108]
+        pdb_id = pdb_id or "1N8Z"
 
     return ProteinMetadata(
         accession=accession,

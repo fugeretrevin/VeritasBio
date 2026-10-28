@@ -109,16 +109,69 @@ class OrchestratorConfig(BaseModel):
         default=False,
         description="Exhaustively test all Hamming-1 mutations around the champion lead",
     )
+    lead_refinement_top_n: int = Field(
+        default=1,
+        ge=1,
+        le=10,
+        description="Number of champion leads around which to evaluate single-hop mutations",
+    )
     campaign_profile: str = Field(
         default="fast_screen",
         description="Campaign profile: 'fast_screen' (frugal, 70% efficiency) or 'deep_lead_optimization' (accuracy-focused, 60% accuracy, multi-lead polish)",
     )
-    lead_refinement_top_n: int = Field(
-        default=3,
-        ge=1,
-        le=10,
-        description="Number of top diverse leads to sweep in Tier 3 Hamming-1 polish",
+    enable_structural_filter: bool = Field(
+        default=True,
+        description="Enable heuristic 3D structural pre-filter to prune uncoupled or clashing variants",
     )
+    structure_pdb_id: Optional[str] = Field(
+        default=None,
+        description="Explicit local PDB ID for optional structural features (e.g. 1EMA, 8EH0, 2QMT, 1N8Z)",
+    )
+
+
+def _apply_structural_filter(
+    selected_batch: SelectedBatch,
+    pdb_path: Optional[Path],
+    catalytic_invariants: Set[int],
+    enabled: bool,
+    reference_sequence: str,
+    allowed_active_positions: Optional[Set[int]] = None,
+) -> SelectedBatch:
+    """Safely applies structural heuristic filtering while maintaining aligned metadata arrays."""
+    if not enabled:
+        return selected_batch
+
+    from workers.spatial_filter import filter_spatially_viable_variants
+    viable_notations, pruned_items = filter_spatially_viable_variants(
+        [variant.notation for variant in selected_batch.variants],
+        pdb_path=pdb_path,
+        catalytic_invariants=catalytic_invariants,
+        enable_heuristics=enabled,
+        reference_sequence=reference_sequence,
+        allowed_active_positions=allowed_active_positions,
+    )
+    if not pruned_items:
+        return selected_batch
+
+    viable_set = set(viable_notations)
+    keep_indices = [
+        index for index, variant in enumerate(selected_batch.variants)
+        if variant.notation in viable_set
+    ]
+    minimum_batch_size = min(5, max(1, len(selected_batch.variants) // 2))
+    if len(keep_indices) < minimum_batch_size:
+        return selected_batch
+
+    selected_batch.variants = [selected_batch.variants[index] for index in keep_indices]
+    selected_batch.expected_improvements = [selected_batch.expected_improvements[index] for index in keep_indices]
+    if getattr(selected_batch, "predicted_means", None) is not None:
+        selected_batch.predicted_means = [selected_batch.predicted_means[index] for index in keep_indices]
+    if getattr(selected_batch, "predicted_uncertainties", None) is not None:
+        selected_batch.predicted_uncertainties = [selected_batch.predicted_uncertainties[index] for index in keep_indices]
+    if getattr(selected_batch, "pareto_ranks", None) is not None:
+        selected_batch.pareto_ranks = [selected_batch.pareto_ranks[index] for index in keep_indices]
+
+    return selected_batch
 
 
 class OrchestratorEvent(BaseModel):
@@ -418,9 +471,32 @@ class Orchestrator:
 
             # Resolve PDB structure file if available
             pdb_path = None
-            if metadata.pdb_id:
-                candidate_pdb = Path(__file__).resolve().parent.parent / "workers" / "data" / f"{metadata.pdb_id}.pdb"
+            data_dir = Path(__file__).resolve().parent.parent / "workers" / "data"
+            if self.config.structure_pdb_id:
+                candidate_pdb = data_dir / f"{self.config.structure_pdb_id}.pdb"
                 if candidate_pdb.exists():
+                    pdb_path = candidate_pdb
+                else:
+                    logger.warning("Configured structure %s was not found at %s.", self.config.structure_pdb_id, candidate_pdb)
+
+            if pdb_path is None and metadata.pdb_id:
+                candidate_pdb = data_dir / f"{metadata.pdb_id}.pdb"
+                if candidate_pdb.exists():
+                    pdb_path = candidate_pdb
+
+            if pdb_path is None:
+                acc_clean = (self.config.target_accession or "").upper()
+                if any(k in acc_clean for k in ("P42212", "GFP", "AVGFP")):
+                    candidate_pdb = data_dir / "1EMA.pdb"
+                elif any(k in acc_clean for k in ("GB1", "SPG1", "2QMT")):
+                    candidate_pdb = data_dir / "2QMT.pdb"
+                elif any(k in acc_clean for k in ("TRASTUZUMAB", "HER2", "1N8Z")):
+                    candidate_pdb = data_dir / "1N8Z.pdb"
+                elif any(k in acc_clean for k in ("TRPB", "TM9D8", "8EH0", "P50909")):
+                    candidate_pdb = data_dir / "8EH0.pdb"
+                else:
+                    candidate_pdb = None
+                if candidate_pdb and candidate_pdb.is_file():
                     pdb_path = candidate_pdb
 
             selected_batch = select_next_micro_batch(
@@ -436,28 +512,19 @@ class Orchestrator:
             # Step 3b: 3D Biomechanical Spatial & Steric Clash Pre-Filter
             # -----------------------------------------------------------------
             try:
-                from workers.spatial_filter import filter_spatially_viable_variants
-                candidate_notations = [v.notation for v in selected_batch.variants]
-                viable_notations, pruned_items = filter_spatially_viable_variants(
-                    candidate_notations,
+                original_batch_size = len(selected_batch.variants)
+                selected_batch = _apply_structural_filter(
+                    selected_batch,
                     pdb_path=pdb_path,
                     catalytic_invariants=set(metadata.catalytic_positions),
+                    enabled=self.config.enable_structural_filter,
+                    reference_sequence=wt_sequence,
+                    allowed_active_positions=set(metadata.binding_positions),
                 )
-                if pruned_items:
-                    viable_set = set(viable_notations)
-                    filtered_variants = [v for v in selected_batch.variants if v.notation in viable_set]
-                    filtered_eis = [
-                        ei for v, ei in zip(selected_batch.variants, selected_batch.expected_improvements)
-                        if v.notation in viable_set
-                    ]
-                    # Maintain batch throughput if viable variants exist
-                    if len(filtered_variants) >= min(5, len(selected_batch.variants) // 2):
-                        selected_batch.variants = filtered_variants
-                        selected_batch.expected_improvements = filtered_eis
-                    logger.info(
-                        "3D Spatial Filter screened %d variants in Round %d (%d viable, %d pruned)",
-                        len(selected_batch.variants), round_num, len(filtered_variants), len(pruned_items),
-                    )
+                logger.info(
+                    "3D Structural Filter screened %d variants in Round %d (%d retained)",
+                    original_batch_size, round_num, len(selected_batch.variants),
+                )
             except Exception as spatial_err:
                 logger.debug("Spatial filter check skipped: %s", spatial_err)
 

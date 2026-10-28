@@ -1585,30 +1585,38 @@ def select_next_micro_batch(
         sub_means = means[prelim_top]
         sub_priors = cand_priors[prelim_top]
         sub_synth = np.array([evaluate_synthesizability_score(c, wt_sequence, active_site_positions=set(active_positions)) for c in sub_cands], dtype=np.float64)
+        sub_dev = np.array([analyze_biologics_developability(c.apply_to(wt_sequence))["developability_score"] for c in sub_cands], dtype=np.float64)
         norm_stab = sub_priors.copy()
         if np.std(norm_stab) > 1e-6:
             norm_stab = (norm_stab - np.mean(norm_stab)) / np.std(norm_stab)
-        sub_pareto_objs = np.column_stack([sub_means, norm_stab, sub_synth])
+        sub_pareto_objs = np.column_stack([sub_means, norm_stab, sub_synth, sub_dev])
         sub_ranks = compute_non_dominated_pareto_ranks(sub_pareto_objs)
 
         candidate_pareto_ranks = np.full(n_cands, 999, dtype=int)
         candidate_pareto_ranks[prelim_top] = sub_ranks
         synth_scores = np.full(n_cands, 0.5, dtype=np.float64)
         synth_scores[prelim_top] = sub_synth
+        dev_scores = np.full(n_cands, 0.5, dtype=np.float64)
+        dev_scores[prelim_top] = sub_dev
     else:
         synth_scores = np.array(
             [evaluate_synthesizability_score(c, wt_sequence, active_site_positions=set(active_positions)) for c in novel_candidates],
             dtype=np.float64,
         )
+        dev_scores = np.array(
+            [analyze_biologics_developability(c.apply_to(wt_sequence))["developability_score"] for c in novel_candidates],
+            dtype=np.float64,
+        )
         norm_stab = cand_priors.copy()
         if np.std(norm_stab) > 1e-6:
             norm_stab = (norm_stab - np.mean(norm_stab)) / np.std(norm_stab)
-        pareto_objs = np.column_stack([means, norm_stab, synth_scores])
+        pareto_objs = np.column_stack([means, norm_stab, synth_scores, dev_scores])
         candidate_pareto_ranks = compute_non_dominated_pareto_ranks(pareto_objs)
 
     pareto_weights = 1.0 / (1.0 + 0.3 * candidate_pareto_ranks)
     synth_weights = 0.6 + 0.4 * synth_scores
-    quality_scores = acquisition_scores * pareto_weights * synth_weights
+    dev_weights = 0.5 + 0.5 * (dev_scores ** 0.5)
+    quality_scores = acquisition_scores * pareto_weights * synth_weights * dev_weights
 
     # Phase 1 / Pillar 1: Determinantal Point Process (k-DPP) Orthogonal Batch Diversity
     # Maximizes the determinant volume det(L_B) to guarantee mutually orthogonal biophysical coverage

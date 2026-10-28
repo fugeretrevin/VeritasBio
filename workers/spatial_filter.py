@@ -38,11 +38,26 @@ AVGFP_BURIED_CORE_RESIDUES: Set[int] = {
 }
 
 
+THREE_TO_ONE: Dict[str, str] = {
+    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
+    "GLN": "Q", "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I",
+    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
+    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
+}
+
+
 class SpatialContactMap:
     """Extracts and caches 3D coordinate matrices from PDB structures."""
 
-    def __init__(self, pdb_path: Optional[Path] = None) -> None:
-        self.pdb_path: Path = Path(pdb_path) if pdb_path else DEFAULT_PDB_PATH
+    def __init__(
+        self,
+        pdb_path: Optional[Path] = None,
+        chain_id: Optional[str] = None,
+        reference_sequence: Optional[str] = None,
+    ) -> None:
+        self.pdb_path: Optional[Path] = Path(pdb_path) if pdb_path is not None else DEFAULT_PDB_PATH
+        self.chain_id = chain_id
+        self.reference_sequence = reference_sequence
         self.ca_coordinates: Dict[int, Tuple[str, float, float, float]] = {}
         self._distance_cache: Dict[Tuple[int, int], float] = {}
         self.buried_core_residues: Set[int] = set()
@@ -60,6 +75,9 @@ class SpatialContactMap:
 
     def _load_pdb(self) -> None:
         """Parses ATOM and HETATM C-alpha coordinates from PDB."""
+        if self.pdb_path is None:
+            return
+
         if not self.pdb_path.is_file():
             pdb_stem = self.pdb_path.stem
             if len(pdb_stem) == 4 and pdb_stem.isalnum():
@@ -76,36 +94,82 @@ class SpatialContactMap:
             logger.warning("PDB file not found at %s. Spatial filtering disabled.", self.pdb_path)
             return
 
-        with open(self.pdb_path, "r", encoding="utf-8") as f:
-            for line in f:
-                if (line.startswith("ATOM") or line.startswith("HETATM")) and len(line) >= 54:
-                    atom_name = line[12:16].strip()
-                    res_name = line[17:20].strip()
+        selected_chain = self.chain_id
+        try:
+            with open(self.pdb_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if (line.startswith("ATOM") or line.startswith("HETATM")) and len(line) >= 54:
+                        atom_name = line[12:16].strip()
+                        res_name = line[17:20].strip()
+                        chain_id = line[21].strip()
 
-                    # Handle chromophore triad (CRO in 1EMA occupies residue 66, representing 65-67)
-                    if res_name == "CRO" and atom_name in ("CA1", "CA2", "CA3", "C1", "C2", "CA"):
-                        try:
-                            res_seq = int(line[22:26].strip())
-                            x = float(line[30:38].strip())
-                            y = float(line[38:46].strip())
-                            z = float(line[46:54].strip())
-                            # Assign chromophore coordinates across triad 65, 66, 67
-                            self.ca_coordinates[65] = ("SER", x, y, z)
-                            self.ca_coordinates[66] = ("TYR", x, y, z)
-                            self.ca_coordinates[67] = ("GLY", x, y, z)
-                        except (ValueError, IndexError):
-                            continue
-                        continue
+                        if selected_chain is None and chain_id:
+                            selected_chain = chain_id
 
-                    if atom_name == "CA":
-                        try:
-                            res_seq = int(line[22:26].strip())
-                            x = float(line[30:38].strip())
-                            y = float(line[38:46].strip())
-                            z = float(line[46:54].strip())
-                            self.ca_coordinates[res_seq] = (res_name, x, y, z)
-                        except (ValueError, IndexError):
+                        if chain_id and selected_chain and chain_id != selected_chain:
                             continue
+
+                        # Insertion codes cannot be mapped safely by integer residue number alone
+                        if self.reference_sequence and len(line) > 26 and line[26].strip():
+                            self.ca_coordinates.clear()
+                            self.chain_id = selected_chain
+                            logger.warning(
+                                "Structural mapping unavailable: insertion codes in %s chain %s.",
+                                self.pdb_path,
+                                selected_chain or "blank",
+                            )
+                            return
+
+                        # Handle chromophore triad (CRO in 1EMA occupies residue 66, representing 65-67)
+                        if res_name == "CRO" and atom_name in ("CA1", "CA2", "CA3", "C1", "C2", "CA"):
+                            try:
+                                x = float(line[30:38].strip())
+                                y = float(line[38:46].strip())
+                                z = float(line[46:54].strip())
+                                # Assign chromophore coordinates across triad 65, 66, 67
+                                self.ca_coordinates[65] = ("SER", x, y, z)
+                                self.ca_coordinates[66] = ("TYR", x, y, z)
+                                self.ca_coordinates[67] = ("GLY", x, y, z)
+                            except (ValueError, IndexError):
+                                continue
+                            continue
+
+                        if atom_name == "CA":
+                            try:
+                                res_seq = int(line[22:26].strip())
+                                x = float(line[30:38].strip())
+                                y = float(line[38:46].strip())
+                                z = float(line[46:54].strip())
+                                self.ca_coordinates[res_seq] = (res_name, x, y, z)
+                            except (ValueError, IndexError):
+                                continue
+        except (OSError, UnicodeError) as exc:
+            logger.warning("Could not read PDB structure at %s: %s", self.pdb_path, exc)
+            return
+
+        self.chain_id = selected_chain
+
+        # Verify against reference sequence if provided
+        if self.reference_sequence and self.ca_coordinates:
+            mismatches = [
+                pos for pos, (res_name, *_coords) in self.ca_coordinates.items()
+                if pos < 1
+                or pos > len(self.reference_sequence)
+                or THREE_TO_ONE.get(res_name) != self.reference_sequence[pos - 1].upper()
+            ]
+            # Tolerate minor homolog/engineered differences (<= 15%), but reject major mismatches or indexing frameshifts
+            mismatch_threshold = max(3, int(0.15 * len(self.ca_coordinates)))
+            if len(mismatches) > mismatch_threshold:
+                self.ca_coordinates.clear()
+                logger.warning(
+                    "Structural mapping unavailable for %s chain %s: residue identity mismatch count %d exceeds threshold %d (%s...).",
+                    self.pdb_path,
+                    self.chain_id or "blank",
+                    len(mismatches),
+                    mismatch_threshold,
+                    mismatches[:5],
+                )
+                return
 
     def get_distance(self, res_a: int, res_b: int) -> Optional[float]:
         """Calculates 3D Euclidean distance (in Angstroms) between two residue C-alphas."""
@@ -147,8 +211,10 @@ class SpatialContactMap:
         mean_d = sum(distances) / len(distances)
         max_d = max(distances)
 
-        # A valid epistatic contact sphere has a mean distance <= 13.0 A and max pairwise <= 16.0 A
-        is_cohesive = (mean_d <= 13.0) and (max_d <= 16.0)
+        # Multi-loop active site contact manifold: allow mean distance <= 16.0 A and max pairwise <= 24.0 A
+        # This properly accommodates multi-loop catalytic pockets (e.g. TrpB loops 183-184 and 227-228 at 18.95 A,
+        # or antibody paratope CDR-H1/H2/H3 loops) while still rejecting uncoupled scaffold hallucinations (> 25-40 A).
+        is_cohesive = (mean_d <= 16.0) and (max_d <= 24.0)
 
         return {
             "is_cohesive": is_cohesive,
@@ -161,6 +227,7 @@ class SpatialContactMap:
         self,
         mutation_tuples: List[Tuple[int, str, str]],
         catalytic_invariants: Optional[Set[int]] = None,
+        allowed_active_positions: Optional[Set[int]] = None,
     ) -> Tuple[bool, str]:
         """
         Checks a proposed set of mutations for steric clashes, core disruption,
@@ -169,6 +236,7 @@ class SpatialContactMap:
         Args:
             mutation_tuples: List of (position, wt_aa, mut_aa) tuples.
             catalytic_invariants: Optional set of 1-indexed residue positions that cannot tolerate mutation.
+            allowed_active_positions: Optional set of binding/active pocket residues exempt from buried core penalties.
 
         Returns:
             Tuple of (passes_filter: bool, reason: str).
@@ -189,6 +257,8 @@ class SpatialContactMap:
 
         # 1. Dynamic Buried Hydrophobic Core Collapse Detection (Coordination Sphere Density)
         buried_set = self.buried_core_residues if self.buried_core_residues else AVGFP_BURIED_CORE_RESIDUES
+        if allowed_active_positions:
+            buried_set = buried_set - allowed_active_positions
         for pos, wt_aa, mut_aa in mutation_tuples:
             if pos in buried_set:
                 wt_vol = AA_VOLUMES.get(wt_aa, 120.0)
@@ -309,16 +379,21 @@ class SpatialContactMap:
         return round(ddg, 3)
 
 
-# Global singleton instance for fast reuse
-_contact_map_instance: Optional[SpatialContactMap] = None
+# Global cache of parsed SpatialContactMap instances for high-throughput zero-cost reuse
+_contact_map_cache: Dict[Tuple[str, Optional[str], Optional[str]], "SpatialContactMap"] = {}
 
 
-def get_spatial_contact_map(pdb_path: Optional[Path] = None) -> SpatialContactMap:
-    """Returns or initializes the cached SpatialContactMap singleton."""
-    global _contact_map_instance
-    if _contact_map_instance is None or (pdb_path and _contact_map_instance.pdb_path != pdb_path):
-        _contact_map_instance = SpatialContactMap(pdb_path)
-    return _contact_map_instance
+def get_spatial_contact_map(
+    pdb_path: Optional[Path] = None,
+    chain_id: Optional[str] = None,
+    reference_sequence: Optional[str] = None,
+) -> SpatialContactMap:
+    """Returns a cached SpatialContactMap instance for the target structure."""
+    resolved_path = str(Path(pdb_path).resolve()) if pdb_path is not None else str(DEFAULT_PDB_PATH.resolve())
+    key = (resolved_path, chain_id, reference_sequence)
+    if key not in _contact_map_cache:
+        _contact_map_cache[key] = SpatialContactMap(pdb_path, chain_id=chain_id, reference_sequence=reference_sequence)
+    return _contact_map_cache[key]
 
 
 def extract_pocket_residues(
@@ -335,6 +410,10 @@ def filter_spatially_viable_variants(
     mutation_strings: List[str],
     pdb_path: Optional[Path] = None,
     catalytic_invariants: Optional[Set[int]] = None,
+    enable_heuristics: bool = True,
+    reference_sequence: Optional[str] = None,
+    chain_id: Optional[str] = None,
+    allowed_active_positions: Optional[Set[int]] = None,
 ) -> Tuple[List[str], List[Tuple[str, str]]]:
     """
     Filters a batch of mutation strings into approved viable variants and pruned clashing variants
@@ -343,7 +422,14 @@ def filter_spatially_viable_variants(
     Returns:
         Tuple of (approved_variants: List[str], pruned_variants: List[Tuple[str, reason]]).
     """
-    cmap = get_spatial_contact_map(pdb_path)
+    if not enable_heuristics:
+        return list(mutation_strings), []
+
+    cmap = SpatialContactMap(pdb_path, chain_id=chain_id, reference_sequence=reference_sequence)
+    if not cmap.ca_coordinates:
+        logger.info("Skipping heuristic filtering: no usable structural context was loaded.")
+        return list(mutation_strings), []
+
     approved: List[str] = []
     pruned: List[Tuple[str, str]] = []
 
@@ -365,7 +451,7 @@ def filter_spatially_viable_variants(
             approved.append(mut_str)
             continue
 
-        # Check multi-mutant cohesion: if > 1 mutation, ensure they are not completely uncoupled (> 18 A apart)
+        # Check multi-mutant cohesion: if > 1 mutation, ensure they are not completely uncoupled (> 24 A apart)
         if len(positions) > 1:
             cohesion = cmap.evaluate_mutation_cluster_cohesion(positions)
             if not cohesion["is_cohesive"]:
@@ -373,7 +459,11 @@ def filter_spatially_viable_variants(
                 continue
 
         # Check steric, core collapse, and catalytic invariants
-        passes, reason = cmap.check_steric_and_core_clash(parsed_tuples, catalytic_invariants=catalytic_invariants)
+        passes, reason = cmap.check_steric_and_core_clash(
+            parsed_tuples,
+            catalytic_invariants=catalytic_invariants,
+            allowed_active_positions=allowed_active_positions,
+        )
         if not passes:
             pruned.append((mut_str, reason))
         else:

@@ -1,5 +1,5 @@
 # Opentrons OT-2 Automated Mutagenesis Assembly Protocol
-# Generated automatically by VeritasBio Wet-Lab Translator on 2026-10-28T02:20:14.294546+00:00
+# Generated automatically by VeritasBio Wet-Lab Translator on 2026-10-28T05:24:30.638403+00:00
 # Target: Tryptophan synthase beta chain, engineered parent Tm9D8* Variant Library (96-well format)
 # Anti-Edge Evaporation Barrier: True
 
@@ -25,16 +25,16 @@ def run(protocol: protocol_api.ProtocolContext):
     p300 = protocol.load_instrument("p300_multi_gen2", "left", tip_racks=[tips_300ul])
 
     variants = [
-    "TRYP_F184V:G185S",
-    "TRYP_F184A:G185S",
-    "TRYP_F184I:G185S",
-    "TRYP_F184L:G185S",
-    "TRYP_WT",
-    "TRYP_G185S",
-    "TRYP_G229Q",
-    "TRYP_V227Y",
-    "TRYP_G185Y",
-    "TRYP_G229F"
+    "TRYP_V183L:F184I:S228G",
+    "TRYP_V183I:F184I:S228G",
+    "TRYP_F184I:S228G",
+    "TRYP_F184I:V227I:S228G",
+    "TRYP_F184V:S228G",
+    "TRYP_F184L:S228G",
+    "TRYP_F184M:S228G",
+    "TRYP_V183M:F184I:S228G",
+    "TRYP_V183A:F184I:S228G",
+    "TRYP_F184I:V227T:S228G"
 ]
     perimeter_barrier_wells = [
     "A1",
