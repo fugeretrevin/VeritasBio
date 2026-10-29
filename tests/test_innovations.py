@@ -19,7 +19,7 @@ from pathlib import Path
 
 from ledger import database as ledger_db
 from ui.landscape_plot import generate_landscape_figure
-from ui.structure_viewer import generate_3d_viewer_html, load_pdb_content
+from ui.structure_viewer import generate_3d_viewer_html, generate_dual_comparison_viewer_html, load_pdb_content
 from workers.wetlab_worker import (
     codon_optimize_sequence,
     generate_cryptographic_audit_certificate,
@@ -116,6 +116,20 @@ class TestInnovations(unittest.TestCase):
         config = OrchestratorConfig(batch_size=20, cold_start_batch_size=50)
         self.assertEqual(config.batch_size, 20)
         self.assertEqual(config.cold_start_batch_size, 50)
+
+
+    def test_dual_comparison_3d_viewer(self) -> None:
+        """Verifies synchronized dual 3D structure viewer renders WT vs Mutant with cofactor shell."""
+        html_str = generate_dual_comparison_viewer_html(
+            target_accession="TRPB_TM9D8",
+            mutant_positions=[183, 184, 227, 228],
+            lead_name="V183A:F184V:S228A",
+        )
+        self.assertIn("<iframe srcdoc=", html_str)
+        self.assertIn("viewport-wt", html_str)
+        self.assertIn("viewport-mutant", html_str)
+        self.assertIn("V183A:F184V:S228A", html_str)
+        self.assertIn("4.5", html_str)
 
 
 if __name__ == "__main__":

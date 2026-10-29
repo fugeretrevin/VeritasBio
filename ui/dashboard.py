@@ -39,7 +39,11 @@ from controller.gatekeeper import Variant
 from controller.orchestrator import CampaignMode, Orchestrator, OrchestratorConfig, OrchestratorEvent
 from ledger import database as ledger_db
 from ui.landscape_plot import generate_landscape_figure
-from ui.structure_viewer import generate_3d_viewer_html, generate_de_novo_complex_viewer_html
+from ui.structure_viewer import (
+    generate_3d_viewer_html,
+    generate_de_novo_complex_viewer_html,
+    generate_dual_comparison_viewer_html,
+)
 from workers.diffusion_worker import DeNovoBinderRequest, generate_budgeted_de_novo_binders
 from workers.lims_worker import BenchlingClient, DEFAULT_PLATE_FORMAT
 from workers.mock_workers import MockLLMWorker
@@ -504,6 +508,9 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
 
                     # TAB 1: 3D Crystal Structure Viewer (3Dmol.js)
                     with gr.TabItem("3D Crystal Structure (Interactive 3Dmol.js)"):
+                        with gr.Row():
+                            btn_single_view = gr.Button("Single Structure View", size="sm")
+                            btn_dual_view = gr.Button("Dual WT vs Lead Comparison (Cofactor Shell)", size="sm")
                         viewer_3d = gr.HTML(
                             value=generate_3d_viewer_html(target_accession="TRPB_TM9D8"),
                             label="Interactive 3D Protein Structure",
@@ -731,6 +738,25 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             fn=on_target_change,
             inputs=[input_target, input_custom_accession],
             outputs=[input_custom_accession, viewer_3d, viewer_cot, status_box],
+        )
+
+        def on_show_single(target_choice: str, custom_acc: str) -> str:
+            eff_acc, _ = resolve_effective_target(target_choice, custom_acc)
+            return generate_3d_viewer_html(target_accession=eff_acc)
+
+        def on_show_dual(target_choice: str, custom_acc: str) -> str:
+            eff_acc, _ = resolve_effective_target(target_choice, custom_acc)
+            return generate_dual_comparison_viewer_html(target_accession=eff_acc)
+
+        btn_single_view.click(
+            fn=on_show_single,
+            inputs=[input_target, input_custom_accession],
+            outputs=[viewer_3d],
+        )
+        btn_dual_view.click(
+            fn=on_show_dual,
+            inputs=[input_target, input_custom_accession],
+            outputs=[viewer_3d],
         )
 
         def on_refresh(target_choice: str, custom_acc: str) -> Tuple[float, float, float, str, str, List[List[Any]], List[List[Any]], List[List[Any]], Any, Any, Optional[str], str]:

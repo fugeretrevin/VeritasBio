@@ -4,8 +4,9 @@ import KpiBar from './components/KpiBar';
 import CampaignStudio from './components/CampaignStudio';
 import DeNovoStudio from './components/DeNovoStudio';
 import LedgerAuditTrail from './components/LedgerAuditTrail';
+import WetlabExportStudio from './components/WetlabExportStudio';
 import AuthModal from './components/AuthModal';
-import { Compass, Sparkles, ShieldCheck } from 'lucide-react';
+import { Compass, Sparkles, ShieldCheck, FlaskConical } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('campaign');
@@ -107,6 +108,15 @@ export default function App() {
           <ShieldCheck size={16} />
           <span>Ledger & Merkle Audit Trail</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('wetlab')}
+          className={`btn ${activeTab === 'wetlab' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ padding: '8px 18px', fontSize: '13px' }}
+        >
+          <FlaskConical size={16} />
+          <span>Physical Wet-Lab & LIMS</span>
+        </button>
       </div>
 
       {/* Active Tab Viewport */}
@@ -114,6 +124,7 @@ export default function App() {
         {activeTab === 'campaign' && <CampaignStudio onRefreshLedger={refreshState} />}
         {activeTab === 'denovo' && <DeNovoStudio onRefreshLedger={refreshState} />}
         {activeTab === 'ledger' && <LedgerAuditTrail ledgerData={ledgerData} onRefresh={refreshState} />}
+        {activeTab === 'wetlab' && <WetlabExportStudio onRefreshLedger={refreshState} />}
       </main>
 
       {/* Identity / Authentication Modal */}

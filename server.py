@@ -43,6 +43,7 @@ from workers.diffusion_worker import DeNovoBinderRequest, generate_budgeted_de_n
 from workers.mock_workers import MockLLMWorker
 from workers.rag_worker import fetch_protein_metadata
 from scripts.ingest_plate_data import ingest_plate_csv
+from workers.lims_worker import BenchlingClient
 from workers.wetlab_worker import (
     generate_cryptographic_audit_certificate,
     generate_opentrons_protocol,
@@ -402,20 +403,33 @@ def run_campaign(req: LaunchCampaignRequest) -> Dict[str, Any]:
 
 
 @app.post("/api/wetlab/export")
-def export_wetlab_manifests(target_name: str = "PanoptesBio_Leads") -> Dict[str, str]:
+def export_wetlab_manifests(
+    target_name: str = "PanoptesBio_Leads",
+    plate_format: str = "96_well",
+) -> Dict[str, Any]:
     """Generates physical biology translation files: Twist CSV, Opentrons OT-2 script, FDA certificate."""
     evidence = ledger_db.get_evidence(db_path=DEFAULT_DB_PATH)
-    sorted_ev = sorted(evidence, key=lambda e: float(e.get("computed_score", 0.0)), reverse=True)[:24]
+    sorted_ev = sorted(evidence, key=lambda e: float(e.get("computed_score", 0.0)), reverse=True)[:56]
 
     twist_csv = generate_twist_order_csv(sorted_ev, protein_name=target_name)
     var_names = [e.get("variant_sequence", "")[:12] for e in sorted_ev]
     opentrons_py = generate_opentrons_protocol(var_names, target_protein=target_name)
-    fda_cert = generate_cryptographic_audit_certificate(sorted_ev, target_protein=target_name, db_path=DEFAULT_DB_PATH)
+    fda_cert = generate_cryptographic_audit_certificate(db_path=DEFAULT_DB_PATH, target_protein=target_name)
+
+    # Generate plate layout and Benchling LIMS manifest
+    plate_layout = generate_plate_layout(sorted_ev, plate_format=plate_format, anti_edge_barrier=True)
+    benchling_client = BenchlingClient(mock_mode=True)
+    benchling_csv = benchling_client.export_lims_manifest(
+        plate_name=f"{target_name}_PLT01",
+        plate_map=plate_layout,
+    )
 
     return {
         "twist_csv": twist_csv,
         "opentrons_script": opentrons_py,
         "fda_certificate_json": json.dumps(fda_cert, indent=2),
+        "benchling_manifest": benchling_csv,
+        "plate_csv": plate_layout.get("csv_layout", ""),
     }
 
 

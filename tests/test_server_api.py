@@ -129,6 +129,20 @@ class TestServerAPI(unittest.TestCase):
         self.assertEqual(res_data.get("barrier_wells_ignored"), 1)
         self.assertAlmostEqual(res_data.get("top_fitness_discovered"), 2.20)
 
+    def test_wetlab_export_endpoint(self) -> None:
+        """Verifies physical biology and LIMS export files generation."""
+        resp = self.client.post("/api/wetlab/export?target_name=Test_Leads&plate_format=96_well")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("twist_csv", data)
+        self.assertIn("opentrons_script", data)
+        self.assertIn("fda_certificate_json", data)
+        self.assertIn("benchling_manifest", data)
+        self.assertIn("plate_csv", data)
+        self.assertIn("Test_Leads", data["twist_csv"])
+        self.assertIn("opentrons", data["opentrons_script"].lower())
+        self.assertIn("Plate_Name", data["benchling_manifest"])
+
 
 if __name__ == "__main__":
     unittest.main()
