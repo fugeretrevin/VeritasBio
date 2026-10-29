@@ -3,7 +3,7 @@
 [![Meta AI Hackathon](https://img.shields.io/badge/Meta_Global_AI_Hackathon-2026-blue.svg)](https://lablab.ai)
 [![Llama 3.1 Powered](https://img.shields.io/badge/Llama_3.1-Strict_JSON_Priors-purple.svg)](https://llama.meta.com/)
 [![Modal GPU](https://img.shields.io/badge/Modal-NVIDIA_A10G-green.svg)](https://modal.com)
-[![Tests Passing](https://img.shields.io/badge/Tests-148%2F148_Passing-brightgreen.svg)]()
+[![Tests Passing](https://img.shields.io/badge/Tests-180%2F180_Passing-brightgreen.svg)]()
 [![Compliance](https://img.shields.io/badge/FDA_21_CFR_Part_11-Cryptographically_Verified-darkgreen.svg)]()
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)]()
 
@@ -256,11 +256,30 @@ python scripts/plot_benchmark.py --target trpb --out scripts/benchmark_trpb.png
 python scripts/plot_benchmark.py --target avgfp --out scripts/benchmark_avgfp.png
 ```
 
+#### 6. High-Performance Full-Stack & Frontier Innovations
+
+VeritasBio / PanoptesBio combines a high-performance **FastAPI backend** with a **modern React 18 + Vite frontend** providing 4 frontier capabilities:
+
+1. **Closed-Loop Llama 3.1 Residual Reflection**: Meta Llama 3.1 analyzes prediction residuals ($y_{\text{obs}} - \hat{y}_{\text{pred}}$) from preceding rounds to diagnose epistatic blind spots and update biophysical priors dynamically.
+2. **HETATM Ligand/Cofactor Coordination & Catalytic Core Clash Pruning**: Explicit $4.2\text{ Å}$ catalytic proximity enforcement for cofactors (PLP in PDB 8EH0, 0JO, HEM), preventing uncompensated charge desolvation or proline backbone kinking in the catalytic shell.
+3. **Asynchronous Microplate Reader Ingestion**: Drag-and-drop CSV dropzone supporting Tecan Spark, BioTek Synergy, and VeritasBio robotic exports. Automatically verifies perimeter hydration barriers (`A01-A12`, `H01-H12`), normalizes against WT control (Well `B02`), and records tamper-evident evidence into the SQLite ledger.
+4. **Dual-Structure 3D Comparison & Wet-Lab Translation Studio**:
+   - Synchronized side-by-side WebGL molecular viewer (Wild-Type vs Mutated Lead) with a $4.5\text{ Å}$ cofactor proximity coordination shell.
+   - One-click export for **Twist Bioscience cDNA orders**, **Opentrons OT-2 robot protocols**, **Benchling LIMS manifests**, and **FDA 21 CFR Part 11 cryptographic audit certificates**.
+
+```bash
+# Launch FastAPI backend bridge (REST + SSE streaming)
+python server.py
+
+# Launch React Vite frontend (in separate terminal)
+npm --prefix web run dev
+```
+
 ---
 
 ### C. Running the Complete Test Suite
 
-VeritasBio includes 148 automated unit tests across 24 test suites covering all 7 layers:
+VeritasBio includes 180 automated unit tests across 26 test suites covering all 7 layers:
 ```bash
 python -m unittest discover -s tests -v
 ```
@@ -303,10 +322,14 @@ VeritasBio/
 │   ├── run_trastuzumab_benchmark.py# Active learning on Trastuzumab biologics (Mason 2021)
 │   ├── ingest_plate_data.py        # Physical wet-lab microplate reader CSV ingestion CLI
 │   └── data/                       # Curated benchmark datasets (GFP, TrpB, GB1, Trastuzumab)
+├── server.py               # FastAPI backend bridge (REST, SSE streaming, Part 11 auth)
+├── web/                    # React 18 + Vite frontend (PanoptesBio Cloud Economics Studio)
+│   ├── src/components/     # CampaignStudio, DeNovoStudio, LedgerAuditTrail, WetlabExportStudio
+│   └── public/             # Branding and static WebGL assets
 ├── presentation.html       # Interactive partner deck with live economics simulator
 ├── main.py                 # Application entry point (CLI and Web Dashboard)
 ├── requirements.txt        # Production dependencies (PyTorch, Modal, Gradio, Plotly, etc.)
-└── tests/                  # 148 unit tests across 24 test suites
+└── tests/                  # 180 unit tests across 26 test suites
 ```
 
 ---

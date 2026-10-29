@@ -93,6 +93,7 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
       (Multi-tenant Firebase project integration `panoptesbio.firebaseapp.com`, AuthenticatedUser model,
       FDA 21 CFR §11.200 HMAC-SHA256 electronic signature stamping into immutable SQLite Merkle audit blocks,
       Dashboard Tab 9 and connection status badge, 5 unit tests passing, full suite 169/169 passing in 114s).
+- [x] Frontier Gap Resolution & Full-Stack Platform: `workers/spatial_filter.py`, `controller/prompts.py`, `server.py`, `scripts/ingest_plate_data.py`, `ui/structure_viewer.py`, `web/src/components/CampaignStudio.jsx`, `web/src/components/WetlabExportStudio.jsx`, `web/src/components/Protein3DViewer.jsx` (Closed-loop Llama 3.1 residual reflection, HETATM cofactor catalytic core clash checks with 4.2 Å proximity shell, real-time Server-Sent Events campaign streaming, drag-and-drop microplate reader CSV ingestion with hydration barrier validation, dual-viewport WT vs Lead 3Dmol WebGL comparison, and Twist/Opentrons/Benchling/FDA Part 11 export studio; full suite 180/180 passing in 40s).
 
 
 ## Open questions (ask the user when relevant)
