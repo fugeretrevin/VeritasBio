@@ -30,7 +30,10 @@ try:
 except ImportError:
     pass
 
-import gradio as gr
+try:
+    import gradio as gr
+except ImportError:
+    gr = None
 
 from controller.gatekeeper import Variant
 from controller.orchestrator import CampaignMode, Orchestrator, OrchestratorConfig, OrchestratorEvent
