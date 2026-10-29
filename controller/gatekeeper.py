@@ -44,6 +44,8 @@ ALLOWED_TARGET_MODELS: Set[str] = {
     "esm_cascade",
     "mock_esm",
     "mock_cascade",
+    "rfdiffusion_proteinmpnn_a10g",
+    "mock_diffusion",
 }
 
 # Mutation regex: e.g. S65T or A123V
@@ -196,6 +198,12 @@ class GatekeeperConfig(BaseModel):
     mock_nominal_cost: float = Field(
         default=0.0001, ge=0.000001, description="Nominal non-zero USD cost for mock test jobs (D2)"
     )
+    gpu_sec_per_diffusion_backbone: float = Field(
+        default=8.0, ge=0.1, description="Average GPU seconds per de novo backbone trajectory"
+    )
+    mock_diffusion_nominal_cost: float = Field(
+        default=0.0005, ge=0.000001, description="Nominal non-zero USD cost for mock diffusion jobs"
+    )
     min_variants_per_batch: int = Field(default=1, ge=1)
     max_variants_per_batch: int = Field(default=500, ge=1)
 
@@ -209,6 +217,9 @@ class BatchEvaluationRequest(BaseModel):
     variants: List[Variant] = Field(..., min_length=1)
     expected_improvements: Optional[List[float]] = None
     budget_id: int = Field(default=ledger_db.DEFAULT_BUDGET_ID, ge=1)
+    operator_uid: Optional[str] = Field(default=None, description="Authenticated Firebase UID")
+    operator_email: Optional[str] = Field(default=None, description="Authenticated operator email")
+    auth_token: Optional[str] = Field(default=None, description="Firebase ID token for FDA Part 11 authentication")
 
     @field_validator("wildtype_sequence")
     @classmethod
@@ -245,6 +256,31 @@ class BatchEvaluationRequest(BaseModel):
                 if not (math.isfinite(ei) and ei >= 0):
                     raise ValueError(f"Expected Improvement must be non-negative and finite, got {ei}")
         return self
+
+
+class DeNovoDiffusionRequest(BaseModel):
+    """Payload presented to the Gatekeeper for de novo backbone diffusion & inverse folding."""
+
+    job_id: str = Field(..., min_length=1)
+    target_model: str = Field(default="mock_diffusion")
+    num_designs: int = Field(default=5, ge=1, le=50)
+    binder_length: int = Field(default=65, ge=20, le=250)
+    target_pdb_id: Optional[str] = None
+    target_sequence: Optional[str] = None
+    hotspot_residues: Optional[List[int]] = None
+    expected_improvements: Optional[List[float]] = None
+    budget_id: int = Field(default=ledger_db.DEFAULT_BUDGET_ID, ge=1)
+    operator_uid: Optional[str] = Field(default=None, description="Authenticated Firebase UID")
+    operator_email: Optional[str] = Field(default=None, description="Authenticated operator email")
+    auth_token: Optional[str] = Field(default=None, description="Firebase ID token for FDA Part 11 authentication")
+
+    @field_validator("target_model")
+    @classmethod
+    def validate_target_model(cls, v: str) -> str:
+        clean = v.strip()
+        if clean not in ALLOWED_TARGET_MODELS:
+            raise ValueError(f"Target model '{clean}' is not in allowed models: {sorted(ALLOWED_TARGET_MODELS)}")
+        return clean
 
 
 class GatekeeperDecision(BaseModel):
@@ -311,6 +347,9 @@ class Gatekeeper:
         if target_model == "mock_cascade":
             # Nominal synthetic cost for local/mock cascade (1.5x mock_nominal_cost)
             return round(self.config.mock_nominal_cost * 1.5, 6), True
+        if target_model == "mock_diffusion":
+            # Nominal synthetic cost for local/mock de novo diffusion mode
+            return self.config.mock_diffusion_nominal_cost, True
 
         now = current_time if current_time is not None else time.time()
 
@@ -334,6 +373,8 @@ class Gatekeeper:
             )
         elif target_model in ("esm2_150m", "esm2_t30_150m_ur50d"):
             active_gpu_sec = variant_count * self.config.gpu_sec_per_variant_150m
+        elif target_model == "rfdiffusion_proteinmpnn_a10g":
+            active_gpu_sec = variant_count * self.config.gpu_sec_per_diffusion_backbone
         else:
             active_gpu_sec = variant_count * self.config.gpu_sec_per_variant
 
@@ -359,7 +400,7 @@ class Gatekeeper:
 
     def evaluate_and_authorize(
         self,
-        payload: Union[BatchEvaluationRequest, Dict[str, Any], str],
+        payload: Union[BatchEvaluationRequest, DeNovoDiffusionRequest, Dict[str, Any], str],
         force_warm: Optional[bool] = None,
     ) -> GatekeeperDecision:
         """
@@ -369,6 +410,10 @@ class Gatekeeper:
           3. Deterministic cost & ROI calculation.
           4. Atomic ledger spend authorization.
         """
+        if isinstance(payload, DeNovoDiffusionRequest) or (
+            isinstance(payload, dict) and "num_designs" in payload and "variants" not in payload
+        ):
+            return self.evaluate_and_authorize_diffusion(payload, force_warm=force_warm)
         job_id = "unknown"
         target_model = "unknown"
         variant_count = 0
@@ -429,6 +474,26 @@ class Gatekeeper:
         mutated_seqs = [v.apply_to(request.wildtype_sequence) for v in request.variants]
 
         # Step 4: Atomic spend authorization against the SQLite ledger
+        operator_uid = request.operator_uid
+        operator_email = request.operator_email
+        if request.auth_token:
+            from controller.auth import verify_firebase_id_token
+            try:
+                user = verify_firebase_id_token(request.auth_token)
+                operator_uid = user.uid
+                operator_email = user.email
+            except Exception as auth_err:
+                logger.warning("Gatekeeper REJECTED job '%s': authentication failed: %s", job_id, auth_err)
+                return GatekeeperDecision(
+                    approved=False,
+                    job_id=job_id,
+                    target_model=target_model,
+                    variant_count=variant_count,
+                    estimated_cost=0.0,
+                    is_warm=is_warm,
+                    rejection_reason=f"Authentication failed: {auth_err}",
+                )
+
         authorized = ledger_db.authorize_spend(
             job_id=job_id,
             target_model=target_model,
@@ -436,6 +501,8 @@ class Gatekeeper:
             estimated_cost=cost_usd,
             budget_id=request.budget_id,
             db_path=self.db_path,
+            operator_uid=operator_uid,
+            operator_email=operator_email,
         )
 
         if not authorized:
@@ -472,4 +539,136 @@ class Gatekeeper:
             is_warm=is_warm,
             roi_ei_per_dollar=roi,
             mutated_sequences=mutated_seqs,
+        )
+
+    def evaluate_and_authorize_diffusion(
+        self,
+        payload: Union[DeNovoDiffusionRequest, Dict[str, Any], str],
+        force_warm: Optional[bool] = None,
+    ) -> GatekeeperDecision:
+        """
+        Gatekeeper pipeline for de novo backbone diffusion & inverse folding jobs:
+          1. Fail-closed parsing & structural parameter validation.
+          2. Trajectory count bounds check.
+          3. Deterministic compute cost calculation.
+          4. Atomic ledger spend authorization against SQLite ledger.
+        """
+        job_id = "unknown"
+        target_model = "unknown"
+        num_designs = 0
+
+        # Step 1: Parse and validate schema fail-closed
+        try:
+            if isinstance(payload, str):
+                request = DeNovoDiffusionRequest.model_validate_json(payload)
+            elif isinstance(payload, dict):
+                request = DeNovoDiffusionRequest.model_validate(payload)
+            elif isinstance(payload, DeNovoDiffusionRequest):
+                request = payload
+            else:
+                raise ValueError(f"Unsupported payload type: {type(payload)}")
+
+            job_id = request.job_id
+            target_model = request.target_model
+            num_designs = request.num_designs
+        except Exception as exc:
+            logger.warning("Gatekeeper REJECTED diffusion payload: validation error: %s", exc)
+            return GatekeeperDecision(
+                approved=False,
+                job_id=job_id,
+                target_model=target_model,
+                variant_count=num_designs,
+                estimated_cost=0.0,
+                is_warm=False,
+                rejection_reason=f"Validation error: {exc}",
+            )
+
+        # Step 2: Batch limits check
+        if not (self.config.min_variants_per_batch <= num_designs <= self.config.max_variants_per_batch):
+            reason = (
+                f"Design count {num_designs} outside allowed batch bounds "
+                f"[{self.config.min_variants_per_batch}, {self.config.max_variants_per_batch}]"
+            )
+            logger.warning("Gatekeeper REJECTED diffusion job '%s': %s", job_id, reason)
+            return GatekeeperDecision(
+                approved=False,
+                job_id=job_id,
+                target_model=target_model,
+                variant_count=num_designs,
+                estimated_cost=0.0,
+                is_warm=False,
+                rejection_reason=reason,
+            )
+
+        # Step 3: Cost calculation
+        cost_usd, is_warm = self.calculate_cost(
+            variant_count=num_designs,
+            target_model=target_model,
+            force_warm=force_warm,
+        )
+        roi = self.calculate_roi(request.expected_improvements, cost_usd)
+
+        # Step 4: Atomic spend authorization against the SQLite ledger
+        operator_uid = request.operator_uid
+        operator_email = request.operator_email
+        if request.auth_token:
+            from controller.auth import verify_firebase_id_token
+            try:
+                user = verify_firebase_id_token(request.auth_token)
+                operator_uid = user.uid
+                operator_email = user.email
+            except Exception as auth_err:
+                logger.warning("Gatekeeper REJECTED diffusion job '%s': authentication failed: %s", job_id, auth_err)
+                return GatekeeperDecision(
+                    approved=False,
+                    job_id=job_id,
+                    target_model=target_model,
+                    variant_count=num_designs,
+                    estimated_cost=0.0,
+                    is_warm=is_warm,
+                    rejection_reason=f"Authentication failed: {auth_err}",
+                )
+
+        authorized = ledger_db.authorize_spend(
+            job_id=job_id,
+            target_model=target_model,
+            variant_count=num_designs,
+            estimated_cost=cost_usd,
+            budget_id=request.budget_id,
+            db_path=self.db_path,
+            operator_uid=operator_uid,
+            operator_email=operator_email,
+        )
+
+        if not authorized:
+            reason = "Ledger authorization rejected (insufficient budget or ledger constraint)"
+            logger.warning("Gatekeeper REJECTED diffusion job '%s': %s", job_id, reason)
+            return GatekeeperDecision(
+                approved=False,
+                job_id=job_id,
+                target_model=target_model,
+                variant_count=num_designs,
+                estimated_cost=cost_usd,
+                is_warm=is_warm,
+                rejection_reason=reason,
+                roi_ei_per_dollar=roi,
+            )
+
+        self._last_execution_time = time.time()
+        logger.info(
+            "Gatekeeper APPROVED diffusion job '%s': %d backbones on %s ($%.6f, warm=%s)",
+            job_id,
+            num_designs,
+            target_model,
+            cost_usd,
+            is_warm,
+        )
+        return GatekeeperDecision(
+            approved=True,
+            job_id=job_id,
+            target_model=target_model,
+            variant_count=num_designs,
+            estimated_cost=cost_usd,
+            is_warm=is_warm,
+            roi_ei_per_dollar=roi,
         )

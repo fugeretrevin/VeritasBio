@@ -681,6 +681,165 @@ def analyze_biologics_developability(sequence: str, wt_sequence: Optional[str] =
     }
 
 
+# -----------------------------------------------------------------------------
+# Enterprise Improvement 2: Multi-Objective Pareto Analysis & Data Contracts
+# -----------------------------------------------------------------------------
+class ParetoPoint(BaseModel):
+    """Represents a single evaluated candidate on the multi-objective fitness surface."""
+    notation: str
+    variant: Variant
+    fitness: float
+    stability_score: float
+    synthesizability_score: float
+    developability_score: float
+    rank: int = 0
+    liabilities: Dict[str, Any] = Field(default_factory=dict)
+    weighted_utility: float = 0.0
+
+
+class ParetoAnalysisResult(BaseModel):
+    """Complete multi-objective Pareto frontier analysis."""
+    all_points: List[ParetoPoint]
+    frontier_points: List[ParetoPoint]
+    rank_0_count: int
+    dominated_count: int
+    hypervolume: float = 0.0
+    weights_used: Dict[str, float] = Field(default_factory=dict)
+
+
+def compute_multi_objective_pareto_front(
+    candidates: Sequence[Variant],
+    wt_sequence: str,
+    predicted_fitness: np.ndarray,
+    stability_priors: Optional[np.ndarray] = None,
+    weights: Optional[Dict[str, float]] = None,
+    active_site_positions: Optional[Set[int]] = None,
+) -> ParetoAnalysisResult:
+    """
+    Computes true multi-objective Pareto trade-off surface across 4 dimensions:
+      1. Predicted functional fitness (to maximize)
+      2. Zero-shot conformational stability prior (to maximize)
+      3. Wet-lab synthesizability & expression score (to maximize)
+      4. Biologics developability & CMC safety score (to maximize)
+
+    Uses Kung / Deb fast non-dominated sorting (NSGA-II) to isolate the non-dominated Rank 0 leads.
+    Calculates scalarized weighted utility based on user-configurable trade-off weights.
+    """
+    n_cands = len(candidates)
+    if n_cands == 0:
+        return ParetoAnalysisResult(
+            all_points=[],
+            frontier_points=[],
+            rank_0_count=0,
+            dominated_count=0,
+            hypervolume=0.0,
+            weights_used=weights or {},
+        )
+
+    raw_w = weights or {
+        "fitness": 0.40,
+        "developability": 0.30,
+        "synthesizability": 0.15,
+        "stability": 0.15,
+    }
+    w_sum = sum(raw_w.values()) if sum(raw_w.values()) > 0 else 1.0
+    w_fit = raw_w.get("fitness", 0.40) / w_sum
+    w_dev = raw_w.get("developability", 0.30) / w_sum
+    w_synth = raw_w.get("synthesizability", 0.15) / w_sum
+    w_stab = raw_w.get("stability", 0.15) / w_sum
+
+    fitness_arr = np.asarray(predicted_fitness, dtype=np.float64)
+    stab_arr = (
+        np.asarray(stability_priors, dtype=np.float64)
+        if stability_priors is not None
+        else np.zeros(n_cands, dtype=np.float64)
+    )
+
+    synth_scores = np.array(
+        [
+            evaluate_synthesizability_score(c, wt_sequence, active_site_positions=active_site_positions)
+            for c in candidates
+        ],
+        dtype=np.float64,
+    )
+
+    dev_reports = [
+        analyze_biologics_developability(c.apply_to(wt_sequence))
+        for c in candidates
+    ]
+    dev_scores = np.array([r["developability_score"] for r in dev_reports], dtype=np.float64)
+
+    def min_max_norm(arr: np.ndarray) -> np.ndarray:
+        min_v = float(np.min(arr))
+        max_v = float(np.max(arr))
+        if max_v - min_v > 1e-8:
+            return (arr - min_v) / (max_v - min_v)
+        return np.full_like(arr, 0.5)
+
+    norm_fit = min_max_norm(fitness_arr)
+    norm_stab = min_max_norm(stab_arr)
+    norm_synth = np.clip(synth_scores, 0.0, 1.0)
+    norm_dev = np.clip(dev_scores, 0.0, 1.0)
+
+    pareto_objs = np.column_stack([fitness_arr, stab_arr, synth_scores, dev_scores])
+    ranks = compute_non_dominated_pareto_ranks(pareto_objs)
+
+    utilities = (
+        w_fit * norm_fit
+        + w_dev * norm_dev
+        + w_synth * norm_synth
+        + w_stab * norm_stab
+    )
+
+    points: List[ParetoPoint] = []
+    for i, c in enumerate(candidates):
+        pt = ParetoPoint(
+            notation=c.notation,
+            variant=c,
+            fitness=float(fitness_arr[i]),
+            stability_score=float(stab_arr[i]),
+            synthesizability_score=float(synth_scores[i]),
+            developability_score=float(dev_scores[i]),
+            rank=int(ranks[i]),
+            liabilities=dev_reports[i],
+            weighted_utility=float(round(utilities[i], 4)),
+        )
+        points.append(pt)
+
+    frontier_points = [p for p in points if p.rank == 0]
+    rank_0_count = len(frontier_points)
+    dominated_count = n_cands - rank_0_count
+
+    hv = 0.0
+    if frontier_points:
+        cand_list = list(candidates)
+        f_norm_front = [norm_fit[cand_list.index(p.variant)] for p in frontier_points]
+        d_norm_front = [norm_dev[cand_list.index(p.variant)] for p in frontier_points]
+        sorted_pairs = sorted(zip(f_norm_front, d_norm_front), key=lambda x: x[0], reverse=True)
+        prev_f = 1.0
+        max_d = 0.0
+        for f_val, d_val in sorted_pairs:
+            if d_val > max_d:
+                hv += (prev_f - f_val) * max_d
+                max_d = d_val
+                prev_f = f_val
+        hv += prev_f * max_d
+
+    return ParetoAnalysisResult(
+        all_points=points,
+        frontier_points=frontier_points,
+        rank_0_count=rank_0_count,
+        dominated_count=dominated_count,
+        hypervolume=float(round(hv, 4)),
+        weights_used={
+            "fitness": float(round(w_fit, 3)),
+            "developability": float(round(w_dev, 3)),
+            "synthesizability": float(round(w_synth, 3)),
+            "stability": float(round(w_stab, 3)),
+        },
+    )
+
+
 def extract_mutations_from_sequence(mutated_seq: str, wt_seq: str) -> List[SingleMutation]:
     """Infers single mutations by comparing mutated sequence to WT sequence."""
     if len(mutated_seq) != len(wt_seq):
@@ -1331,6 +1490,7 @@ def select_next_micro_batch(
     catalytic_invariants: Optional[Set[int]] = None,
     pdb_path: Optional[Any] = None,
     random_seed: Optional[int] = None,
+    pareto_weights_config: Optional[Dict[str, float]] = None,
 ) -> SelectedBatch:
     """
     Executes the Gaussian Process active learning selection (Phases 1-4):
@@ -1619,9 +1779,12 @@ def select_next_micro_batch(
         pareto_objs = np.column_stack([means, norm_stab, synth_scores, dev_scores])
         candidate_pareto_ranks = compute_non_dominated_pareto_ranks(pareto_objs)
 
+    pw = pareto_weights_config or {}
+    w_dev = pw.get("developability", 0.30)
+    w_synth = pw.get("synthesizability", 0.15)
     pareto_weights = 1.0 / (1.0 + 0.3 * candidate_pareto_ranks)
-    synth_weights = 0.6 + 0.4 * synth_scores
-    dev_weights = 0.5 + 0.5 * (dev_scores ** 0.5)
+    synth_weights = 0.6 + 0.4 * (synth_scores ** max(0.2, (w_synth / 0.15)))
+    dev_weights = 0.4 + 0.6 * (dev_scores ** max(0.2, (w_dev / 0.30) * 0.5))
     quality_scores = acquisition_scores * pareto_weights * synth_weights * dev_weights
 
     # Phase 1 / Pillar 1: Determinantal Point Process (k-DPP) Orthogonal Batch Diversity

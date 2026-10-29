@@ -192,6 +192,38 @@ class TestSpatialFilter(unittest.TestCase):
         self.assertLess(score_clash, -3.0)
 
 
+    def test_cofactor_charge_and_proline_disruption(self) -> None:
+        """Proline and uncompensated acidic charge in immediate cofactor shell (< 4.2 A) must be rejected."""
+        trpb_pdb = Path(__file__).resolve().parents[1] / "workers" / "data" / "8EH0.pdb"
+        if not trpb_pdb.is_file():
+            self.skipTest("8EH0.pdb not available")
+
+        cmap = get_spatial_contact_map(trpb_pdb)
+        # Residue 227 is 3.8 A from 0JO cofactor; mutating to Pro kinks catalytic backbone
+        passes_pro, reason_pro = cmap.check_steric_and_core_clash([(227, "V", "P")])
+        self.assertFalse(passes_pro)
+        self.assertIn("Cofactor catalytic loop disruption", reason_pro)
+
+        # Mutating residue 227 to Asp introduces negative charge into phosphate binding sphere (even when exempt from buried core)
+        passes_asp, reason_asp = cmap.check_steric_and_core_clash([(227, "V", "D")], allowed_active_positions={227})
+        self.assertFalse(passes_asp)
+        self.assertIn("Cofactor catalytic charge disruption", reason_asp)
+
+    def test_extract_functional_pocket_with_cofactors(self) -> None:
+        """extract_functional_pocket with include_cofactors=True pulls all cofactor-lining residues."""
+        trpb_pdb = Path(__file__).resolve().parents[1] / "workers" / "data" / "8EH0.pdb"
+        if not trpb_pdb.is_file():
+            self.skipTest("8EH0.pdb not available")
+
+        cmap = get_spatial_contact_map(trpb_pdb)
+        pocket = cmap.extract_functional_pocket([83], cutoff_angstroms=8.5, include_cofactors=True)
+        # Must include catalytic lysine 83 and active loop residues 227, 228
+        self.assertIn(83, pocket)
+        self.assertIn(227, pocket)
+        self.assertIn(228, pocket)
+        self.assertGreater(len(pocket), 25)
+
+
 if __name__ == "__main__":
     unittest.main()
 

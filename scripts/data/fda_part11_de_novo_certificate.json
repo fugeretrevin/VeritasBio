@@ -1,0 +1,12 @@
+{
+  "certificate_id": "VB-AUDIT-64CDAEAA7EC2F38F",
+  "timestamp_utc": "2026-10-28T23:40:59.779425+00:00",
+  "ledger_hash_sha256": "64cdaeaa7ec2f38f827497a219332eac60508db25aafd24a4dc84fd492fc1866",
+  "standard_compliance": "FDA 21 CFR Part 11 / GAMP 5 Immutability Verified",
+  "target_protein": "De Novo Binder Campaign: Centruroides noxius Cn2 Scorpion Neurotoxin",
+  "total_budget_usd": 0.05,
+  "total_spent_usd": 0.0005,
+  "total_jobs_authorized": 1,
+  "total_evidence_records": 3,
+  "deterministic_verification": "PASS: All spends follow ACID ledger lock with zero unbudgeted GPU bypass."
+}

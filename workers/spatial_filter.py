@@ -397,6 +397,12 @@ class SpatialContactMap:
                     # Bulky aromatic expansion colliding directly into cofactor
                     if vol_delta > 65.0 and mut_aa in ("W", "Y", "F"):
                         return False, f"Cofactor catalytic clash: {wt_aa}{pos}{mut_aa} is {d_cof:.1f} A from cofactor with severe steric expansion +{vol_delta:.1f} A^3"
+                    # Proline kinking catalytic active-site loop
+                    if mut_aa == "P" and wt_aa != "P":
+                        return False, f"Cofactor catalytic loop disruption: proline substitution {wt_aa}{pos}{mut_aa} kinks catalytic backbone at {d_cof:.1f} A from cofactor"
+                    # Severe uncompensated electrostatic disruption in immediate catalytic core (< 4.2 A)
+                    if wt_aa in "AILVMFST" and mut_aa in ("D", "E"):
+                        return False, f"Cofactor catalytic charge disruption: {wt_aa}{pos}{mut_aa} introduces acidic charge at {d_cof:.1f} A from cofactor binding sphere"
 
         # 2. Check for spatial steric collision between neighboring mutations
         for i in range(len(mutation_tuples)):
@@ -423,9 +429,11 @@ class SpatialContactMap:
         self,
         functional_centers: Sequence[int],
         cutoff_angstroms: float = 8.5,
+        include_cofactors: bool = True,
     ) -> List[int]:
         """
-        Extracts all residue positions within cutoff_angstroms of ANY functional center.
+        Extracts all residue positions within cutoff_angstroms of ANY functional center
+        or catalytic cofactor/ligand heavy atom.
         Universal 3D tessellation method that extracts catalytic/fluorophore pockets from PDB.
         """
         if not self.ca_coordinates:
@@ -438,6 +446,14 @@ class SpatialContactMap:
             for res_id in self.ca_coordinates:
                 dist = self.get_distance(fc, res_id)
                 if dist is not None and dist <= cutoff_angstroms:
+                    pocket.add(res_id)
+
+        if include_cofactors and (self.cofactor_coordinates or self.catalytic_center_coordinates):
+            for res_id in self.ca_coordinates:
+                d_cof = self.get_cofactor_distance(res_id)
+                if d_cof is None:
+                    d_cof = self.get_catalytic_center_distance(res_id)
+                if d_cof is not None and d_cof <= cutoff_angstroms:
                     pocket.add(res_id)
 
         return sorted(list(pocket))
@@ -517,10 +533,11 @@ def extract_pocket_residues(
     functional_centers: Sequence[int],
     pdb_path: Optional[Path] = None,
     cutoff_angstroms: float = 8.5,
+    include_cofactors: bool = True,
 ) -> List[int]:
-    """Universal 3D tessellation helper: extracts all interacting residues within 8.5A of functional centers."""
+    """Universal 3D tessellation helper: extracts all interacting residues within 8.5A of functional centers or cofactors."""
     cmap = get_spatial_contact_map(pdb_path)
-    return cmap.extract_functional_pocket(functional_centers, cutoff_angstroms=cutoff_angstroms)
+    return cmap.extract_functional_pocket(functional_centers, cutoff_angstroms=cutoff_angstroms, include_cofactors=include_cofactors)
 
 
 def filter_spatially_viable_variants(

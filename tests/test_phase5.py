@@ -120,6 +120,14 @@ class TestPhase5(unittest.TestCase):
         self.assertEqual(len(ev_rows), 1)
         self.assertEqual(ev_rows[0][0], 1)  # Rank 1
 
+    def test_de_novo_complex_viewer(self):
+        """Verifies 3Dmol WebGL rendering of de novo docked binder complexes."""
+        from ui.structure_viewer import generate_de_novo_complex_viewer_html
+        html_str = generate_de_novo_complex_viewer_html(target_accession="SCFV_9004G_CN2")
+        self.assertIn("iframe", html_str)
+        self.assertIn("3Dmol", html_str)
+        self.assertIn("De Novo Docked Complex", html_str)
+
 
 if __name__ == "__main__":
     unittest.main()

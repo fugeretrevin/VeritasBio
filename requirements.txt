@@ -11,3 +11,4 @@ requests
 matplotlib
 plotly
 python-dotenv
+firebase-admin

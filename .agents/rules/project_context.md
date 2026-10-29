@@ -40,6 +40,8 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
 | D9 | Second benchmark | **TrpB** active-site landscape (Johnston et al. 2024), combinatorially complete 20⁴ at residues 183/184/227/228 of the engineered parent Tm9D8\*. Reference sequence is the **parent, not UniProt P50909** (they differ by 10 substitutions + a His-tag). Reported metrics are **held-out** $\rho$ and **enrichment vs. a random-screening baseline**, never in-sample fit alone. |
 | D10 | Target modality & commercial roadmap | **Therapeutic biologics first** (antibodies, nanobodies, binders, folding stability) for immediate go-to-market where ESM-2 and DKL GP natively attain proven $\rho \approx 0.80$ predictive skill. Unnatural catalytic enzyme adapters, enterprise value-based pricing, and live CRO lab execution staged for post-hackathon expansion. |
 | D11 | Scorpion Antivenom Neutralizing Engine | **Scorpion antivenom scaffold-based active learning** (`SCFV_9004G_CN2`, PDB: `2YBR`), targeting *Centruroides noxius* Cn2 neurotoxin. Solves antivenom development without de novo hallucination or $30k+ unguided brute force, discovering high-potency neutralizing leads under $0.01 compute with Twist CSV and Opentrons robot protocols. |
+| D12 | PanoptesBio Firebase Authentication & FDA Part 11 Electronic Identity | **Firebase Authentication & Cloud Storage integration** (`panoptesbio`, `panoptesbio.firebaseapp.com`, `G-3CQM0RGVH3`). `controller/firebase_config.py` supplies credentials; `controller/auth.py` provides `AuthenticatedUser` model, token verification, and FDA Part 11 dual-identifier HMAC-SHA256 electronic signature stamping; `ledger/database.py` and `controller/gatekeeper.py` stamp operator identity directly into immutable SQLite Merkle audit blocks. |
+
 
 ## Changes vs. the original v3.0 §6 (now reflected in ARCHITECTURE.md v3.1)
 - Money columns are `INTEGER` micro-USD instead of `float` (D1).
@@ -82,6 +84,18 @@ compute (Modal A10G + ESM) may run. **Not an open-ended AI agent.**
       `scripts/run_scorpion_antivenom_campaign.py`, `ui/structure_viewer.py`, `ui/dashboard.py`, `tests/test_scorpion_antivenom.py`
       (Authentic PDB 2YBR Cα contact graph, CDR-H3 paratope active learning, biologics developability liability screening,
       Twist cDNA CSV, Opentrons OT-2 neutralization protocol, FDA Part 11 certificate, 5 unit tests passing, full suite 153/153 passing).
+- [x] Budgeted De Novo Diffusion & Inverse Folding Engine: `controller/gatekeeper.py`, `workers/diffusion_worker.py`,
+      `tests/test_diffusion_worker.py` (Parametric 3-helix bundle geometric backbone sampling, ProteinMPNN inverse folding,
+      zero unpaired cysteines & developability liability filtering, epitope hotspot docking, fail-closed spend gate,
+      Twist cDNA CSV synthesis orders, Opentrons OT-2 scripts, FDA Part 11 audit certificates, 5 unit tests passing).
+- [x] PanoptesBio Firebase Authentication & FDA Part 11 Electronic Signatures: `controller/firebase_config.py`,
+      `controller/auth.py`, `ledger/database.py`, `controller/gatekeeper.py`, `ui/dashboard.py`, `tests/test_firebase_auth.py`
+      (Multi-tenant Firebase project integration `panoptesbio.firebaseapp.com`, AuthenticatedUser model,
+      FDA 21 CFR §11.200 HMAC-SHA256 electronic signature stamping into immutable SQLite Merkle audit blocks,
+      Dashboard Tab 9 and connection status badge, 5 unit tests passing, full suite 169/169 passing in 114s).
+- [x] Frontier Gap Resolution & Full-Stack Platform: `workers/spatial_filter.py`, `controller/prompts.py`, `server.py`, `scripts/ingest_plate_data.py`, `ui/structure_viewer.py`, `web/src/components/CampaignStudio.jsx`, `web/src/components/WetlabExportStudio.jsx`, `web/src/components/Protein3DViewer.jsx` (Closed-loop Llama 3.1 residual reflection, HETATM cofactor catalytic core clash checks with 4.2 Å proximity shell, real-time Server-Sent Events campaign streaming, drag-and-drop microplate reader CSV ingestion with hydration barrier validation, dual-viewport WT vs Lead 3Dmol WebGL comparison, and Twist/Opentrons/Benchling/FDA Part 11 export studio; full suite 180/180 passing in 40s).
+- [x] Track B Multi-Objective Pareto Optimization & Developability Loss: `workers/math_worker.py`, `server.py`, `web/src/components/ParetoFrontierStudio.jsx`, `web/src/App.jsx`, `tests/test_pareto_optimization.py`, `tests/test_server_api.py` (NSGA-II Kung/Deb fast non-dominated sorting, 4-objective trade-off surface [Fitness, Developability, Synthesizability, Stability], 2D hypervolume indicator, `/api/campaign/pareto-frontier` REST endpoint, interactive trade-off SVG canvas with live weight sliders & presets, 183/183 unit tests passing in 39.2s).
+
 
 ## Open questions (ask the user when relevant)
 - Numeric constants for D3: A10G $/sec, GPU-seconds/variant, cold-start seconds.

@@ -257,6 +257,7 @@ class OrchestratorSummary(BaseModel):
     total_variants_evaluated: int
     highest_fitness_score: float
     top_variant_sequence: Optional[str] = None
+    pocket_hops_completed: int = 0
 
 
 class Orchestrator:
@@ -505,6 +506,7 @@ class Orchestrator:
         consecutive_stagnation = 0
         prev_best_fitness = -1e9
         current_hop = 0
+        self.last_hop_count = 0
 
         while round_num <= self.config.max_iterations:
             rem_usd = ledger_db.get_remaining_budget(self.config.budget_id, self.db_path)
@@ -740,29 +742,29 @@ class Orchestrator:
                                 b_seq = best_ev["variant_sequence"]
                                 b_score = float(best_ev["computed_score"])
                                 b_muts = extract_mutations_from_sequence(b_seq, wt_sequence)
-                                if b_muts:
-                                    current_hop += 1
-                                    consecutive_low_regret = 0
-                                    consecutive_stagnation = 0
-                                    prev_best_fitness = b_score
-                                    lead_str = ":".join(m.to_string() for m in b_muts)
-                                    hop_msg = (
-                                        f"Round {round_num}: POCKET HOP {current_hop}/{self.config.max_hops}! "
-                                        f"Regret saturated on pocket {current_hop}. Locking lead anchor {lead_str} "
-                                        f"(score: {b_score:.4f}) and sweeping coupled spatial pocket..."
-                                    )
-                                    logger.info(hop_msg)
-                                    yield OrchestratorEvent(
-                                        iteration=round_num,
-                                        step="strategy",
-                                        message=hop_msg,
-                                        remaining_budget_usd=rem_usd,
-                                        cumulative_spent_usd=spent_usd,
-                                        current_job_id=job_id,
-                                        top_variants=sorted(ev_list, key=lambda e: float(e["computed_score"]), reverse=True)[:5],
-                                    )
-                                    round_num += 1
-                                    continue
+                                current_hop += 1
+                                self.last_hop_count = current_hop
+                                consecutive_low_regret = 0
+                                consecutive_stagnation = 0
+                                prev_best_fitness = b_score
+                                lead_str = ":".join(m.to_string() for m in b_muts) if b_muts else "WT"
+                                hop_msg = (
+                                    f"Round {round_num}: POCKET HOP {current_hop}/{self.config.max_hops}! "
+                                    f"Regret saturated on pocket {current_hop}. Locking lead anchor {lead_str} "
+                                    f"(score: {b_score:.4f}) and sweeping coupled spatial pocket..."
+                                )
+                                logger.info(hop_msg)
+                                yield OrchestratorEvent(
+                                    iteration=round_num,
+                                    step="strategy",
+                                    message=hop_msg,
+                                    remaining_budget_usd=rem_usd,
+                                    cumulative_spent_usd=spent_usd,
+                                    current_job_id=job_id,
+                                    top_variants=sorted(ev_list, key=lambda e: float(e["computed_score"]), reverse=True)[:5],
+                                )
+                                round_num += 1
+                                continue
 
                         stop_reason = "converged_regret_threshold"
                         logger.info("Bayesian regret stopping triggered: %s", stop_reason)
@@ -995,29 +997,29 @@ class Orchestrator:
                                 b_seq = best_ev["variant_sequence"]
                                 b_score = float(best_ev["computed_score"])
                                 b_muts = extract_mutations_from_sequence(b_seq, wt_sequence)
-                                if b_muts:
-                                    current_hop += 1
-                                    consecutive_stagnation = 0
-                                    consecutive_low_regret = 0
-                                    prev_best_fitness = b_score
-                                    lead_str = ":".join(m.to_string() for m in b_muts)
-                                    hop_msg = (
-                                        f"Round {round_num}: POCKET HOP {current_hop}/{self.config.max_hops}! "
-                                        f"Plateau reached on pocket {current_hop}. Locking lead anchor {lead_str} "
-                                        f"(score: {b_score:.4f}) and sweeping coupled spatial pocket..."
-                                    )
-                                    logger.info(hop_msg)
-                                    yield OrchestratorEvent(
-                                        iteration=round_num,
-                                        step="strategy",
-                                        message=hop_msg,
-                                        remaining_budget_usd=rem_after_spend,
-                                        cumulative_spent_usd=spent_after_spend,
-                                        current_job_id=job_id,
-                                        top_variants=sorted_all[:5],
-                                    )
-                                    round_num += 1
-                                    continue
+                                current_hop += 1
+                                self.last_hop_count = current_hop
+                                consecutive_stagnation = 0
+                                consecutive_low_regret = 0
+                                prev_best_fitness = b_score
+                                lead_str = ":".join(m.to_string() for m in b_muts) if b_muts else "WT"
+                                hop_msg = (
+                                    f"Round {round_num}: POCKET HOP {current_hop}/{self.config.max_hops}! "
+                                    f"Plateau reached on pocket {current_hop}. Locking lead anchor {lead_str} "
+                                    f"(score: {b_score:.4f}) and sweeping coupled spatial pocket..."
+                                )
+                                logger.info(hop_msg)
+                                yield OrchestratorEvent(
+                                    iteration=round_num,
+                                    step="strategy",
+                                    message=hop_msg,
+                                    remaining_budget_usd=rem_after_spend,
+                                    cumulative_spent_usd=spent_after_spend,
+                                    current_job_id=job_id,
+                                    top_variants=sorted_all[:5],
+                                )
+                                round_num += 1
+                                continue
 
                         stop_reason = "converged_fitness_plateau"
                         logger.info("Fitness plateau stopping triggered: %s", stop_reason)
@@ -1188,4 +1190,5 @@ class Orchestrator:
             total_variants_evaluated=len(all_ev),
             highest_fitness_score=float(best_ev["computed_score"]) if best_ev else 0.0,
             top_variant_sequence=best_ev["variant_sequence"] if best_ev else None,
+            pocket_hops_completed=getattr(self, "last_hop_count", 0),
         )
