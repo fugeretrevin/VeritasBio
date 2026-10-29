@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -209,11 +210,11 @@ def get_structure_pdb(target_id: str) -> Dict[str, Any]:
 @app.get("/api/ledger")
 def get_ledger_state() -> Dict[str, Any]:
     """Returns the complete double-entry ledger state and cryptographic Merkle audit blocks."""
-    budget = ledger_db.get_budget(1, DEFAULT_DB_PATH)
-    jobs = ledger_db.list_jobs(DEFAULT_DB_PATH)
+    budget = ledger_db.get_budget(1, db_path=DEFAULT_DB_PATH)
+    jobs = ledger_db.list_jobs(db_path=DEFAULT_DB_PATH)
     evidence = ledger_db.get_evidence(db_path=DEFAULT_DB_PATH)
-    audit_blocks = ledger_db.list_audit_blocks(DEFAULT_DB_PATH)
-    is_valid, count, msg = ledger_db.verify_audit_integrity(DEFAULT_DB_PATH)
+    audit_blocks = ledger_db.list_audit_blocks(db_path=DEFAULT_DB_PATH)
+    is_valid, count, msg = ledger_db.verify_audit_integrity(db_path=DEFAULT_DB_PATH)
 
     # Sort evidence by score descending
     sorted_ev = sorted(evidence, key=lambda e: float(e.get("computed_score", 0.0)), reverse=True)[:50]
@@ -289,6 +290,72 @@ def generate_diffusion_binders(req: DeNovoRequestPayload) -> Dict[str, Any]:
         logger.exception("Diffusion generation error: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+
+
+@app.get("/api/campaign/stream")
+def stream_campaign(
+    target_accession: str = Query("TRPB_TM9D8"),
+    total_budget_usd: float = Query(1.00),
+    max_iterations: int = Query(4),
+    batch_size: int = Query(15),
+    target_model: str = Query("mock_esm"),
+    enable_pocket_hopping: bool = Query(True),
+    auth_token: Optional[str] = Query("panoptes_demo_token"),
+):
+    """
+    Server-Sent Events (SSE) streaming endpoint for active learning campaigns.
+    Yields live round-by-round OrchestratorEvents to the React frontend in real-time.
+    """
+    def event_generator():
+        try:
+            config = OrchestratorConfig(
+                target_accession=target_accession,
+                total_budget_usd=total_budget_usd,
+                max_iterations=max_iterations,
+                batch_size=batch_size,
+                target_model=target_model,
+                use_mock_llm=True,
+                enable_live_llm=False,
+                enable_regret_stopping=True,
+                enable_pocket_hopping=enable_pocket_hopping,
+                db_path=str(DEFAULT_DB_PATH),
+            )
+            orch = Orchestrator(config)
+            for event in orch.run_stream():
+                payload = {
+                    "iteration": event.iteration,
+                    "step": event.step,
+                    "message": event.message,
+                    "remaining_budget_usd": event.remaining_budget_usd,
+                    "cumulative_spent_usd": event.cumulative_spent_usd,
+                    "top_variants": event.top_variants if event.top_variants else None,
+                    "decision": event.decision if event.decision else None,
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+
+            # Final complete event with top discovered evidence
+            evidence = ledger_db.get_evidence(db_path=DEFAULT_DB_PATH)
+            sorted_ev = sorted(evidence, key=lambda e: float(e.get("computed_score", 0.0)), reverse=True)[:15]
+            final_payload = {
+                "step": "complete",
+                "message": "Optimization campaign completed.",
+                "top_variants": sorted_ev,
+            }
+            yield f"data: {json.dumps(final_payload)}\n\n"
+        except Exception as exc:
+            logger.exception("Streaming campaign failed: %s", exc)
+            err_payload = {"step": "error", "message": str(exc)}
+            yield f"data: {json.dumps(err_payload)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 @app.post("/api/campaign/run")
 def run_campaign(req: LaunchCampaignRequest) -> Dict[str, Any]:

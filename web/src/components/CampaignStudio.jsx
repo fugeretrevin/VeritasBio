@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Play, Terminal, Award, Compass, RefreshCw } from 'lucide-react';
 import Protein3DViewer from './Protein3DViewer';
 
@@ -17,6 +17,22 @@ export default function CampaignStudio({ onRefreshLedger }) {
 
   const [targetPdb, setTargetPdb] = useState(null);
   const [topVariants, setTopVariants] = useState([]);
+  const activeStreamRef = useRef(null);
+  const terminalEndRef = useRef(null);
+
+  useEffect(() => {
+    if (terminalEndRef.current) {
+      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [terminalLogs]);
+
+  useEffect(() => {
+    return () => {
+      if (activeStreamRef.current) {
+        activeStreamRef.current.close();
+      }
+    };
+  }, []);
 
   // Fetch PDB structure when target changes
   useEffect(() => {
@@ -34,51 +50,85 @@ export default function CampaignStudio({ onRefreshLedger }) {
     loadStructure();
   }, [targetAccession]);
 
-  const handleLaunch = async () => {
+  const handleStop = () => {
+    if (activeStreamRef.current) {
+      activeStreamRef.current.close();
+      activeStreamRef.current = null;
+    }
+    setIsRunning(false);
+    setTerminalLogs((prev) => [...prev, '■ Campaign stream stopped by operator.']);
+    if (onRefreshLedger) onRefreshLedger();
+  };
+
+  const handleLaunch = () => {
+    if (isRunning) return;
     setIsRunning(true);
     setTerminalLogs((prev) => [
       ...prev,
-      `--- Starting Campaign: ${targetAccession} (Budget: $${budgetUsd.toFixed(2)}, Cap: ${maxIterations} rounds) ---`,
+      `--- Starting Real-Time Stream: ${targetAccession} (Budget: $${budgetUsd.toFixed(2)}, Cap: ${maxIterations} rounds) ---`,
     ]);
 
-    try {
-      const res = await fetch('/api/campaign/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          target_accession: targetAccession,
-          total_budget_usd: budgetUsd,
-          max_iterations: maxIterations,
-          batch_size: batchSize,
-          target_model: 'mock_esm',
-          enable_pocket_hopping: enablePocketHopping,
-          auth_token: 'panoptes_demo_token',
-        }),
-      });
+    const params = new URLSearchParams({
+      target_accession: targetAccession,
+      total_budget_usd: budgetUsd.toString(),
+      max_iterations: maxIterations.toString(),
+      batch_size: batchSize.toString(),
+      target_model: 'mock_esm',
+      enable_pocket_hopping: enablePocketHopping.toString(),
+      auth_token: 'panoptes_demo_token',
+    });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || 'Campaign failed to run');
+    const url = `/api/campaign/stream?${params.toString()}`;
+    const es = new EventSource(url);
+    activeStreamRef.current = es;
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.step === 'complete') {
+          setTerminalLogs((prev) => [
+            ...prev,
+            '✓ ' + (data.message || 'Optimization campaign completed successfully.'),
+          ]);
+          if (data.top_variants) {
+            setTopVariants(data.top_variants);
+          }
+          if (onRefreshLedger) onRefreshLedger();
+          es.close();
+          activeStreamRef.current = null;
+          setIsRunning(false);
+        } else if (data.step === 'error') {
+          setTerminalLogs((prev) => [...prev, `[ERROR] ${data.message}`]);
+          es.close();
+          activeStreamRef.current = null;
+          setIsRunning(false);
+        } else {
+          const remStr = data.remaining_budget_usd !== undefined ? ` (Rem: $${data.remaining_budget_usd.toFixed(4)})` : '';
+          let tag = `[Round ${data.iteration} · ${data.step}]`;
+          if (data.step === 'reflection_complete') tag = `[Llama 3.1 Reflection · R${data.iteration}]`;
+          if (data.step === 'authorization') tag = `[Ledger Gate · R${data.iteration}]`;
+          if (data.step === 'strategy') tag = `[Strategic Prior · R${data.iteration}]`;
+          if (data.step === 'selection') tag = `[Quant DKL · R${data.iteration}]`;
+          if (data.step === 'execution') tag = `[A10G Muscle · R${data.iteration}]`;
+
+          setTerminalLogs((prev) => [...prev, `${tag} ${data.message}${remStr}`]);
+
+          if (data.top_variants && data.top_variants.length > 0) {
+            setTopVariants(data.top_variants);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to parse SSE event payload:', err);
       }
+    };
 
-      const data = await res.json();
-      if (data.events) {
-        const eventMessages = data.events.map(
-          (e) => `[Round ${e.iteration} · ${e.step}] ${e.message} (Rem: $${e.remaining_budget_usd?.toFixed(4)})`
-        );
-        setTerminalLogs((prev) => [...prev, ...eventMessages, '✓ Optimization round sequence completed.']);
-      }
-
-      if (data.top_variants) {
-        setTopVariants(data.top_variants);
-      }
-
-      if (onRefreshLedger) onRefreshLedger();
-    } catch (err) {
-      setTerminalLogs((prev) => [...prev, `[ERROR] ${err.message}`]);
-    } finally {
+    es.onerror = (err) => {
+      console.warn('SSE EventSource disconnected or finished:', err);
+      es.close();
+      activeStreamRef.current = null;
       setIsRunning(false);
-    }
+      if (onRefreshLedger) onRefreshLedger();
+    };
   };
 
   const getHotspots = (acc) => {
@@ -203,15 +253,26 @@ export default function CampaignStudio({ onRefreshLedger }) {
           </label>
         </div>
 
-        <button
-          onClick={handleLaunch}
-          disabled={isRunning}
-          className="btn btn-primary"
-          style={{ width: '100%', padding: '12px', fontSize: '14px' }}
-        >
-          <Play size={16} />
-          <span>{isRunning ? 'Running Optimization Loop...' : 'Launch Active Learning Loop'}</span>
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={handleLaunch}
+            disabled={isRunning}
+            className="btn btn-primary"
+            style={{ flex: 1, padding: '12px', fontSize: '14px' }}
+          >
+            <Play size={16} />
+            <span>{isRunning ? 'Streaming Optimization...' : 'Launch Active Learning Loop'}</span>
+          </button>
+          {isRunning && (
+            <button
+              onClick={handleStop}
+              className="btn btn-secondary"
+              style={{ padding: '12px 16px', fontSize: '14px', borderColor: '#ef4444', color: '#ef4444' }}
+            >
+              Stop
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Right Column: 3D Visualization + Real-Time Terminal Log */}
@@ -241,6 +302,7 @@ export default function CampaignStudio({ onRefreshLedger }) {
                 {log}
               </div>
             ))}
+            <div ref={terminalEndRef} />
           </div>
         </div>
 
