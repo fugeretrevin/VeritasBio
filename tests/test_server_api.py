@@ -143,6 +143,30 @@ class TestServerAPI(unittest.TestCase):
         self.assertIn("opentrons", data["opentrons_script"].lower())
         self.assertIn("Plate_Name", data["benchling_manifest"])
 
+    def test_pareto_frontier_endpoint(self) -> None:
+        """Verifies multi-objective Pareto trade-off analysis API (Track B)."""
+        payload = {
+            "target_protein": "SCFV_9004G_CN2",
+            "variants": ["G24V", "G24V:S25N"],
+            "weights": {
+                "fitness": 0.40,
+                "developability": 0.30,
+                "synthesizability": 0.15,
+                "stability": 0.15,
+            },
+        }
+        resp = self.client.post("/api/campaign/pareto-frontier", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data.get("target_protein"), "SCFV_9004G_CN2")
+        self.assertIn("points", data)
+        self.assertIn("frontier_points", data)
+        self.assertIn("chart_data", data)
+        self.assertGreaterEqual(len(data["points"]), 2)
+        self.assertGreaterEqual(data["rank_0_count"], 1)
+        self.assertTrue(any(pt["is_frontier"] for pt in data["chart_data"]))
+
+
 
 if __name__ == "__main__":
     unittest.main()

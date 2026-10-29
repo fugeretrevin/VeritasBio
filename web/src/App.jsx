@@ -5,8 +5,9 @@ import CampaignStudio from './components/CampaignStudio';
 import DeNovoStudio from './components/DeNovoStudio';
 import LedgerAuditTrail from './components/LedgerAuditTrail';
 import WetlabExportStudio from './components/WetlabExportStudio';
+import ParetoFrontierStudio from './components/ParetoFrontierStudio';
 import AuthModal from './components/AuthModal';
-import { Compass, Sparkles, ShieldCheck, FlaskConical } from 'lucide-react';
+import { Compass, Sparkles, ShieldCheck, FlaskConical, Scale } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('campaign');
@@ -101,6 +102,15 @@ export default function App() {
         </button>
 
         <button
+          onClick={() => setActiveTab('pareto')}
+          className={`btn ${activeTab === 'pareto' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ padding: '8px 18px', fontSize: '13px' }}
+        >
+          <Scale size={16} />
+          <span>Pareto Frontier Studio</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('ledger')}
           className={`btn ${activeTab === 'ledger' ? 'btn-primary' : 'btn-secondary'}`}
           style={{ padding: '8px 18px', fontSize: '13px' }}
@@ -123,6 +133,7 @@ export default function App() {
       <main>
         {activeTab === 'campaign' && <CampaignStudio onRefreshLedger={refreshState} />}
         {activeTab === 'denovo' && <DeNovoStudio onRefreshLedger={refreshState} />}
+        {activeTab === 'pareto' && <ParetoFrontierStudio onRefreshLedger={refreshState} />}
         {activeTab === 'ledger' && <LedgerAuditTrail ledgerData={ledgerData} onRefresh={refreshState} />}
         {activeTab === 'wetlab' && <WetlabExportStudio onRefreshLedger={refreshState} />}
       </main>

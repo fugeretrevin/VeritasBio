@@ -35,6 +35,7 @@ from controller.gatekeeper import (
     BatchEvaluationRequest,
     DeNovoDiffusionRequest,
     Gatekeeper,
+    SingleMutation,
     Variant,
 )
 from controller.orchestrator import Orchestrator, OrchestratorConfig
@@ -43,6 +44,8 @@ from workers.diffusion_worker import DeNovoBinderRequest, generate_budgeted_de_n
 from workers.mock_workers import MockLLMWorker
 from workers.rag_worker import fetch_protein_metadata
 from scripts.ingest_plate_data import ingest_plate_csv
+import numpy as np
+from workers.math_worker import compute_multi_objective_pareto_front, compute_biological_prior
 from workers.lims_worker import BenchlingClient
 from workers.wetlab_worker import (
     generate_cryptographic_audit_certificate,
@@ -98,6 +101,15 @@ class LaunchCampaignRequest(BaseModel):
     batch_size: int = 15
     target_model: str = "mock_esm"
     enable_pocket_hopping: bool = True
+    auth_token: Optional[str] = "panoptes_demo_token"
+
+
+class ParetoFrontierRequest(BaseModel):
+    target_protein: str = "avGFP"
+    wt_sequence: Optional[str] = None
+    variants: Optional[List[str]] = None
+    weights: Optional[Dict[str, float]] = None
+    active_site_positions: Optional[List[int]] = None
     auth_token: Optional[str] = "panoptes_demo_token"
 
 
@@ -494,6 +506,140 @@ async def ingest_plate_endpoint(request: Request) -> Dict[str, Any]:
     except Exception as exc:
         logger.exception("Microplate data ingestion failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/campaign/pareto-frontier")
+def get_pareto_frontier(request: ParetoFrontierRequest) -> Dict[str, Any]:
+    """
+    Computes true multi-objective Pareto trade-off surface across 4 dimensions:
+      1. Predicted functional fitness (to maximize)
+      2. Zero-shot conformational stability prior (to maximize)
+      3. Wet-lab synthesizability & expression score (to maximize)
+      4. Biologics developability & CMC safety score (to maximize)
+    Returns non-dominated Rank 0 leads and pre-formatted chart data for interactive UI exploration.
+    """
+    target_clean = request.target_protein.upper().strip()
+    wt_seq = request.wt_sequence
+    active_positions: Optional[Set[int]] = set(request.active_site_positions) if request.active_site_positions else None
+
+    if not wt_seq:
+        if "SCFV" in target_clean or "2YBR" in target_clean or "SCORPION" in target_clean or "CN2" in target_clean:
+            scaffold_path = DATA_DIR / "SCFV_9004G_CN2.json"
+            if scaffold_path.is_file():
+                meta = json.loads(scaffold_path.read_text(encoding="utf-8"))
+                wt_seq = meta.get("sequence", {}).get("value")
+        elif "TRPB" in target_clean or "8EH0" in target_clean:
+            meta = fetch_protein_metadata("TRPB_TM9D8")
+            wt_seq = meta.get("sequence")
+        elif "P42212" in target_clean or "GFP" in target_clean or "1EMA" in target_clean:
+            meta = fetch_protein_metadata("P42212")
+            wt_seq = meta.get("sequence")
+        elif "GB1" in target_clean or "2QMT" in target_clean or "SPG1" in target_clean:
+            meta = fetch_protein_metadata("SPG1_STRSG")
+            wt_seq = meta.get("sequence")
+        elif "HER2" in target_clean or "1N8Z" in target_clean or "TRASTUZUMAB" in target_clean:
+            meta = fetch_protein_metadata("HER2_TRASTUZUMAB")
+            wt_seq = meta.get("sequence")
+
+    if not wt_seq:
+        meta = fetch_protein_metadata("P42212")
+        wt_seq = meta.get("sequence")
+
+    if not wt_seq:
+        raise HTTPException(status_code=400, detail=f"Could not resolve wild-type sequence for {request.target_protein}")
+
+    candidates: List[Variant] = []
+    evidence = ledger_db.get_evidence(db_path=DEFAULT_DB_PATH)
+    score_map: Dict[str, float] = {}
+    for ev in evidence:
+        s = ev.get("variant_sequence")
+        sc = ev.get("computed_score")
+        if s and sc is not None:
+            score_map[s] = float(sc)
+
+    if request.variants:
+        for notat in request.variants:
+            try:
+                v = Variant(notation=notat)
+                v.validate_against_wt(wt_seq)
+                candidates.append(v)
+            except Exception as e:
+                logger.warning("Skipping invalid variant notation %s: %s", notat, e)
+    else:
+        for ev in evidence:
+            s = ev.get("variant_sequence")
+            if s and len(s) == len(wt_seq) and len(candidates) < 30:
+                try:
+                    candidates.append(Variant.from_sequence(s, wt_seq))
+                except Exception:
+                    pass
+
+    if not candidates:
+        hotspot_pos = [64, 65, 68]
+        if "SCFV" in target_clean:
+            hotspot_pos = [98, 99, 100]
+        elif "TRPB" in target_clean:
+            hotspot_pos = [183, 184, 227]
+        for p in hotspot_pos:
+            if p <= len(wt_seq):
+                orig_aa = wt_seq[p - 1]
+                for mut_aa in ["A", "V", "L", "S", "T"]:
+                    if mut_aa != orig_aa and len(candidates) < 15:
+                        candidates.append(Variant(
+                            notation=f"{orig_aa}{p}{mut_aa}",
+                            mutations=[SingleMutation(wt_aa=orig_aa, position=p, mut_aa=mut_aa)],
+                        ))
+
+    predicted_fitness_list: List[float] = []
+    stability_priors_list: List[float] = []
+
+    for c in candidates:
+        seq = c.apply_to(wt_seq)
+        if seq in score_map:
+            fit = score_map[seq]
+        else:
+            fit = compute_biological_prior(c)
+        predicted_fitness_list.append(fit)
+        stability_priors_list.append(compute_biological_prior(c) * 0.5)
+
+    fitness_arr = np.array(predicted_fitness_list, dtype=np.float64)
+    stab_arr = np.array(stability_priors_list, dtype=np.float64)
+
+    result = compute_multi_objective_pareto_front(
+        candidates=candidates,
+        wt_sequence=wt_seq,
+        predicted_fitness=fitness_arr,
+        stability_priors=stab_arr,
+        weights=request.weights,
+        active_site_positions=active_positions,
+    )
+
+    chart_data = [
+        {
+            "label": p.notation,
+            "x_fitness": round(p.fitness, 3),
+            "y_developability": round(p.developability_score, 3),
+            "synthesizability": round(p.synthesizability_score, 3),
+            "stability": round(p.stability_score, 3),
+            "rank": p.rank,
+            "is_frontier": p.rank == 0,
+            "weighted_utility": round(p.weighted_utility, 3),
+            "liabilities_count": len(p.liabilities.get("clinical_liabilities", [])),
+            "clinical_liabilities": p.liabilities.get("clinical_liabilities", []),
+        }
+        for p in result.all_points
+    ]
+
+    return {
+        "target_protein": request.target_protein,
+        "points": [p.model_dump() for p in result.all_points],
+        "frontier_points": [p.model_dump() for p in result.frontier_points],
+        "rank_0_count": result.rank_0_count,
+        "dominated_count": result.dominated_count,
+        "hypervolume": result.hypervolume,
+        "weights_used": result.weights_used,
+        "chart_data": chart_data,
+    }
 
 
 if __name__ == "__main__":
