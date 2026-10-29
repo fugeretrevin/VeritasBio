@@ -307,6 +307,8 @@ def authorize_spend(
     estimated_cost: float,
     budget_id: int = DEFAULT_BUDGET_ID,
     db_path: Optional[DbPath] = None,
+    operator_uid: Optional[str] = None,
+    operator_email: Optional[str] = None,
 ) -> bool:
     """
     Approve or hard-reject a compute job against the Budget table.
@@ -386,17 +388,23 @@ def authorize_spend(
                 "VALUES (?, ?, ?, ?, ?);",
                 (job_id, target_model, variant_count, cost_micro, STATUS_APPROVED),
             )
+            spend_payload = {
+                "job_id": job_id,
+                "target_model": target_model,
+                "variant_count": variant_count,
+                "cost_micro_usd": cost_micro,
+                "cost_usd": _micro_to_usd(cost_micro),
+                "budget_id": budget_id,
+            }
+            if operator_uid:
+                spend_payload["operator_uid"] = operator_uid
+            if operator_email:
+                spend_payload["operator_email"] = operator_email
+
             _append_audit_block_tx(
                 conn,
                 action_type="SPEND_AUTHORIZED",
-                payload={
-                    "job_id": job_id,
-                    "target_model": target_model,
-                    "variant_count": variant_count,
-                    "cost_micro_usd": cost_micro,
-                    "cost_usd": _micro_to_usd(cost_micro),
-                    "budget_id": budget_id,
-                },
+                payload=spend_payload,
             )
 
         logger.info("authorize_spend APPROVED job %r: $%.6f for %d variants on %s",
@@ -566,6 +574,9 @@ def list_audit_blocks(db_path: Optional[DbPath] = None) -> List[Dict[str, Any]]:
     with _connect(db_path) as conn:
         rows = conn.execute("SELECT * FROM AuditLedgerBlocks ORDER BY block_index ASC;").fetchall()
     return [dict(r) for r in rows]
+
+
+get_audit_blocks = list_audit_blocks
 
 
 def verify_audit_integrity(db_path: Optional[DbPath] = None) -> Tuple[bool, int, str]:

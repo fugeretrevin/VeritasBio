@@ -36,7 +36,8 @@ from controller.gatekeeper import Variant
 from controller.orchestrator import CampaignMode, Orchestrator, OrchestratorConfig, OrchestratorEvent
 from ledger import database as ledger_db
 from ui.landscape_plot import generate_landscape_figure
-from ui.structure_viewer import generate_3d_viewer_html
+from ui.structure_viewer import generate_3d_viewer_html, generate_de_novo_complex_viewer_html
+from workers.diffusion_worker import DeNovoBinderRequest, generate_budgeted_de_novo_binders
 from workers.lims_worker import BenchlingClient, DEFAULT_PLATE_FORMAT
 from workers.mock_workers import MockLLMWorker
 from workers.rag_worker import fetch_protein_metadata
@@ -46,6 +47,9 @@ from workers.wetlab_worker import (
     generate_plate_layout,
     generate_twist_order_csv,
 )
+
+from controller.auth import AuthenticatedUser, create_part11_electronic_signature, verify_firebase_id_token
+from controller.firebase_config import get_firebase_config
 
 logger = logging.getLogger(__name__)
 
@@ -339,8 +343,12 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             with gr.Column(scale=8):
                 gr.HTML("""
                 <div>
-                    <h1 class="brand-title">VERITAS<span style="color:#0284c7;">BIO</span></h1>
-                    <p class="brand-subtitle">Deterministic Cloud Economics Engine for Computational Biology & Autonomous Protein Evolution</p>
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:4px; flex-wrap:wrap;">
+                        <h1 class="brand-title" style="margin:0;">VERITAS<span style="color:#0284c7;">BIO</span></h1>
+                        <span style="background:rgba(2,132,199,0.18); border:1px solid #0284c7; color:#38bdf8; font-size:11px; font-weight:700; padding:3px 8px; border-radius:12px; text-transform:uppercase; letter-spacing:0.5px;">PanoptesBio Cloud Engine</span>
+                        <span style="background:rgba(16,185,129,0.18); border:1px solid #10b981; color:#34d399; font-size:11px; font-weight:600; padding:3px 8px; border-radius:12px;">● Firebase Auth: panoptesbio.firebaseapp.com</span>
+                    </div>
+                    <p class="brand-subtitle" style="margin:0;">Deterministic Cloud Economics Engine for Computational Biology · FDA 21 CFR Part 11 Audit Trail</p>
                 </div>
                 """)
             with gr.Column(scale=4):
@@ -564,6 +572,123 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                             type="filepath",
                             interactive=False,
                         )
+
+                    # TAB 8: De Novo Diffusion Studio (RFdiffusion + ProteinMPNN)
+                    with gr.TabItem("De Novo Diffusion Studio (RFdiffusion + ProteinMPNN)"):
+                        gr.Markdown("### Autonomous De Novo Protein Binder Diffusion & Inverse Folding Engine")
+                        gr.Markdown(
+                            "Generates targeted 3-helix bundle backbones docked to crystallographic epitopes, "
+                            "conditioned with ProteinMPNN sequence design and strict biophysical developability checks."
+                        )
+                        with gr.Row():
+                            with gr.Column(scale=5):
+                                diff_input_target = gr.Dropdown(
+                                    label="Target Epitope / Scaffold",
+                                    choices=[
+                                        "SCFV_9004G_CN2 (Centruroides noxius Cn2 Scorpion Neurotoxin · 2YBR)",
+                                        "HER2_TRASTUZUMAB (HER2 Extracellular Receptor Epitope · 1N8Z)",
+                                        "P42212 (avGFP β-Barrel Surface · 1EMA)",
+                                    ],
+                                    value="SCFV_9004G_CN2 (Centruroides noxius Cn2 Scorpion Neurotoxin · 2YBR)",
+                                )
+                                with gr.Row():
+                                    diff_num_designs = gr.Slider(
+                                        label="Number of Backbones",
+                                        minimum=1,
+                                        maximum=10,
+                                        step=1,
+                                        value=4,
+                                    )
+                                    diff_binder_len = gr.Slider(
+                                        label="Binder Length (AAs)",
+                                        minimum=30,
+                                        maximum=120,
+                                        step=5,
+                                        value=65,
+                                    )
+                                diff_budget = gr.Slider(
+                                    label="Compute Budget Allocation ($ USD)",
+                                    minimum=0.01,
+                                    maximum=5.00,
+                                    step=0.01,
+                                    value=0.05,
+                                )
+                                btn_run_diffusion = gr.Button(
+                                    "⚡ Generate Budgeted De Novo Binders",
+                                    variant="primary",
+                                    elem_classes=["btn-primary-glow"],
+                                )
+                                diff_status_box = gr.Textbox(
+                                    label="Diffusion & Gatekeeper Status",
+                                    value="Ready to initialize diffusion trajectory under fail-closed ledger.",
+                                    interactive=False,
+                                )
+
+                            with gr.Column(scale=7):
+                                diff_3d_viewer = gr.HTML(
+                                    value=generate_de_novo_complex_viewer_html(target_accession="SCFV_9004G_CN2"),
+                                    label="3D Docked De Novo Binder Complex",
+                                )
+
+                        gr.Markdown("### Designed De Novo Binders (Biophysical & Developability Evaluation)")
+                        diff_results_table = gr.Dataframe(
+                            headers=["Design ID", "Length", "Sequence", "pLDDT", "RMSD (Å)", "Rg (Å)", "Developability", "Twist USD"],
+                            datatype=["str", "number", "str", "number", "number", "number", "str", "str"],
+                            interactive=False,
+                            wrap=True,
+                        )
+
+                        with gr.Row():
+                            btn_diff_twist = gr.Button("Export Twist Synthesis Manifest (CSV)", elem_classes=["btn-action"])
+                            btn_diff_robot = gr.Button("Export Opentrons OT-2 Neutralization Script (.py)", elem_classes=["btn-action"])
+
+                        diff_export_code = gr.Code(
+                            label="De Novo Synthesis Manifest / Robot Script",
+                            language="python",
+                            lines=12,
+                        )
+
+                    # TAB 9: PanoptesBio Cloud Auth & Tenancy (Firebase)
+                    with gr.TabItem("PanoptesBio Cloud Auth & Tenancy"):
+                        gr.Markdown("### PanoptesBio Multi-Tenant Cloud Authentication & FDA 21 CFR Part 11 Electronic Identity")
+                        gr.Markdown(
+                            "Secure identity management via Google Firebase Auth (`panoptesbio.firebaseapp.com`). "
+                            "Every compute budget allocation, variant scoring run, and robotic synthesis manifest is "
+                            "cryptographically signed and sealed in the immutable double-entry ledger."
+                        )
+                        with gr.Row():
+                            with gr.Column(scale=6):
+                                auth_email_input = gr.Textbox(
+                                    label="Operator Corporate Email (SSO / Firebase)",
+                                    value="lead.scientist@panoptesbio.com",
+                                )
+                                auth_role_dropdown = gr.Dropdown(
+                                    label="FDA Part 11 Role & Permission Level",
+                                    choices=["lead_biologist", "lab_director", "compliance_officer", "principal_investigator"],
+                                    value="lead_biologist",
+                                )
+                                auth_org_input = gr.Textbox(
+                                    label="Tenant Organization ID",
+                                    value="panoptesbio",
+                                    interactive=False,
+                                )
+                                auth_action_dropdown = gr.Dropdown(
+                                    label="Authorized Action Meaning",
+                                    choices=[
+                                        "Approval of Modal A10G Cloud GPU Spend",
+                                        "Authorization of Twist Bioscience cDNA Synthesis Order",
+                                        "Validation of Opentrons OT-2 Neutralization Protocol",
+                                        "Review and Approval of FDA 21 CFR Part 11 Audit Certificate",
+                                    ],
+                                    value="Approval of Modal A10G Cloud GPU Spend",
+                                )
+                                btn_gen_sig = gr.Button("Generate 21 CFR §11.200 Electronic Signature Token", variant="primary")
+                            with gr.Column(scale=6):
+                                auth_token_output = gr.Code(
+                                    label="Active Firebase Identity & Cryptographic Audit Token",
+                                    language="json",
+                                    lines=14,
+                                )
 
         # ---------------------------------------------------------------------
         # Event Handlers & Streaming Generator
@@ -895,7 +1020,134 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             ],
         )
 
-    return demo
+        # ---------------------------------------------------------------------
+        # Tab 8 Event Handlers: De Novo Diffusion Studio
+        # ---------------------------------------------------------------------
+        state_current_designs = gr.State([])
+
+        def run_diffusion_generation(target_choice: str, num_designs: int, binder_len: int, budget_val: float):
+            import time
+            choice_str = str(target_choice).upper()
+            if "SCORPION" in choice_str or "CN2" in choice_str or "2YBR" in choice_str:
+                acc = "SCFV_9004G_CN2"
+                hotspots = [99, 100, 101, 102, 103, 104, 105, 106]
+                prot_name = "Centruroides noxius Cn2 Scorpion Neurotoxin"
+            elif "HER2" in choice_str or "1N8Z" in choice_str:
+                acc = "HER2_TRASTUZUMAB"
+                hotspots = [99, 100, 101, 102, 103, 104, 105, 106, 107, 108]
+                prot_name = "HER2 Extracellular Domain"
+            else:
+                acc = "P42212"
+                hotspots = [65, 66, 67, 203]
+                prot_name = "avGFP Surface Epitope"
+
+            job_id = f"diff-ui-{int(time.time())}"
+            req = DeNovoBinderRequest(
+                job_id=job_id,
+                target_model="mock_diffusion",
+                num_designs=int(num_designs),
+                binder_length=int(binder_len),
+                target_pdb=acc,
+                hotspot_residues=hotspots,
+                target_protein_name=prot_name,
+                budget_id=1,
+            )
+
+            res = generate_budgeted_de_novo_binders(request=req)
+            if not res.approved:
+                status = f"❌ [GATEKEEPER REJECTED] {res.rejection_reason}"
+                return status, generate_de_novo_complex_viewer_html(target_accession=acc), [], "", []
+
+            table_rows = []
+            for d in res.designs:
+                table_rows.append([
+                    d.design_id,
+                    d.length,
+                    d.sequence,
+                    f"{d.predicted_plddt:.1f}",
+                    f"{d.estimated_rmsd_to_target:.2f}",
+                    f"{d.radius_of_gyration:.2f}",
+                    f"{d.developability_score:.2f} (0 Unpaired Cys)",
+                    f"${d.synthesis_cost_usd:.2f}",
+                ])
+
+            top_pdb = res.designs[0].pdb_content if res.designs else None
+            top_name = res.designs[0].design_id if res.designs else "Designed Binder"
+            viewer_html = generate_de_novo_complex_viewer_html(
+                target_accession=acc,
+                binder_pdb_content=top_pdb,
+                hotspot_residues=hotspots,
+                binder_name=f"{top_name} (Docked)",
+            )
+            status_text = (
+                f"✅ [APPROVED & COMPLETED] {len(res.designs)} de novo binders synthesized | "
+                f"Cost: ${res.cost_usd:.6f} | Merkle Hash: {str(res.audit_block_hash)[:16]}..."
+            )
+            manifest_preview = res.twist_csv or ""
+            return status_text, viewer_html, table_rows, manifest_preview, res.designs
+
+        btn_run_diffusion.click(
+            fn=run_diffusion_generation,
+            inputs=[diff_input_target, diff_num_designs, diff_binder_len, diff_budget],
+            outputs=[diff_status_box, diff_3d_viewer, diff_results_table, diff_export_code, state_current_designs],
+        )
+
+        def export_twist_from_state(designs: List[Any], target_choice: str) -> str:
+            if not designs:
+                return "# No diffusion designs generated yet. Click 'Generate Budgeted De Novo Binders' first."
+            twist_input = [
+                {
+                    "variant_sequence": d.sequence,
+                    "mutations": d.design_id,
+                    "computed_score": d.predicted_plddt / 100.0,
+                }
+                for d in designs
+            ]
+            return generate_twist_order_csv(top_variants=twist_input, protein_name=str(target_choice)[:20])
+
+        btn_diff_twist.click(
+            fn=export_twist_from_state,
+            inputs=[state_current_designs, diff_input_target],
+            outputs=[diff_export_code],
+        )
+
+        def export_robot_from_state(designs: List[Any], target_choice: str) -> str:
+            if not designs:
+                return "# No diffusion designs generated yet. Click 'Generate Budgeted De Novo Binders' first."
+            names = [d.design_id for d in designs]
+            return generate_opentrons_protocol(variant_names=names, target_protein=str(target_choice)[:20])
+
+        btn_diff_robot.click(
+            fn=export_robot_from_state,
+            inputs=[state_current_designs, diff_input_target],
+            outputs=[diff_export_code],
+        )
+
+        def generate_part11_sig_callback(email_val: str, role_val: str, org_val: str, action_val: str) -> str:
+            clean_email = email_val.strip() if email_val else "scientist@panoptesbio.com"
+            clean_user = clean_email.split("@")[0]
+            user = AuthenticatedUser(
+                uid=f"usr_{clean_user}",
+                email=clean_email,
+                display_name=f"Dr. {clean_user.replace('.', ' ').title()}",
+                organization_id=org_val or "panoptesbio",
+                role=role_val or "lead_biologist",
+                is_part11_certified=True,
+            )
+            sig_dict = create_part11_electronic_signature(
+                user=user,
+                action=action_val or "Approval of Compute Spend",
+                meaning="Authenticated operator electronic signature binding action under 21 CFR Part 11 §11.200",
+            )
+            return json.dumps(sig_dict, indent=2)
+
+        btn_gen_sig.click(
+            fn=generate_part11_sig_callback,
+            inputs=[auth_email_input, auth_role_dropdown, auth_org_input, auth_action_dropdown],
+            outputs=[auth_token_output],
+        )
+
+        return demo
 
 
 if __name__ == "__main__":

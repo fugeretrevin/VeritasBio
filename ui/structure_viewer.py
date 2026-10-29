@@ -377,3 +377,210 @@ def generate_3d_viewer_html(
 
     escaped_srcdoc = html.escape(inner_html, quote=True)
     return f'<iframe srcdoc="{escaped_srcdoc}" style="width: 100%; height: 540px; border: none; border-radius: 12px; background: #0b1329; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);"></iframe>'
+
+
+def generate_de_novo_complex_viewer_html(
+    target_accession: str = "SCFV_9004G_CN2",
+    binder_pdb_content: Optional[str] = None,
+    hotspot_residues: Optional[List[int]] = None,
+    binder_name: str = "VB-DIFF-001 (De Novo 3-Helix Bundle)",
+    spin: bool = True,
+) -> str:
+    """
+    Renders an interactive 3D WebGL complex of the target protein epitope docked
+    with the de novo designed binder backbone (RFdiffusion + ProteinMPNN).
+    """
+    from workers.diffusion_worker import GeometricBackboneSampler
+
+    resolved_pdb_path, title_str, scaffold_label, default_hotspots, cat_label, _ = resolve_target_pdb_context(
+        target_accession=target_accession
+    )
+    target_pdb_str = load_pdb_content(resolved_pdb_path)
+
+    # If no binder provided, generate an initial geometric 3-helix bundle for live preview
+    if not binder_pdb_content:
+        sampler = GeometricBackboneSampler(random_seed=42)
+        pdb_b, _, _ = sampler.sample_3helix_bundle(length=65, design_idx=1)
+        binder_pdb_content = pdb_b
+
+    # Combine into a single complex PDB: Target as Chain A, Binder as Chain B
+    # Filter target lines and ensure Chain A
+    target_lines = []
+    for line in target_pdb_str.splitlines():
+        if line.startswith(("ATOM", "HETATM")):
+            if len(line) >= 22:
+                line = line[:21] + "A" + line[22:]
+            target_lines.append(line)
+
+    binder_lines = []
+    for line in binder_pdb_content.splitlines():
+        if line.startswith(("ATOM", "HETATM")):
+            if len(line) >= 22:
+                line = line[:21] + "B" + line[22:]
+            binder_lines.append(line)
+
+    complex_pdb = "\n".join(target_lines) + "\nTER\n" + "\n".join(binder_lines) + "\nEND\n"
+    escaped_pdb = json.dumps(complex_pdb)
+
+    effective_hotspots = hotspot_residues if hotspot_residues is not None else default_hotspots
+    hotspots_json = json.dumps(effective_hotspots)
+    spin_js = "true" if spin else "false"
+
+    inner_html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.0.4/3Dmol-min.js"></script>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            background: #0b1329;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }}
+        .header {{
+            padding: 10px 16px;
+            background: rgba(15, 23, 42, 0.85);
+            border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }}
+        .title {{ font-size: 13px; font-weight: 600; color: #38bdf8; }}
+        .badge {{
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            background: rgba(6, 182, 212, 0.2);
+            color: #22d3ee;
+            border: 1px solid rgba(6, 182, 212, 0.4);
+        }}
+        .viewport {{ flex: 1; width: 100%; position: relative; }}
+        .controls {{
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            display: flex;
+            gap: 8px;
+            z-index: 20;
+        }}
+        .btn {{
+            background: rgba(30, 41, 59, 0.85);
+            color: #e2e8f0;
+            border: 1px solid #475569;
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }}
+        .btn:hover {{ background: #334155; color: #ffffff; }}
+        .legend {{
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(51, 65, 85, 0.6);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 11px;
+            z-index: 20;
+            line-height: 1.6;
+        }}
+        .dot {{ display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <span class="title">De Novo Docked Complex · RFdiffusion + ProteinMPNN</span>
+            <span style="font-size: 11px; color: #94a3b8; margin-left: 8px;">Target: {html.escape(scaffold_label)}</span>
+        </div>
+        <span class="badge">{html.escape(binder_name)}</span>
+    </div>
+    <div class="viewport" id="viewport-box">
+        <div class="legend">
+            <div><span class="dot" style="background: #94a3b8;"></span>Target Epitope (Chain A)</div>
+            <div><span class="dot" style="background: #f59e0b;"></span>Target Hotspots (Contacts)</div>
+            <div><span class="dot" style="background: #06b6d4;"></span>Designed De Novo Binder (Chain B)</div>
+        </div>
+        <div class="controls">
+            <button class="btn" id="btn-spin" onclick="toggleSpin()">Pause Spin</button>
+            <button class="btn" onclick="resetCamera()">Center Camera</button>
+        </div>
+    </div>
+    <script>
+    (function() {{
+        let glviewer = null;
+        let isSpinning = {spin_js};
+        const pdbData = {escaped_pdb};
+        const hotspots = {hotspots_json};
+
+        function init() {{
+            const el = document.getElementById("viewport-box");
+            glviewer = $3Dmol.createViewer(el, {{ backgroundColor: "#0b1329" }});
+            glviewer.addModel(pdbData, "pdb");
+
+            // 1. Style Target Protein (Chain A): Translucent slate gray
+            glviewer.setStyle({{ chain: "A" }}, {{
+                cartoon: {{ color: "#94a3b8", opacity: 0.70 }}
+            }});
+
+            // 2. Highlight Hotspots on Chain A: Golden yellow sticks
+            if (hotspots && hotspots.length > 0) {{
+                glviewer.addStyle({{ chain: "A", resi: hotspots }}, {{
+                    stick: {{ color: "#f59e0b", radius: 0.28 }}
+                }});
+            }}
+
+            // 3. Style Designed De Novo Binder (Chain B): Bright electric cyan cartoon
+            glviewer.setStyle({{ chain: "B" }}, {{
+                cartoon: {{ color: "#06b6d4", opacity: 1.0, thickness: 0.6 }}
+            }});
+
+            // Show interface sidechains on Binder
+            glviewer.addStyle({{ chain: "B", within: {{ distance: 8.5, sel: {{ chain: "A" }} }} }}, {{
+                stick: {{ color: "#22d3ee", radius: 0.20 }}
+            }});
+
+            glviewer.zoomTo();
+            glviewer.render();
+            if (isSpinning) glviewer.spin("y", 0.5);
+        }}
+
+        window.toggleSpin = function() {{
+            if (!glviewer) return;
+            isSpinning = !isSpinning;
+            const btn = document.getElementById("btn-spin");
+            if (isSpinning) {{
+                glviewer.spin("y", 0.5);
+                if (btn) btn.innerText = "Pause Spin";
+            }} else {{
+                glviewer.spin(false);
+                if (btn) btn.innerText = "Resume Spin";
+            }}
+        }};
+
+        window.resetCamera = function() {{
+            if (!glviewer) return;
+            glviewer.zoomTo();
+            glviewer.render();
+        }};
+
+        init();
+    }})();
+    </script>
+</body>
+</html>"""
+
+    escaped_srcdoc = html.escape(inner_html, quote=True)
+    return f'<iframe srcdoc="{escaped_srcdoc}" style="width: 100%; height: 540px; border: none; border-radius: 12px; background: #0b1329; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);"></iframe>'
+
