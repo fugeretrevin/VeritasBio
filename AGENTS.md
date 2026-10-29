@@ -13,9 +13,24 @@ Standard five-role triage vocabulary (`needs-triage`, `needs-info`, `ready-for-a
 ### Domain Docs
 Single-context domain architecture documentation layout. See [`docs/agents/domain.md`](docs/agents/domain.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
----
+## Natural Conversational Skill Routing
 
-## Available Skills Reference
+You do not need the user to type slash commands. Recognize conversational intent and seamlessly adopt the appropriate skill flow:
+
+1. **New Ideas & Feature Requests** ("I want to add X", "Let's build Y"):
+   - Adopt **`grill-with-docs`**. Ask 2–3 sharp clarifying questions to resolve trade-offs, record the decision in `docs/adr/`, and update `GLOSSARY.md`.
+2. **Planning & Architecture** ("How should we design this?", "Map this out"):
+   - Adopt **`wayfinder`**, **`to-spec`**, and **`to-tickets`**. Produce a technical spec and dependency-linked task breakdown before writing code.
+3. **Bug Reports & Regressions** ("This is broken", "Why is it failing?", "Debug this"):
+   - Adopt **`diagnosing-bugs`**. Establish a tight reproduction command first. Do not guess; find root cause and fix with a regression test.
+4. **Building & Coding** ("Build this", "Implement the feature"):
+   - Adopt **`tdd`** (Red-Green-Refactor loop). Write failing tests first, pass them with minimal code, and refactor.
+5. **Code Inspection & Verification** ("Review this", "Check what changed"):
+   - Adopt **`code-review`**. Evaluate the diff along two axes: Standards and Spec compliance.
+6. **Pull Requests & Shipping** ("Create PR", "Prepare release"):
+   - Adopt **`pr`**. Format before/after verification evidence, visual diffs, and risk assessment.
+7. **Doubt or Confusion** ("Wait, does this make sense?", "Are we sure?"):
+   - Adopt **`wait-what`**. Pause and surface conflicting assumptions.
 
 ### Engineering Workflows (Matt Pocock Skills)
 - **`ask-matt`**: Ask which skill or flow fits your current engineering situation.
