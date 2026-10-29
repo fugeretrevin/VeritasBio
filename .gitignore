@@ -233,3 +233,8 @@ __marimo__/
 # VeritasBio bulk upstream downloads (regenerate with scripts/download_*_benchmark.py).
 # The prepared benchmark CSVs they produce are committed; these raw sources are not.
 scripts/data/TrpB_Johnston_2024_raw.csv
+
+# impeccable — native engine binaries (~20MB each, one per harness).
+# Re-downloaded by `npx impeccable install`; the skill definitions stay tracked.
+.claude/skills/impeccable/scripts/bin/
+.agents/skills/impeccable/scripts/bin/
