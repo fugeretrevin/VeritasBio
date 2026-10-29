@@ -400,7 +400,7 @@ def generate_dual_comparison_viewer_html(
     target_accession: str = "TRPB_TM9D8",
     mutant_positions: Optional[List[int]] = None,
     lead_name: str = "Epistatic Lead Candidate",
-    viewer_id: str = "veritasbio-dual-viewer",
+    viewer_id: str = "panoptesbio-dual-viewer",
     spin: bool = True,
     pdb_path: Optional[Path] = None,
 ) -> str:
@@ -809,7 +809,7 @@ def generate_dual_comparison_viewer_html(
     target_accession: str = "TRPB_TM9D8",
     mutant_positions: Optional[List[int]] = None,
     lead_name: str = "Epistatic Lead Candidate",
-    viewer_id: str = "veritasbio-dual-viewer",
+    viewer_id: str = "panoptesbio-dual-viewer",
     spin: bool = True,
     pdb_path: Optional[Path] = None,
 ) -> str:

@@ -1,5 +1,5 @@
 """
-server.py — FastAPI High-Performance Backend Bridge for PanoptesBio / VeritasBio.
+server.py — FastAPI High-Performance Backend Bridge for PanoptesBio / PanoptesBio.
 
 Exposes REST and streaming APIs for:
   - Ledger & Budget Telemetry (Micro-USD double-entry accounting)
@@ -132,7 +132,7 @@ def get_health() -> Dict[str, Any]:
     fb_cfg = get_firebase_config()
     return {
         "status": "online",
-        "engine": "PanoptesBio / VeritasBio v3.2",
+        "engine": "PanoptesBio / PanoptesBio v3.2",
         "database": "sqlite_immutable_merkle",
         "budget": {
             "total_allocation_usd": budget["total_allocation"] if budget else 5.0,
@@ -449,7 +449,7 @@ def export_wetlab_manifests(
 async def ingest_plate_endpoint(request: Request) -> Dict[str, Any]:
     """
     Ingests physical 96-well / 384-well microplate reader CSV experimental data
-    into the VeritasBio SQLite ledger and Merkle audit trail.
+    into the PanoptesBio SQLite ledger and Merkle audit trail.
     Supports:
       - Multipart form-data with file upload ('file')
       - Form fields ('csv_content', 'target_accession', 'normalize_to_wt', 'auth_token')

@@ -22,9 +22,9 @@ This skill governs the presentation layer (`ui/dashboard.py`, `ui/structure_view
    - Provide dedicated interactive buttons for human sign-offs (e.g., "Approve Lead & Generate Twist Synthesis Order", "Export Opentrons Robot Protocol").
 
 ## Key Files
-- [ui/dashboard.py](file:///c:/Users/stoof/source/repos/VeritasBio/ui/dashboard.py): Main Gradio blocks application with responsive tabs.
-- [ui/structure_viewer.py](file:///c:/Users/stoof/source/repos/VeritasBio/ui/structure_viewer.py): 3Dmol WebGL HTML renderer with custom selection styles.
-- [ui/landscape_plot.py](file:///c:/Users/stoof/source/repos/VeritasBio/ui/landscape_plot.py): Plotly interactive 2D/3D fitness landscape and Pareto frontier plots.
+- [ui/dashboard.py](file:///c:/Users/stoof/source/repos/PanoptesBio/ui/dashboard.py): Main Gradio blocks application with responsive tabs.
+- [ui/structure_viewer.py](file:///c:/Users/stoof/source/repos/PanoptesBio/ui/structure_viewer.py): 3Dmol WebGL HTML renderer with custom selection styles.
+- [ui/landscape_plot.py](file:///c:/Users/stoof/source/repos/PanoptesBio/ui/landscape_plot.py): Plotly interactive 2D/3D fitness landscape and Pareto frontier plots.
 
 ## Verification Checklist
 ```powershell

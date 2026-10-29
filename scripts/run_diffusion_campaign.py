@@ -4,7 +4,7 @@ scripts/run_diffusion_campaign.py — Production De Novo Diffusion & Inverse Fol
 Purpose:
     Executes an autonomous, budgeted de novo protein binder generation campaign
     (RFdiffusion backbone sampling + ProteinMPNN sequence inverse folding) under
-    VeritasBio's deterministic fail-closed cloud economics ledger.
+    PanoptesBio's deterministic fail-closed cloud economics ledger.
 
     Generates compact 3-helix bundle mini-protein binders against crystallographic
     target epitopes, conditioned with zero unpaired cysteines and developability checks.
@@ -42,7 +42,7 @@ from workers.diffusion_worker import (
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("veritasbio.diffusion_campaign")
+logger = logging.getLogger("panoptesbio.diffusion_campaign")
 
 
 def run_campaign(
@@ -84,7 +84,7 @@ def run_campaign(
         hotspots = [65, 66, 67, 203]
 
     logger.info("=" * 75)
-    logger.info("VERITASBIO BUDGETED DE NOVO DIFFUSION & INVERSE FOLDING ENGINE")
+    logger.info("PANOPTESBIO BUDGETED DE NOVO DIFFUSION & INVERSE FOLDING ENGINE")
     logger.info("Target: %s (PDB: %s)", target_name, target_pdb)
     logger.info("Backbone Architecture: 3-Helix Bundle (L=%d)", binder_length)
     logger.info("Designs Requested: %d | Budget Allocated: $%.4f", num_designs, budget_usd)
@@ -157,7 +157,7 @@ def run_campaign(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="VeritasBio De Novo Binder Diffusion Campaign")
+    parser = argparse.ArgumentParser(description="PanoptesBio De Novo Binder Diffusion Campaign")
     parser.add_argument("--target", default="2YBR", help="Target PDB accession or file (default: 2YBR)")
     parser.add_argument("--designs", type=int, default=5, help="Number of binder backbones (default: 5)")
     parser.add_argument("--length", type=int, default=65, help="Binder sequence length (default: 65)")

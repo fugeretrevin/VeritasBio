@@ -1,6 +1,6 @@
 # Issue Tracker Configuration
 
 - **Tracker Type**: GitHub Issues (`gh issue`)
-- **Repository**: `fugeretrevin/VeritasBio`
+- **Repository**: `fugeretrevin/PanoptesBio`
 - **External PR Triage**: Off
 

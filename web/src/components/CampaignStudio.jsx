@@ -449,7 +449,7 @@ export default function CampaignStudio({ onRefreshLedger }) {
               {plateUploading ? 'Ingesting microplate data...' : 'Drop plate reader CSV here'}
             </div>
             <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-              Supports Tecan, BioTek, and VeritasBio robotic CSV exports
+              Supports Tecan, BioTek, and PanoptesBio robotic CSV exports
             </div>
           </div>
 

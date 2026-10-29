@@ -1,13 +1,13 @@
 # Opentrons OT-2 Automated Mutagenesis Assembly Protocol
-# Generated automatically by VeritasBio Wet-Lab Translator on 2026-10-28T23:40:59.763871+00:00
+# Generated automatically by PanoptesBio Wet-Lab Translator on 2026-10-28T23:40:59.763871+00:00
 # Target: Centruroides noxius Cn2 Scorpion Neurotoxin Variant Library (96-well format)
 # Anti-Edge Evaporation Barrier: True
 
 from opentrons import protocol_api
 
 metadata = {
-    "protocolName": "VeritasBio High-Throughput Mutagenesis Assembly",
-    "author": "VeritasBio Robotics Engine",
+    "protocolName": "PanoptesBio High-Throughput Mutagenesis Assembly",
+    "author": "PanoptesBio Robotics Engine",
     "description": "Automated distribution of evaporation barriers, Gibson master mix, and mutant primers.",
     "apiLevel": "2.14"
 }
@@ -68,7 +68,7 @@ def run(protocol: protocol_api.ProtocolContext):
     "H9"
 ]
 
-    protocol.comment(f"Starting VeritasBio automated assembly for {len(variants)} variants...")
+    protocol.comment(f"Starting PanoptesBio automated assembly for {len(variants)} variants...")
 
     # Step 1: Dispense 200 uL sterile water/buffer evaporation barriers to eliminate edge effects
     barrier_reservoir_well = reagent_reservoir.wells()[1]

@@ -5,7 +5,7 @@ Provides:
   1. AuthenticatedUser data model with Organization Tenancy & RBAC roles.
   2. Firebase ID Token verification via firebase-admin SDK (with high-fidelity deterministic offline/mock mode).
   3. FDA 21 CFR Part 11 Electronic Signature creation (HMAC-SHA256 dual-component binding).
-  4. Integration with VeritasBio double-entry ledger & gatekeeper spend authorization.
+  4. Integration with PanoptesBio double-entry ledger & gatekeeper spend authorization.
 """
 
 from __future__ import annotations

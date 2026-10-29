@@ -8,7 +8,7 @@ description: >-
 
 # Quant Engine Development Skill
 
-This skill governs the mathematical and statistical engine of VeritasBio (`workers/math_worker.py`).
+This skill governs the mathematical and statistical engine of PanoptesBio (`workers/math_worker.py`).
 
 ## Core Invariants
 1. **Separation of Concerns:**

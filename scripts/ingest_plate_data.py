@@ -3,11 +3,11 @@ scripts/ingest_plate_data.py — Asynchronous Wet-Lab Plate Reader Data Ingestio
 
 Purpose:
     Ingests physical 96-well and 384-well microplate reader experimental data (fluorescence,
-    absorbance, luminescence, or binding Kd) into the VeritasBio SQLite ledger.
+    absorbance, luminescence, or binding Kd) into the PanoptesBio SQLite ledger.
     Connects offline physical biology to the online active learning engine.
 
 Workflow:
-    1. Parses robotic plate reader CSV (VeritasBio anti-evaporation layout or generic plate reader export).
+    1. Parses robotic plate reader CSV (PanoptesBio anti-evaporation layout or generic plate reader export).
     2. Filters out perimeter hydration barriers, media blanks, and negative controls.
     3. Normalizes candidate signals against the Wild-Type reference parent well (B2).
     4. Applies fail-closed ledger authorization: `ledger_db.authorize_spend(...)`.
@@ -43,7 +43,7 @@ def parse_plate_csv(
     normalize_to_wt: bool = True,
 ) -> Dict[str, Any]:
     """
-    Parses plate reader CSV files or raw CSV text. Supports VeritasBio robotic layout and generic plate reader exports.
+    Parses plate reader CSV files or raw CSV text. Supports PanoptesBio robotic layout and generic plate reader exports.
     """
     close_stream = False
     if isinstance(csv_path, io.StringIO):
@@ -275,7 +275,7 @@ def ingest_plate_csv(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="VeritasBio Wet-Lab Plate Reader Data Ingestion CLI")
+    parser = argparse.ArgumentParser(description="PanoptesBio Wet-Lab Plate Reader Data Ingestion CLI")
     parser.add_argument("--plate-csv", type=str, required=True, help="Path to plate reader CSV")
     parser.add_argument("--db-path", type=str, default=None, help="Path to SQLite ledger database")
     parser.add_argument("--target-accession", type=str, default="P42212", help="UniProt accession (P42212, TRPB_TM9D8)")
@@ -291,7 +291,7 @@ def main() -> None:
     )
 
     print("=" * 60)
-    print("VERITASBIO WET-LAB PLATE DATA INGESTION SUCCESS")
+    print("PANOPTESBIO WET-LAB PLATE DATA INGESTION SUCCESS")
     print("=" * 60)
     print(f"Job ID:                 {result['job_id']}")
     print(f"Target Protein:         {result['target_protein']} ({result['target_accession']})")

@@ -2,7 +2,7 @@
 ui/dashboard.py — Enterprise Real-Time Telemetry & Economics Dashboard.
 
 Purpose:
-    Enterprise Gradio frontend for VeritasBio.
+    Enterprise Gradio frontend for PanoptesBio.
     Provides non-blocking telemetry monitoring, budget controls, live audit trails,
     interactive 3D molecular visualization (3Dmol.js), interactive latent fitness landscape (Plotly),
     and one-click wet-lab synthesis & robotics protocol generation (Twist/IDT/Opentrons).
@@ -342,7 +342,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
     }
     """
 
-    with gr.Blocks(title="VeritasBio — Cloud Economics Engine") as demo:
+    with gr.Blocks(title="PanoptesBio — Cloud Economics Engine") as demo:
         demo.custom_css = custom_css
 
         # Header Row
@@ -351,7 +351,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 gr.HTML("""
                 <div>
                     <div style="display:flex; align-items:center; gap:12px; margin-bottom:4px; flex-wrap:wrap;">
-                        <h1 class="brand-title" style="margin:0;">VERITAS<span style="color:#0284c7;">BIO</span></h1>
+                        <h1 class="brand-title" style="margin:0;">PANOPTES<span style="color:#0284c7;">BIO</span></h1>
                         <span style="background:rgba(2,132,199,0.18); border:1px solid #0284c7; color:#38bdf8; font-size:11px; font-weight:700; padding:3px 8px; border-radius:12px; text-transform:uppercase; letter-spacing:0.5px;">PanoptesBio Cloud Engine</span>
                         <span style="background:rgba(16,185,129,0.18); border:1px solid #10b981; color:#34d399; font-size:11px; font-weight:600; padding:3px 8px; border-radius:12px;">● Firebase Auth: panoptesbio.firebaseapp.com</span>
                     </div>
@@ -490,7 +490,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                             <span class="terminal-dot" style="background:#ef4444;"></span>
                             <span class="terminal-dot" style="background:#f59e0b;"></span>
                             <span class="terminal-dot" style="background:#10b981;"></span>
-                            <span class="terminal-title">veritasbio-kernel :: live-event-stream.log</span>
+                            <span class="terminal-title">panoptesbio-kernel :: live-event-stream.log</span>
                         </div>
                     </div>
                     """)
@@ -950,11 +950,11 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             )
             client = BenchlingClient()
             manifest_csv = client.export_lims_manifest(
-                plate_name=f"VeritasBio_{eff_acc}_Plate1",
+                plate_name=f"PanoptesBio_{eff_acc}_Plate1",
                 plate_map=layout,
             )
             plate_res = client.create_virtual_plate(
-                plate_name=f"VeritasBio_{eff_acc}_Plate1",
+                plate_name=f"PanoptesBio_{eff_acc}_Plate1",
                 plate_format=DEFAULT_PLATE_FORMAT,
                 plate_map=layout,
                 db_path=db_path,

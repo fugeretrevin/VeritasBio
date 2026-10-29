@@ -223,18 +223,18 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# VeritasBio local SQLite ledger
+# PanoptesBio local SQLite ledger
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
 
-# VeritasBio environment secrets
+# PanoptesBio environment secrets
 .env
 .env.*
 !.env.example
 
-# VeritasBio bulk upstream downloads (regenerate with scripts/download_*_benchmark.py).
+# PanoptesBio bulk upstream downloads (regenerate with scripts/download_*_benchmark.py).
 # The prepared benchmark CSVs they produce are committed; these raw sources are not.
 scripts/data/TrpB_Johnston_2024_raw.csv
 

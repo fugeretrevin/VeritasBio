@@ -1,5 +1,5 @@
 """
-tests/test_server_api.py — Unit Tests for PanoptesBio / VeritasBio FastAPI Backend.
+tests/test_server_api.py — Unit Tests for PanoptesBio / PanoptesBio FastAPI Backend.
 
 Verifies:
     1. /api/health returns online status and budget allocation telemetry.

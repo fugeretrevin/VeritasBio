@@ -3,7 +3,7 @@ workers/diffusion_worker.py — DOMAIN: Science & Math Tools (Pillar 5: Cloud Mu
 
 Purpose:
     Autonomous, budgeted de novo protein binder generator combining RFdiffusion 3D backbone
-    sampling and ProteinMPNN sequence inverse folding under VeritasBio's fail-closed cloud economics ledger.
+    sampling and ProteinMPNN sequence inverse folding under PanoptesBio's fail-closed cloud economics ledger.
 
     Solves the fundamental flaws of static compute brokers (like Tamarind Bio):
       1. Deterministic Budget Gate: Every diffusion trajectory must be authorized by
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 try:
     import modal
 
-    diffusion_app = modal.App("veritasbio-diffusion")
+    diffusion_app = modal.App("panoptesbio-diffusion")
 except ImportError:
     modal = None
     diffusion_app = None
@@ -275,7 +275,7 @@ class GeometricBackboneSampler:
 
         # Format PDB string
         pdb_lines = [
-            f"REMARK 250 VERITASBIO DE NOVO BINDER DESIGN {design_idx:03d}",
+            f"REMARK 250 PANOPTESBIO DE NOVO BINDER DESIGN {design_idx:03d}",
             f"REMARK 250 ARCHITECTURE: 3-HELIX BUNDLE (L={len(all_ca)})",
             f"REMARK 250 RADIUS OF GYRATION: {rg:.2f} ANGSTROMS",
         ]
@@ -422,7 +422,7 @@ def generate_budgeted_de_novo_binders(
     """
     Main entry point for budgeted de novo protein binder design.
 
-    Enforces VeritasBio's cloud economics invariants:
+    Enforces PanoptesBio's cloud economics invariants:
       1. Gatekeeper spend authorization check (`authorize_spend`) BEFORE any compute.
       2. Generates 3D backbones and inverse-folded sequences.
       3. Screens through biologics developability liabilities.

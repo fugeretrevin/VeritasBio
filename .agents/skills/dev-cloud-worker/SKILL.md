@@ -23,10 +23,10 @@ This skill governs the development of high-throughput computational biology work
    - Enforce zero unpaired cysteines on de novo designs.
 
 ## File Manifest
-- [workers/esm_worker.py](file:///c:/Users/stoof/source/repos/VeritasBio/workers/esm_worker.py): ESM-2 650M / 150M zero-shot masked marginal scoring.
-- [workers/diffusion_worker.py](file:///c:/Users/stoof/source/repos/VeritasBio/workers/diffusion_worker.py): De novo 3-helix bundle geometric backbone generator & ProteinMPNN inverse folding.
-- [workers/mock_workers.py](file:///c:/Users/stoof/source/repos/VeritasBio/workers/mock_workers.py): High-fidelity biological landscape simulators with non-linear epistasis.
-- [workers/spatial_filter.py](file:///c:/Users/stoof/source/repos/VeritasBio/workers/spatial_filter.py): 3D PDB coordinate extractor and contact sphere calculator.
+- [workers/esm_worker.py](file:///c:/Users/stoof/source/repos/PanoptesBio/workers/esm_worker.py): ESM-2 650M / 150M zero-shot masked marginal scoring.
+- [workers/diffusion_worker.py](file:///c:/Users/stoof/source/repos/PanoptesBio/workers/diffusion_worker.py): De novo 3-helix bundle geometric backbone generator & ProteinMPNN inverse folding.
+- [workers/mock_workers.py](file:///c:/Users/stoof/source/repos/PanoptesBio/workers/mock_workers.py): High-fidelity biological landscape simulators with non-linear epistasis.
+- [workers/spatial_filter.py](file:///c:/Users/stoof/source/repos/PanoptesBio/workers/spatial_filter.py): 3D PDB coordinate extractor and contact sphere calculator.
 
 ## Verification Checklist
 ```powershell

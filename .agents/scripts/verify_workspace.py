@@ -1,5 +1,5 @@
 """
-.agents/scripts/verify_workspace.py — Master Automated Verification Harness for VeritasBio.
+.agents/scripts/verify_workspace.py — Master Automated Verification Harness for PanoptesBio.
 
 Executes comprehensive verification gates across:
   1. Git working tree inspection (uncommitted changes and modified files).
@@ -112,12 +112,12 @@ def check_git_status() -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="VeritasBio Workspace Verification Harness")
+    parser = argparse.ArgumentParser(description="PanoptesBio Workspace Verification Harness")
     parser.add_argument("--fast", action="store_true", help="Run fast core test subset instead of full discovery")
     args = parser.parse_args()
 
     print("=" * 60)
-    print("VERITASBIO DEVELOPMENT AGENT VERIFICATION HARNESS")
+    print("PANOPTESBIO DEVELOPMENT AGENT VERIFICATION HARNESS")
     print("=" * 60)
 
     g1 = check_grounding_files()

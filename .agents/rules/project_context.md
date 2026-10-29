@@ -1,9 +1,9 @@
 ---
 trigger: always_on
-description: VeritasBio project memory — confirmed scope decisions, deviations from ARCHITECTURE.md, invariants, and build status. Read before any change.
+description: PanoptesBio project memory — confirmed scope decisions, deviations from ARCHITECTURE.md, invariants, and build status. Read before any change.
 ---
 
-# VeritasBio — Project Context (agent memory)
+# PanoptesBio — Project Context (agent memory)
 
 > Source of truth: `ARCHITECTURE.md` (v3.1, synced with D1–D8 on 2026-10-26). This file
 > records **decisions made with the user**. If the two ever conflict, the decision log

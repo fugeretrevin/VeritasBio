@@ -1,6 +1,6 @@
-# VeritasBio — Agent Instructions & Skills
+# PanoptesBio — Agent Instructions & Skills
 
-This repository uses automated AI agent engineering skills based on [Matt Pocock's Skills](https://github.com/mattpocock/skills) alongside domain-specific VeritasBio active learning and biophysics skills.
+This repository uses automated AI agent engineering skills based on [Matt Pocock's Skills](https://github.com/mattpocock/skills) alongside domain-specific PanoptesBio active learning and biophysics skills.
 
 ## Agent Skills Configuration
 
@@ -53,7 +53,7 @@ You do not need the user to type slash commands. Recognize conversational intent
 - **`teach`**: Educational explanations and walkthroughs.
 - **`wait-what`**: Sanity checks assumptions when a plan feels confusing or counterintuitive.
 
-### VeritasBio Domain Skills
+### PanoptesBio Domain Skills
 - **`dev-orchestrator`**: Coordinates 6-step active learning and multi-track tasks.
 - **`dev-quant-engine`**: Gaussian Process, DKL, GFlowNet, and Bayesian optimization.
 - **`dev-cloud-worker`**: Modal A10G ESM-2 inference and mock protein evolution workers.

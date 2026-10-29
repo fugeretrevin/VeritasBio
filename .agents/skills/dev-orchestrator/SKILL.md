@@ -1,14 +1,14 @@
 ---
 name: dev-orchestrator
 description: >-
-  Use this skill to orchestrate complex feature developments across VeritasBio.
+  Use this skill to orchestrate complex feature developments across PanoptesBio.
   It decomposes user requests into non-overlapping parallel tracks, coordinates subagents,
   runs automated verification gates, and synthesizes approval summaries for the user.
 ---
 
 # Development Orchestrator Skill
 
-The **Development Orchestrator** is the meta-level coordinator for VeritasBio engineering tasks. It enforces modularity, grounding, parallel development, and human approval gates.
+The **Development Orchestrator** is the meta-level coordinator for PanoptesBio engineering tasks. It enforces modularity, grounding, parallel development, and human approval gates.
 
 ## Step-by-Step Orchestration Workflow
 
@@ -21,7 +21,7 @@ Analyze the user request and divide the implementation across the 4 orthogonal d
 
 ### Step 2: Establish the Interface Contract First
 Before modifying backend logic or writing UI:
-1. Verify existing schemas in [gatekeeper.py](file:///c:/Users/stoof/source/repos/VeritasBio/controller/gatekeeper.py).
+1. Verify existing schemas in [gatekeeper.py](file:///c:/Users/stoof/source/repos/PanoptesBio/controller/gatekeeper.py).
 2. If new endpoints or target models are needed, add them to `ALLOWED_TARGET_MODELS` and define strongly typed Pydantic models with field validators.
 
 ### Step 3: Execute Disjoint Tasks
