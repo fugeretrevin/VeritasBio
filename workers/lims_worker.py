@@ -2,7 +2,7 @@
 workers/lims_worker.py — Enterprise Benchling LIMS Integration & Virtual Plate Synchronization.
 
 Purpose:
-    Provides automated bidirectional synchronization between VeritasBio's in silico active
+    Provides automated bidirectional synchronization between PanoptesBio's in silico active
     learning loop and Laboratory Information Management Systems (LIMS), primarily Benchling.
     
     Capabilities:
@@ -13,7 +13,7 @@ Purpose:
     3. Bulk Manifest Export: Generates Benchling-compliant Bulk Import CSV/JSON datasets ready
        for direct drag-and-drop or headless ingestion.
     4. Regulatory Audit Proof: Links every LIMS synchronization event to an immutable FDA 21 CFR
-       Part 11 cryptographic block in the VeritasBio ledger.
+       Part 11 cryptographic block in the PanoptesBio ledger.
     5. Dual-Mode Architecture: Live mode connects to Benchling v2 REST API when credentials are
        present; Mock mode provides full-fidelity emulation with zero network dependencies.
 """
@@ -61,7 +61,7 @@ class BenchlingClient:
         mock_mode: Optional[bool] = None,
     ) -> None:
         self.api_key: Optional[str] = api_key or os.environ.get("BENCHLING_API_KEY")
-        self.tenant: str = tenant or os.environ.get("BENCHLING_TENANT", "veritasbio")
+        self.tenant: str = tenant or os.environ.get("BENCHLING_TENANT", "panoptesbio")
         self.default_folder_id: str = default_folder_id or os.environ.get(
             "BENCHLING_FOLDER_ID", "fld_veritasbio_candidate_leads"
         )

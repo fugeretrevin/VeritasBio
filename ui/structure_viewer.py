@@ -111,7 +111,7 @@ def load_pdb_content(pdb_path: Optional[Path] = None) -> str:
 
 def generate_3d_viewer_html(
     active_mutations: Optional[List[int]] = None,
-    viewer_id: str = "veritasbio-mol-viewer",
+    viewer_id: str = "panoptesbio-mol-viewer",
     spin: bool = True,
     target_accession: str = "P42212",
     pdb_path: Optional[Path] = None,

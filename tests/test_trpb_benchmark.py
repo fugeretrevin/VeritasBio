@@ -84,7 +84,7 @@ class TestTrpBParentMetadata(unittest.TestCase):
     def test_parent_record_is_labelled_as_derived(self):
         """The offline cache must declare its provenance rather than pose as a UniProt entry."""
         record = json.loads(PARENT_CACHE_JSON.read_text(encoding="utf-8"))
-        prov = record["veritasbio_provenance"]
+        prov = record["panoptesbio_provenance"]
         self.assertIn("derived", prov["record_type"])
         self.assertEqual(len(prov["substitutions_vs_uniprot_wild_type"]), EXPECTED_PARENT_SUBSTITUTIONS)
         self.assertEqual(prov["active_site_positions"], ACTIVE_SITE_POSITIONS)

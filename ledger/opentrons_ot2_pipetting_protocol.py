@@ -1,12 +1,12 @@
 # Opentrons OT-2 Automated Mutagenesis Assembly Protocol
-# Generated automatically by VeritasBio Wet-Lab Translator on 2026-10-27T17:16:49.013569+00:00
+# Generated automatically by PanoptesBio Wet-Lab Translator on 2026-10-27T17:16:49.013569+00:00
 # Target: Aequorea victoria GFP Variant Library (96-well format)
 
 from opentrons import protocol_api
 
 metadata = {
-    "protocolName": "VeritasBio High-Throughput Mutagenesis Assembly",
-    "author": "VeritasBio Robotics Engine",
+    "protocolName": "PanoptesBio High-Throughput Mutagenesis Assembly",
+    "author": "PanoptesBio Robotics Engine",
     "description": "Automated distribution of Gibson master mix, mutant primers, and linear template.",
     "apiLevel": "2.14"
 }
@@ -36,7 +36,7 @@ def run(protocol: protocol_api.ProtocolContext):
     "GFP_Y66A:A206L"
 ]
 
-    protocol.comment(f"Starting VeritasBio automated assembly for {len(variants)} variants...")
+    protocol.comment(f"Starting PanoptesBio automated assembly for {len(variants)} variants...")
 
     # Step 1: Distribute 10 uL 2X Gibson Assembly Master Mix to all active wells
     master_mix_well = reagent_reservoir.wells()[0]

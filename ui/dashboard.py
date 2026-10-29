@@ -2,7 +2,7 @@
 ui/dashboard.py — Enterprise Real-Time Telemetry & Economics Dashboard.
 
 Purpose:
-    Enterprise Gradio frontend for VeritasBio.
+    Enterprise Gradio frontend for PanoptesBio.
     Provides non-blocking telemetry monitoring, budget controls, live audit trails,
     interactive 3D molecular visualization (3Dmol.js), interactive latent fitness landscape (Plotly),
     and one-click wet-lab synthesis & robotics protocol generation (Twist/IDT/Opentrons).
@@ -331,7 +331,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
     }
     """
 
-    with gr.Blocks(title="VeritasBio — Cloud Economics Engine") as demo:
+    with gr.Blocks(title="PanoptesBio — Cloud Economics Engine") as demo:
         demo.custom_css = custom_css
 
         # Header Row
@@ -339,7 +339,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             with gr.Column(scale=8):
                 gr.HTML("""
                 <div>
-                    <h1 class="brand-title">VERITAS<span style="color:#0284c7;">BIO</span></h1>
+                    <h1 class="brand-title">PANOPTES<span style="color:#0284c7;">BIO</span></h1>
                     <p class="brand-subtitle">Deterministic Cloud Economics Engine for Computational Biology & Autonomous Protein Evolution</p>
                 </div>
                 """)
@@ -475,7 +475,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                             <span class="terminal-dot" style="background:#ef4444;"></span>
                             <span class="terminal-dot" style="background:#f59e0b;"></span>
                             <span class="terminal-dot" style="background:#10b981;"></span>
-                            <span class="terminal-title">veritasbio-kernel :: live-event-stream.log</span>
+                            <span class="terminal-title">panoptesbio-kernel :: live-event-stream.log</span>
                         </div>
                     </div>
                     """)
@@ -796,11 +796,11 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
             )
             client = BenchlingClient()
             manifest_csv = client.export_lims_manifest(
-                plate_name=f"VeritasBio_{eff_acc}_Plate1",
+                plate_name=f"PanoptesBio_{eff_acc}_Plate1",
                 plate_map=layout,
             )
             plate_res = client.create_virtual_plate(
-                plate_name=f"VeritasBio_{eff_acc}_Plate1",
+                plate_name=f"PanoptesBio_{eff_acc}_Plate1",
                 plate_format=DEFAULT_PLATE_FORMAT,
                 plate_map=layout,
                 db_path=db_path,

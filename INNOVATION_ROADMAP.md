@@ -1,8 +1,8 @@
-# VeritasBio — Innovation Roadmap & Gap Resolution Plan
+# PanoptesBio — Innovation Roadmap & Gap Resolution Plan
 
 **Status:** Active Execution  
 **Target:** Meta Global AI Developer Hackathon & B2B Cloud Economics Engine  
-**Companion Documents:** [ARCHITECTURE.md](file:///c:/Users/stoof/source/repos/VeritasBio/ARCHITECTURE.md), [.agents/rules/project_context.md](file:///c:/Users/stoof/source/repos/VeritasBio/.agents/rules/project_context.md)
+**Companion Documents:** [ARCHITECTURE.md](file:///c:/Users/stoof/source/repos/PanoptesBio/ARCHITECTURE.md), [.agents/rules/project_context.md](file:///c:/Users/stoof/source/repos/PanoptesBio/.agents/rules/project_context.md)
 
 ---
 
@@ -12,8 +12,8 @@ Most AI biology projects make one of two mistakes:
 1. **The Brute-Force Money Pit:** Running thousands of variants through large models indiscriminately, burning enterprise cloud budgets.
 2. **The "LLM-as-Scientist" Toy:** Asking a chatbot to hallucinate mutations, which fails basic thermodynamic reality.
 
-**VeritasBio's Competitive Edge:**  
-We treat cloud compute as a scarce financial asset. VeritasBio pairs biological priors (UniProt RAG) with Bayesian active learning (Gaussian Process Expected Improvement) and enforces a strict, deterministic financial Gatekeeper. 
+**PanoptesBio's Competitive Edge:**  
+We treat cloud compute as a scarce financial asset. PanoptesBio pairs biological priors (UniProt RAG) with Bayesian active learning (Gaussian Process Expected Improvement) and enforces a strict, deterministic financial Gatekeeper. 
 
 This roadmap outlines the **5 foundational gaps** identified in early architectural review and tracks the concrete tasks to turn each gap into a breakthrough capability.
 
@@ -116,8 +116,8 @@ This roadmap outlines the **5 foundational gaps** identified in early architectu
 - [x] **TASK-6.2: Benchmark Metrics Engine** (`scripts/evaluate.py`)
   - Compute:
     1. **Spearman Rank Correlation** vs. ground truth.
-    2. **Cost-to-Top-Decile**: Total USD spent by VeritasBio to locate top 5% brightest variants vs. brute-force random screening.
-    3. **Cloud Efficiency Multiple**: $\frac{\text{Brute Force Cost}}{\text{VeritasBio Cost}}$ (target: $4\times$ to $10\times$ efficiency).
+    2. **Cost-to-Top-Decile**: Total USD spent by PanoptesBio to locate top 5% brightest variants vs. brute-force random screening.
+    3. **Cloud Efficiency Multiple**: $\frac{\text{Brute Force Cost}}{\text{PanoptesBio Cost}}$ (target: $4\times$ to $10\times$ efficiency).
 
 ---
 
@@ -158,5 +158,5 @@ Moving from a cloud FinOps tool to an autonomous operating system for physical s
 - **Planetary Bioremediation**: Autonomous directed evolution of thermostable plastic-degrading enzymes (PETase, nylonase) and high-efficiency carbon-scrubbing biocatalysts.
 
 ### Pillar 4: Programmable Capital Allocation for Science
-- **Algorithmic Milestone-Gated Grants**: Escrow research funding in smart-contract ledgers where capital is unlocked in micro-cent increments only as VeritasBio mathematically and cryptographically (SHA-256) proves affinity and stability milestones, resolving the scientific reproducibility crisis.
+- **Algorithmic Milestone-Gated Grants**: Escrow research funding in smart-contract ledgers where capital is unlocked in micro-cent increments only as PanoptesBio mathematically and cryptographically (SHA-256) proves affinity and stability milestones, resolving the scientific reproducibility crisis.
 

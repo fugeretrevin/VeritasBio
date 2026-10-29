@@ -202,7 +202,9 @@ def parse_uniprot_response(raw_data: Dict[str, Any]) -> ProteinMetadata:
             functional_features.append(annot)
 
     # Ingest provenance active sites for derived datasets (e.g. TrpB parent Tm9D8*)
-    prov = raw_data.get("veritasbio_provenance", {})
+    prov = raw_data.get("panoptesbio_provenance") or raw_data.get(
+        "veritasbio_provenance", {}
+    )
     if prov.get("active_site_positions"):
         for p in prov["active_site_positions"]:
             if p not in binding_positions:
@@ -289,7 +291,7 @@ def fetch_protein_metadata(
     try:
         req = urllib.request.Request(
             url,
-            headers={"User-Agent": "VeritasBio-CloudEconomicsEngine/3.1 (contact@veritasbio.ai)"},
+            headers={"User-Agent": "PanoptesBio-CloudEconomicsEngine/3.1 (contact@panoptesbio.ai)"},
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))

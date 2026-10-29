@@ -46,7 +46,7 @@ def download_proteingym_gfp(dest: Path = OUTPUT_CSV, force: bool = False) -> Pat
 
     req = urllib.request.Request(
         PROTEINGYM_URL,
-        headers={"User-Agent": "VeritasBio/1.0 (Computational Biology Benchmark)"},
+        headers={"User-Agent": "PanoptesBio/1.0 (Computational Biology Benchmark)"},
     )
 
     with urllib.request.urlopen(req, timeout=60.0) as resp, open(dest, "wb") as f:

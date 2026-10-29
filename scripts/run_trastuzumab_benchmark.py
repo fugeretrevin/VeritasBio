@@ -2,7 +2,7 @@
 scripts/run_trastuzumab_benchmark.py — Real-World Active Learning Benchmark on Trastuzumab (Herceptin) CDR-H3.
 
 Purpose:
-    Benchmarks VeritasBio's active-learning engine on the 36,391 empirical antibody
+    Benchmarks PanoptesBio's active-learning engine on the 36,391 empirical antibody
     variants from the deep mutational scanning of Trastuzumab (Herceptin) Fab CDR-H3
     (Mason et al. 2021, Nature Biomedical Engineering).
 
@@ -50,7 +50,7 @@ from workers.rag_worker import fetch_protein_metadata
 from workers.spatial_filter import SpatialContactMap
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("veritasbio.trastuzumab_benchmark")
+logger = logging.getLogger("panoptesbio.trastuzumab_benchmark")
 
 DATA_CSV = ROOT_DIR / "scripts" / "data" / "HER2_TRASTUZUMAB_Mason_2021.csv"
 PARENT_ACCESSION = "HER2_TRASTUZUMAB"

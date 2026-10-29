@@ -38,7 +38,7 @@ from workers.wetlab_worker import (
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("veritasbio.dollar_experiment")
+logger = logging.getLogger("panoptesbio.dollar_experiment")
 
 
 import argparse
@@ -66,7 +66,7 @@ def run_dollar_experiment(
     ledger_db.init_db(db_file)
 
     print("\n" + "=" * 70)
-    print(" VERITASBIO FULL 7-LAYER LIVE PRODUCTION EXPERIMENT ($1.00 BUDGET)")
+    print(" PANOPTESBIO FULL 7-LAYER LIVE PRODUCTION EXPERIMENT ($1.00 BUDGET)")
     print("=" * 70)
     print(f"Target Protein:           {meta.protein_name} ({target_accession})")
     print(f"Total Budget:             ${budget_usd:.2f} USD")
@@ -181,7 +181,7 @@ def run_dollar_experiment(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run full live 7-layer VeritasBio production experiment")
+    parser = argparse.ArgumentParser(description="Run full live 7-layer PanoptesBio production experiment")
     parser.add_argument("--target", type=str, default="TRPB_TM9D8", help="Target UniProt accession (e.g. TRPB_TM9D8 or P42212)")
     parser.add_argument("--budget", type=float, default=1.00, help="Total USD budget allocation (default: 1.00)")
     parser.add_argument("--rounds", type=int, default=4, help="Maximum active learning rounds (default: 4)")

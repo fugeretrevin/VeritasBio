@@ -2,7 +2,7 @@
 scripts/run_real_data_benchmark.py — Real-World Active Learning Benchmark on Authentic ProteinGym Data.
 
 Purpose:
-    Benchmarks VeritasBio's active-learning loop directly on the 51,714 empirical
+    Benchmarks PanoptesBio's active-learning loop directly on the 51,714 empirical
     FACS-seq variant measurements from Sarkisyan et al. (2016) Nature avGFP assay.
 
     Simulates the laboratory closed loop:
@@ -42,7 +42,7 @@ from workers.math_worker import (
 from workers.rag_worker import fetch_protein_metadata
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("veritasbio.real_benchmark")
+logger = logging.getLogger("panoptesbio.real_benchmark")
 
 DATA_CSV = ROOT_DIR / "scripts" / "data" / "GFP_AEQVI_Sarkisyan_2016.csv"
 

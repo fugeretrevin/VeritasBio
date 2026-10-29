@@ -46,7 +46,7 @@ from workers.wetlab_worker import (
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("veritasbio.e2e_production")
+logger = logging.getLogger("panoptesbio.e2e_production")
 
 TARGETS = [
     {
@@ -177,7 +177,7 @@ def run_target_e2e(
     try:
         b_client = BenchlingClient()
         if top_5_evidence:
-            manifest = b_client.export_lims_manifest(f"VeritasBio_{acc}_Plate", plate_layout if "plate_layout" in locals() else {})
+            manifest = b_client.export_lims_manifest(f"PanoptesBio_{acc}_Plate", plate_layout if "plate_layout" in locals() else {})
             benchling_synced = bool(manifest and len(manifest) > 20)
     except Exception:
         benchling_synced = False
@@ -212,7 +212,7 @@ def run_target_e2e(
 
 def main() -> None:
     print("\n" + "=" * 100)
-    print("VERITASBIO FULL END-TO-END LIVE DEMO & PRODUCTION BENCHMARK")
+    print("PANOPTESBIO FULL END-TO-END LIVE DEMO & PRODUCTION BENCHMARK")
     print("Execution Modality: Live Meta Llama API (Step 2) + Live Modal Cloud A10G GPU (Step 5)")
     print("Ledger Budget: $0.50 per dataset | Targets: 4 Distinct Empirical Biology Datasets")
     print("=" * 100 + "\n")

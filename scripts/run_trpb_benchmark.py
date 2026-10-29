@@ -2,7 +2,7 @@
 scripts/run_trpb_benchmark.py — Real-World Active Learning Benchmark on the TrpB Fitness Landscape.
 
 Purpose:
-    Benchmarks VeritasBio's active-learning loop against the 159,999 empirical variant
+    Benchmarks PanoptesBio's active-learning loop against the 159,999 empirical variant
     measurements from the combinatorially complete TrpB active-site landscape
     (Johnston, Iqbal et al. 2024).
 
@@ -54,7 +54,7 @@ from workers.rag_worker import fetch_protein_metadata
 from workers.spatial_filter import SpatialContactMap
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("veritasbio.trpb_benchmark")
+logger = logging.getLogger("panoptesbio.trpb_benchmark")
 
 DATA_CSV = ROOT_DIR / "scripts" / "data" / "TRPB_THEMA_Johnston_2024.csv"
 PARENT_ACCESSION = "TRPB_TM9D8"
@@ -97,7 +97,10 @@ def load_parent_fitness(path: Path = PARENT_METADATA_JSON) -> float:
     Used only to centre the GP targets; it is never substituted for a measurement.
     """
     record = json.loads(path.read_text(encoding="utf-8"))
-    return float(record["veritasbio_provenance"]["parent_measured_fitness"])
+    # "veritasbio_provenance" is the pre-rename key; files generated before the
+    # rename are still valid benchmarks and must keep loading.
+    prov = record.get("panoptesbio_provenance") or record["veritasbio_provenance"]
+    return float(prov["parent_measured_fitness"])
 
 
 def run_trpb_active_learning(
@@ -398,7 +401,7 @@ def run_comparative_benchmark(
 ) -> Dict[str, Any]:
     """
     Head-to-head empirical comparison across 5 real-world paradigms on the TrpB landscape (Johnston 2024):
-      1. VeritasBio: 3D C-alpha Contact DKL + k-DPP Diversity + Structural Prior + Regret Early Stopping
+      1. PanoptesBio: 3D C-alpha Contact DKL + k-DPP Diversity + Structural Prior + Regret Early Stopping
       2. Greedy BO: Standard Sequence GP + Greedy Argmax Expected Improvement (BoTorch / Scikit-Optimize)
       3. One-Hot Ridge: Standard Sequence ML (Ridge alpha=1.0) on 80D mutational encoding
       4. Zero-Shot Foundation Ranking: Structural/ESM-2 proxy prior ranking with no active learning
@@ -457,7 +460,7 @@ def run_comparative_benchmark(
         return vec
     pool_onehot = np.array([get_onehot(c[2]) for c in candidate_pool])
 
-    # 1. VERITASBIO (3D DKL + k-DPP Diversity + Prior)
+    # 1. PANOPTESBIO (3D DKL + k-DPP Diversity + Prior)
     vb_eval = rng.sample(range(len(candidate_pool)), min(batch_size, len(candidate_pool)))
     vb_gp = build_gp_model(random_state=seed if seed is not None else 42)
     for _ in range(1, rounds):
@@ -548,7 +551,7 @@ def run_comparative_benchmark(
 
     results = [
         {
-            "method": "VeritasBio (3D DKL + k-DPP)",
+            "method": "PanoptesBio (3D DKL + k-DPP)",
             "screened": total_screened,
             "top_1_pct_hits": vb_hits,
             "enrichment": vb_hits / max(0.01, rand_hits),

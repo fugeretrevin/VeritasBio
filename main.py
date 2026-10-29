@@ -1,5 +1,5 @@
 """
-main.py — Application entry point for VeritasBio.
+main.py — Application entry point for PanoptesBio.
 
 Purpose:
     Initializes the SQLite ledger, starts the Gradio telemetry dashboard,
@@ -40,12 +40,12 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%H:%M:%S",
 )
-logger = logging.getLogger("veritasbio")
+logger = logging.getLogger("panoptesbio")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="VeritasBio: Deterministic Cloud Economics Engine for Computational Biology",
+        description="PanoptesBio: Deterministic Cloud Economics Engine for Computational Biology",
     )
     parser.add_argument(
         "--cli",
@@ -124,7 +124,7 @@ def main() -> None:
 
         summary = orchestrator.run(on_event=print_event)
         print("\n" + "=" * 60)
-        print("VERITASBIO RUN SUMMARY")
+        print("PANOPTESBIO RUN SUMMARY")
         print("=" * 60)
         print(f"Target:               {summary.target_protein} ({summary.target_accession})")
         print(f"Rounds Completed:     {summary.iterations_completed}")
@@ -134,7 +134,7 @@ def main() -> None:
         print(f"Highest Fitness Score:    {summary.highest_fitness_score:.4f}")
         print("=" * 60)
     else:
-        logger.info("Launching VeritasBio Gradio Dashboard on port %d...", args.port)
+        logger.info("Launching PanoptesBio Gradio Dashboard on port %d...", args.port)
         import gradio as gr
         demo = create_dashboard(db_path=args.db)
         demo.launch(

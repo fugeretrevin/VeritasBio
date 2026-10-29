@@ -268,15 +268,15 @@ def generate_opentrons_protocol(
     perimeter_repr = json.dumps(sorted(perimeter_wells), indent=4)
 
     script_template = f'''# Opentrons OT-2 Automated Mutagenesis Assembly Protocol
-# Generated automatically by VeritasBio Wet-Lab Translator on {now_iso}
+# Generated automatically by PanoptesBio Wet-Lab Translator on {now_iso}
 # Target: {target_protein} Variant Library (96-well format)
 # Anti-Edge Evaporation Barrier: {anti_edge_barrier}
 
 from opentrons import protocol_api
 
 metadata = {{
-    "protocolName": "VeritasBio High-Throughput Mutagenesis Assembly",
-    "author": "VeritasBio Robotics Engine",
+    "protocolName": "PanoptesBio High-Throughput Mutagenesis Assembly",
+    "author": "PanoptesBio Robotics Engine",
     "description": "Automated distribution of evaporation barriers, Gibson master mix, and mutant primers.",
     "apiLevel": "2.14"
 }}
@@ -296,7 +296,7 @@ def run(protocol: protocol_api.ProtocolContext):
     variants = {variants_repr}
     perimeter_barrier_wells = {perimeter_repr}
 
-    protocol.comment(f"Starting VeritasBio automated assembly for {{len(variants)}} variants...")
+    protocol.comment(f"Starting PanoptesBio automated assembly for {{len(variants)}} variants...")
 
     # Step 1: Dispense 200 uL sterile water/buffer evaporation barriers to eliminate edge effects
     barrier_reservoir_well = reagent_reservoir.wells()[1]

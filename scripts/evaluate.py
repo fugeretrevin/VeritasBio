@@ -2,7 +2,7 @@
 scripts/evaluate.py — Benchmark & Cloud Economics Evaluation Engine.
 
 Purpose:
-    Evaluates VeritasBio active-learning runs against ground-truth deep
+    Evaluates PanoptesBio active-learning runs against ground-truth deep
     mutational scanning (DMS) datasets (Sarkisyan et al. 2016 Nature avGFP benchmark).
 
     Computes:
@@ -14,10 +14,10 @@ Purpose:
 
 Usage:
     # Evaluate ledger database against default Sarkisyan GFP benchmark:
-    python scripts/evaluate.py --db ledger/veritasbio_ledger.db
+    python scripts/evaluate.py --db ledger/panoptesbio_ledger.db
 
     # Custom benchmark dataset and JSON output:
-    python scripts/evaluate.py --db ledger/veritasbio_ledger.db --benchmark scripts/data/sarkisyan_gfp_benchmark.json --json
+    python scripts/evaluate.py --db ledger/panoptesbio_ledger.db --benchmark scripts/data/sarkisyan_gfp_benchmark.json --json
 """
 
 from __future__ import annotations
@@ -42,13 +42,13 @@ from ledger import database as ledger_db
 from workers.rag_worker import fetch_protein_metadata
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("veritasbio.evaluate")
+logger = logging.getLogger("panoptesbio.evaluate")
 
 DEFAULT_BENCHMARK_PATH = Path(__file__).parent / "data" / "sarkisyan_gfp_benchmark.json"
 
 
 class BenchmarkMetrics(BaseModel):
-    """Immutable evaluation metrics record for a completed VeritasBio run."""
+    """Immutable evaluation metrics record for a completed PanoptesBio run."""
 
     target: str = "avGFP"
     total_ledger_evidence: int
@@ -337,7 +337,7 @@ def print_report(metrics: BenchmarkMetrics) -> None:
     t_lower = (metrics.target or "").lower()
     is_trpb = "trpb" in t_lower or "tryptophan" in t_lower or "tm9d8" in t_lower
     bench_label = "Johnston et al. TrpB Active-Site" if is_trpb else "Sarkisyan et al. GFP DMS"
-    print(f" VERITASBIO BENCHMARK EVALUATION REPORT ({bench_label})")
+    print(f" PANOPTESBIO BENCHMARK EVALUATION REPORT ({bench_label})")
     print(separator)
     print(f"Target Protein:                {metrics.target}")
     print(f"Ledger Evidence Records:       {metrics.total_ledger_evidence}")
@@ -364,7 +364,7 @@ def print_report(metrics: BenchmarkMetrics) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="VeritasBio: Benchmark & Cloud Economics Evaluation Engine",
+        description="PanoptesBio: Benchmark & Cloud Economics Evaluation Engine",
     )
     parser.add_argument("--db", type=str, default=None, help="Path to SQLite ledger database")
     parser.add_argument("--benchmark", type=str, default=None, help="Path to DMS benchmark JSON")

@@ -1,17 +1,17 @@
-# VeritasBio — Frontier Gap Resolution & Productionization Execution Plan
+# PanoptesBio — Frontier Gap Resolution & Productionization Execution Plan
 
 **Document Status:** Approved Engineering & Commercial Execution Plan (v1.0)  
 **Target Horizon:** Meta Global AI Developer Hackathon Victory $\to$ B2B Enterprise Bio-SaaS Spinout  
-**Author:** VeritasBio Core Engineering & DeepMind Antigravity  
+**Author:** PanoptesBio Core Engineering & DeepMind Antigravity  
 **Date:** October 28, 2026  
 
 ---
 
 ## 1. Executive Summary & System Objectives
 
-VeritasBio has validated its foundational premise: **coupling a fail-closed micro-USD ledger with Gaussian Process active learning slashes computational biology cloud spend by 73.9x–134x while attaining 80.1%–91.2% of library global optima across 4 authentic experimental landscapes (avGFP, TrpB, GB1, Trastuzumab/HER2).**
+PanoptesBio has validated its foundational premise: **coupling a fail-closed micro-USD ledger with Gaussian Process active learning slashes computational biology cloud spend by 73.9x–134x while attaining 80.1%–91.2% of library global optima across 4 authentic experimental landscapes (avGFP, TrpB, GB1, Trastuzumab/HER2).**
 
-To elevate VeritasBio from an elite hackathon project into a **generationally impactful, venture-backed enterprise platform**, this document establishes the definitive execution plan to resolve the four fundamental operational and biophysical gaps:
+To elevate PanoptesBio from an elite hackathon project into a **generationally impactful, venture-backed enterprise platform**, this document establishes the definitive execution plan to resolve the four fundamental operational and biophysical gaps:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -128,7 +128,7 @@ Resolve the low zero-shot accuracy of foundation PLMs on unnatural catalytic rea
 ### Gap 4: Enterprise Productionization, LIMS & Compliance
 
 #### Objective
-Transition VeritasBio from a single-user local tool to an enterprise-grade cloud B2B platform deployable in pharma VPCs with complete regulatory auditability.
+Transition PanoptesBio from a single-user local tool to an enterprise-grade cloud B2B platform deployable in pharma VPCs with complete regulatory auditability.
 
 #### Production Architecture:
 1. **Dual-Backend Ledger Interface:**

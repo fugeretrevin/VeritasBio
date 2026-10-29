@@ -76,7 +76,7 @@ PURIFICATION_TAG: str = "LEHHHHHH"
 
 BIN_RULE = "DMS_score_bin = 1 if DMS_score >= parent (Tm9D8*) fitness, else 0"
 
-_USER_AGENT = "VeritasBio/1.0 (Computational Biology Benchmark)"
+_USER_AGENT = "PanoptesBio/1.0 (Computational Biology Benchmark)"
 
 
 # -----------------------------------------------------------------------------
@@ -314,7 +314,7 @@ def write_parent_metadata(
     Writes a UniProt-shaped offline record for the Tm9D8* parent so that
     workers.rag_worker.fetch_protein_metadata('TRPB_TM9D8') resolves without a network call.
 
-    This is a DERIVED record, and says so in its own `veritasbio_provenance` block:
+    This is a DERIVED record, and says so in its own `panoptesbio_provenance` block:
       - `sequence` is the parent taken verbatim from the Johnston et al. dataset.
       - organism, protein name and structural features are copied unchanged from UniProt
         P50909. Tm9D8* carries only substitutions (no insertions or deletions) across the
@@ -342,7 +342,7 @@ def write_parent_metadata(
         "organism": uniprot_raw.get("organism", {}),
         "sequence": {"value": parent_seq, "length": len(parent_seq)},
         "features": kept_features,
-        "veritasbio_provenance": {
+        "panoptesbio_provenance": {
             "record_type": "derived — not a UniProt entry",
             "sequence_source": (
                 "Tm9D8* parent sequence, verbatim from "

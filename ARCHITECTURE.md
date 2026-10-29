@@ -1,10 +1,10 @@
-# VeritasBio: System Architecture & Execution Blueprint
+# PanoptesBio: System Architecture & Execution Blueprint
 **Version:** 3.1 (Frontier Architecture — ledger decisions D1–D8 incorporated, see §8)
 **Objective:** Meta Global AI Developer Hackathon & Future B2B SaaS
 
 ## 1. Vision & Value Proposition
-**The Pitch:** VeritasBio is an enterprise-grade cloud economics platform for computational biology. It solves the "brute-force GPU waste" problem by treating LLMs not as physics engines, but as heavily restricted orchestration layers.
-**The Value:** By combining biological RAG, Bayesian Optimization, and a strict deterministic financial Gatekeeper, VeritasBio achieves frontier-level scientific discovery (target binding/fitness) while reducing a lab's cloud compute bill by 80%.
+**The Pitch:** PanoptesBio is an enterprise-grade cloud economics platform for computational biology. It solves the "brute-force GPU waste" problem by treating LLMs not as physics engines, but as heavily restricted orchestration layers.
+**The Value:** By combining biological RAG, Bayesian Optimization, and a strict deterministic financial Gatekeeper, PanoptesBio achieves frontier-level scientific discovery (target binding/fitness) while reducing a lab's cloud compute bill by 80%.
 
 ## 2. Problem & Solution
 *   **The Problem:** LLMs hallucinate spatial thermodynamics. On the other hand, brute-force foundation model screening (like Anthropic's scorpion venom test generating 300k variants) requires unrestricted GPU compute that is economically impossible for most labs. 
@@ -37,7 +37,7 @@ This is the unidirectional `while` loop that the `orchestrator.py` manages. It s
 
 ## 5. Directory & File Scaffolding
 ```text
-veritasbio/
+panoptesbio/
 ├── .env                  # Secrets (git-ignored): LLAMA_API_KEY, HF_TOKEN, MODAL_TOKEN_ID
 ├── .env.example          # Committed template for .env (no real values).
 ├── .agents/rules/        # AI assistant memory: project_context.md (always-on rule).

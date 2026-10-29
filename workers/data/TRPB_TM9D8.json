@@ -922,7 +922,7 @@
       ]
     }
   ],
-  "veritasbio_provenance": {
+  "panoptesbio_provenance": {
     "record_type": "derived \u2014 not a UniProt entry",
     "sequence_source": "Tm9D8* parent sequence, verbatim from huggingface.co/datasets/SaProtHub/Dataset-TrpB_fitness_landsacpe",
     "annotation_source": "UniProt P50909 (wild-type TmTrpB), copied unchanged",

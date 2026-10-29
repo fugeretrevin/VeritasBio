@@ -1,15 +1,15 @@
-# VeritasBio Enterprise Hardening Roadmap & Scientific Gap Analysis
+# PanoptesBio Enterprise Hardening Roadmap & Scientific Gap Analysis
 
 **Document Status:** Production Hardening Specification (v4.0)  
 **Target Milestone:** Transition from High-Fidelity Active Learning Engine to Enterprise B2B SaaS  
 **Scope:** Biophysical Modeling Gaps, Wet-Lab Assay Realities, Cloud/Security Hardening, and Production Architecture  
-**Author:** VeritasBio Core Engineering & DeepMind Antigravity  
+**Author:** PanoptesBio Core Engineering & DeepMind Antigravity  
 
 ---
 
 ## 1. Executive Summary & Problem Framing
 
-VeritasBio has validated its core thesis: **combining deterministic cloud economics (fail-closed micro-USD ledger) with active learning (DKL PyTorch GP + GFlowNet + 3-Tier Cloud Cascade) delivers 67.7x to 134x compute cost reductions and extracts high-activity leads from combinatorial libraries of 160,000+ variants.**
+PanoptesBio has validated its core thesis: **combining deterministic cloud economics (fail-closed micro-USD ledger) with active learning (DKL PyTorch GP + GFlowNet + 3-Tier Cloud Cascade) delivers 67.7x to 134x compute cost reductions and extracts high-activity leads from combinatorial libraries of 160,000+ variants.**
 
 However, transitioning from an in-silico benchmark to a **validated, enterprise-grade B2B SaaS platform** deployed inside biopharma R&D organizations (e.g., Genentech, Amgen, Ginkgo Bioworks, Flagship Pioneering ventures) requires resolving four fundamental gaps:
 1. **The Catalytic vs. Evolutionary Gap:** Foundation PLMs (ESM-2) excel at thermodynamic stability ($\rho \approx 0.80$ on GFP) but struggle with unnatural substrate catalysis ($\rho \approx 0.14$ on TrpB).
@@ -17,7 +17,7 @@ However, transitioning from an in-silico benchmark to a **validated, enterprise-
 3. **The Turnaround Time & Batching Asymmetry:** Cloud inference runs in seconds; DNA synthesis and microplate assays require 7–14 days. The engine must scale from 10-variant micro-loops to 96/384-well asynchronous plate cycles.
 4. **Enterprise Multi-Tenancy, Security & LIMS Integration:** Moving from a single SQLite ledger to a multi-tenant, SOC-2/HIPAA/GAMP-5 compliant architecture integrated with enterprise ELN/LIMS (Benchling, Dotmatics).
 
-This document outlines the exact mathematical, biophysical, and software engineering steps required to bridge these gaps and harden VeritasBio into a commercial platform.
+This document outlines the exact mathematical, biophysical, and software engineering steps required to bridge these gaps and harden PanoptesBio into a commercial platform.
 
 ---
 
@@ -97,7 +97,7 @@ This document outlines the exact mathematical, biophysical, and software enginee
    ```
    Cycle 1: Broad Exploration (1 x 384-Well Plate)
             -> Screen 360 diverse GFlowNet variants using high-throughput crude cell lysate.
-            -> Ingest plate data into VeritasBio Ledger.
+            -> Ingest plate data into PanoptesBio Ledger.
    Cycle 2: Deep Characterization & Epistatic Lead Polish (1 x 96-Well Plate)
             -> Screen 88 variants: Top 20 verified leads + Hamming-1 sphere + lead recombinations.
             -> Full protein purification, kinetic parameters (k_cat, K_M, T_m).
@@ -112,7 +112,7 @@ This document outlines the exact mathematical, biophysical, and software enginee
 
 #### The Scientific Reality
 - In a 4-residue active-site library ($20^4 = 160,000$ combinations), only **~0.1%** of variants exhibit enhanced catalytic activity, while **95%** are completely dead or misfolded.
-- Screening 452 variants (0.28%) allowed VeritasBio to discover variants with 40.5% top-decile enrichment and fitness $f = 0.3138$, but missed the single global optimum ($f = 1.0000$).
+- Screening 452 variants (0.28%) allowed PanoptesBio to discover variants with 40.5% top-decile enrichment and fitness $f = 0.3138$, but missed the single global optimum ($f = 1.0000$).
 - Standard Bayesian Optimization with stationary kernels can get trapped in local sub-optimal basins when rugged landscapes exhibit severe sign epistasis.
 
 #### Technical Solution: TuRBO + Co-Evolutionary Potts Priors
@@ -139,7 +139,7 @@ This document outlines the exact mathematical, biophysical, and software enginee
 graph TD
     subgraph Client Layer
         A1[Scientist Web Portal - Next.js / Tailwind]
-        A2[Python SDK - pip install veritasbio]
+        A2[Python SDK - pip install panoptesbio]
         A3[Benchling / Dotmatics LIMS Webhook]
     end
 
@@ -193,7 +193,7 @@ graph TD
 | **Phase 1** | **Plate-Scale Active Learning & Noise Modeling** | - Batch size scaling ($B=88, 360$) in $k$-DPP<br>- Heteroscedastic Matérn 5/2 GP in PyTorch<br>- Anti-edge-effect plate layouts in Opentrons generator | 2 weeks |
 | **Phase 2** | **Ligand-Aware Catalysis Adapters** | - RDKit molecular graph cross-attention layer<br>- Few-shot LoRA fine-tuning module for ESM-2<br>- Active-site distance geometric constraints | 3 weeks |
 | **Phase 3** | **Enterprise PostgreSQL & Temporal Engine** | - PostgreSQL schema with micro-USD constraints & RLS<br>- Temporal.io workflow engine supporting 14-day wet-lab pauses<br>- Role-Based Access Control (RBAC) & OAuth2 JWT | 3 weeks |
-| **Phase 4** | **LIMS Integration & Python Enterprise SDK** | - Bi-directional Benchling REST API integration<br>- `veritasbio-python` SDK with CLI tools<br>- AWS KMS cryptographic sealing for FDA compliance | 2 weeks |
+| **Phase 4** | **LIMS Integration & Python Enterprise SDK** | - Bi-directional Benchling REST API integration<br>- `panoptesbio-python` SDK with CLI tools<br>- AWS KMS cryptographic sealing for FDA compliance | 2 weeks |
 | **Phase 5** | **Wet-Lab Validation Pilot** | - Execute real-world 1 x 96-well plate synthesis with Twist Bioscience<br>- Bench-scale expression & fluorescence assay verification<br>- Publish joint technical validation whitepaper | 4–6 weeks |
 
 ---

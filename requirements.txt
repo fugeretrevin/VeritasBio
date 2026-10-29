@@ -1,4 +1,4 @@
-# requirements.txt — Python dependencies for VeritasBio.
+# requirements.txt — Python dependencies for PanoptesBio.
 # Core engine, quant active learning, cloud muscle, UI, and benchmark analytics.
 modal
 gradio

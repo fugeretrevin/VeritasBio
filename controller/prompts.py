@@ -116,7 +116,7 @@ class SearchStrategy(BaseModel):
 # -----------------------------------------------------------------------------
 # Prompts
 # -----------------------------------------------------------------------------
-STRATEGY_SYSTEM_PROMPT = """You are the Strategic Biological Planner for VeritasBio, an autonomous cloud economics platform for computational biology.
+STRATEGY_SYSTEM_PROMPT = """You are the Strategic Biological Planner for PanoptesBio, an autonomous cloud economics platform for computational biology.
 Your sole role is to read target-specific biological metadata (UniProt functional domains, catalytic active sites, binding pockets, 3D structural coordinates, and mutagenesis literature) and define search boundaries for protein engineering across any protein family.
 
 CRITICAL RULES:
@@ -440,7 +440,7 @@ class ReflectionDiagnosis(BaseModel):
         return cleaned
 
 
-REFLECTION_SYSTEM_PROMPT = """You are the Senior Biophysical Reasoning Engine for VeritasBio.
+REFLECTION_SYSTEM_PROMPT = """You are the Senior Biophysical Reasoning Engine for PanoptesBio.
 Your mission is Closed-Loop Residual Reflection: analyze active-learning surrogate prediction residuals (unpredicted synergistic wins and epistatic crashes) to guide subsequent rounds of protein engineering.
 
 CRITICAL RULES:

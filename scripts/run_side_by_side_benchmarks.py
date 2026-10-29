@@ -23,7 +23,7 @@ from scripts.evaluate import evaluate_run, BenchmarkMetrics
 
 def main() -> None:
     print("\n" + "=" * 80)
-    print(" VERITASBIO DUAL END-TO-END PRODUCTION BENCHMARK RUN")
+    print(" PANOPTESBIO DUAL END-TO-END PRODUCTION BENCHMARK RUN")
     print(" Active Learning Loop with 3D Contact Coupling, GFlowNet Annealing, & Pareto Front")
     print("=" * 80 + "\n")
 
@@ -81,7 +81,7 @@ def main() -> None:
     )
 
     print("\n" + "=" * 80)
-    print(" VERITASBIO FULL PRODUCTION BENCHMARK — SIDE-BY-SIDE PERFORMANCE")
+    print(" PANOPTESBIO FULL PRODUCTION BENCHMARK — SIDE-BY-SIDE PERFORMANCE")
     print("=" * 80)
     header = f"{'Metric':<36} | {'TrpB (TRPB_TM9D8)':<20} | {'avGFP (P42212)':<20}"
     print(header)

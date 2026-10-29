@@ -1,7 +1,7 @@
 -- =============================================================================
 -- ledger/schema.sql — DOMAIN: Immutable Memory
 --
--- DDL for the VeritasBio SQLite ledger (ARCHITECTURE.md §6):
+-- DDL for the PanoptesBio SQLite ledger (ARCHITECTURE.md §6):
 --   Budget   — total allocation and cumulative spend.
 --   Jobs     — every authorization decision (APPROVED / REJECTED) and its cost.
 --   Evidence — ESM fitness scores returned for approved jobs.

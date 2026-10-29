@@ -1,7 +1,7 @@
 """
 ledger/database.py — DOMAIN: Immutable Memory.
 
-SQLite CRUD wrapper for the VeritasBio ledger (ARCHITECTURE.md §5, §6).
+SQLite CRUD wrapper for the PanoptesBio ledger (ARCHITECTURE.md §5, §6).
 
 Design rules:
     * authorize_spend() is the ONLY function that can approve a job or move money
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # -----------------------------------------------------------------------------
 LEDGER_DIR: Path = Path(__file__).resolve().parent
 SCHEMA_PATH: Path = LEDGER_DIR / "schema.sql"
-DEFAULT_DB_PATH: Path = LEDGER_DIR / "veritasbio_ledger.db"
+DEFAULT_DB_PATH: Path = LEDGER_DIR / "panoptesbio_ledger.db"
 DEFAULT_BUDGET_ID: int = 1
 _BUSY_TIMEOUT_SECONDS: float = 5.0
 
@@ -58,8 +58,14 @@ JOB_STATUSES = frozenset(
     {STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED, STATUS_COMPLETED, STATUS_FAILED}
 )
 
-HMAC_AUDIT_SECRET: bytes = os.environ.get(
-    "VERITAS_AUDIT_SECRET", "veritasbio-fda-21cfr11-genesis-secret-key"
+# The env var was renamed with the product (VeritasBio -> PanoptesBio); the old name
+# still works so an existing environment keeps verifying. The DEFAULT VALUE is frozen on
+# purpose: it seeds the HMAC over the Part 11 hash chain, so changing it would invalidate
+# every row already written against the default.
+HMAC_AUDIT_SECRET: bytes = (
+    os.environ.get("PANOPTES_AUDIT_SECRET")
+    or os.environ.get("VERITAS_AUDIT_SECRET")
+    or "veritasbio-fda-21cfr11-genesis-secret-key"
 ).encode("utf-8")
 GENESIS_PREV_HASH: str = "0" * 64
 
@@ -227,7 +233,7 @@ def init_db(db_path: Optional[DbPath] = None) -> Path:
                 _append_audit_block_tx(
                     conn,
                     action_type="GENESIS",
-                    payload={"system": "VeritasBio", "standard": "FDA 21 CFR Part 11", "version": "1.0"},
+                    payload={"system": "PanoptesBio", "standard": "FDA 21 CFR Part 11", "version": "1.0"},
                 )
     logger.info("Ledger initialized at %s", path)
     return path

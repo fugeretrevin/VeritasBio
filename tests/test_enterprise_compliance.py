@@ -195,7 +195,7 @@ class TestEnterpriseCompliance(unittest.TestCase):
         }
 
         plate_res = client.create_virtual_plate(
-            plate_name="VeritasBio_Run01_PlateA",
+            plate_name="PanoptesBio_Run01_PlateA",
             plate_format=DEFAULT_PLATE_FORMAT,
             plate_map=plate_map,
             db_path=self.db_path,
@@ -207,14 +207,14 @@ class TestEnterpriseCompliance(unittest.TestCase):
         # Export manifest
         manifest_path = Path(self.temp_dir.name) / "benchling_manifest.csv"
         csv_str = client.export_lims_manifest(
-            plate_name="VeritasBio_Run01_PlateA",
+            plate_name="PanoptesBio_Run01_PlateA",
             plate_map=plate_map,
             output_path=manifest_path,
         )
 
         self.assertTrue(manifest_path.exists())
         self.assertIn("Plate_Name,Well_Coordinate,Container_Barcode", csv_str)
-        self.assertIn("VeritasBio_Run01_PlateA,B4,CNT-VeritasBio_Run01_PlateA-B4,S65T:Y66H,experimental,20.0,50.0,2.4500,PASS", csv_str)
+        self.assertIn("PanoptesBio_Run01_PlateA,B4,CNT-PanoptesBio_Run01_PlateA-B4,S65T:Y66H,experimental,20.0,50.0,2.4500,PASS", csv_str)
 
     def test_postgres_schema_ddl_integrity(self) -> None:
         """Verifies ledger/postgres_schema.sql exists and contains valid DDL structures."""

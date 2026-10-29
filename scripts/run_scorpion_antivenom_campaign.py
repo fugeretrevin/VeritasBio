@@ -9,7 +9,7 @@ Purpose:
     Contrasts with brute-force de novo generation (Anthropic / Citrini Research 2026):
     - Anthropic generated 318,484 unguided candidates over 64 hours (~$30,000+ compute)
       with a 92% wet-lab failure rate and unverified in vivo neutralization.
-    - VeritasBio starts from an established human neutralizing scaffold (scFv 9004G, PDB: 2YBR)
+    - PanoptesBio starts from an established human neutralizing scaffold (scFv 9004G, PDB: 2YBR)
       that already occludes the site-4 voltage-gated sodium channel epitope of Cn2, and
       optimizes the CDR-H3 paratope loop (residues 99-106 GGVGSFDT) using 3D spatial DKL GP,
       strict biologics developability filters, and fail-closed cloud micro-cent accounting (< $0.05).
@@ -58,7 +58,7 @@ from workers.wetlab_worker import (
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("veritasbio.scorpion_antivenom")
+logger = logging.getLogger("panoptesbio.scorpion_antivenom")
 
 TARGET_ACCESSION = "SCFV_9004G_CN2"
 PDB_ID = "2YBR"
@@ -219,7 +219,7 @@ def run_scorpion_antivenom_campaign(
     5. Wet-lab synthesis order + robot protocol export.
     """
     logger.info("=" * 75)
-    logger.info("VERITASBIO SCORPION ANTIVENOM NEUTRALIZING ANTIBODY ENGINE")
+    logger.info("PANOPTESBIO SCORPION ANTIVENOM NEUTRALIZING ANTIBODY ENGINE")
     logger.info("Target: Centruroides noxius Cn2 Neurotoxin · Scaffold: scFv 9004G (PDB: 2YBR)")
     logger.info("=" * 75)
 
@@ -440,7 +440,7 @@ def run_scorpion_antivenom_campaign(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run VeritasBio Scorpion Antivenom Engineering Campaign")
+    parser = argparse.ArgumentParser(description="Run PanoptesBio Scorpion Antivenom Engineering Campaign")
     parser.add_argument("--budget", type=float, default=0.50, help="Compute budget allocation in USD")
     parser.add_argument("--rounds", type=int, default=4, help="Active learning iterations")
     parser.add_argument("--batch-size", type=int, default=15, help="Variants evaluated per micro-batch")

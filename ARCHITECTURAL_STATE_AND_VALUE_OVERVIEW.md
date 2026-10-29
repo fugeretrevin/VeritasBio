@@ -1,4 +1,4 @@
-# VeritasBio — Comprehensive Technical Architecture, Math Specification & Value Overview
+# PanoptesBio — Comprehensive Technical Architecture, Math Specification & Value Overview
 
 > **Target Audience:** Engineering Partners, AI Agents, Technical Evaluators, and Biopharma Stakeholders.  
 > **Source of Truth:** Codebase state as of October 27, 2026 (`v3.2 Production Ready`).  
@@ -8,12 +8,12 @@
 
 ## 1. Executive Summary & Value Proposition
 
-### What VeritasBio Is
-VeritasBio is a **deterministic cloud-economics engine and active-learning platform for computational biology and protein engineering**. 
+### What PanoptesBio Is
+PanoptesBio is a **deterministic cloud-economics engine and active-learning platform for computational biology and protein engineering**. 
 
 In conventional generative biology, running foundation model inference (e.g. Meta ESM-2, AlphaFold 3, ESMFold) across combinatorial mutation libraries creates runaway infrastructure bills. Testing multi-point mutations across an active site yields $>10^7$ combinations, costing upwards of **$35,000** in unconstrained GPU forward passes. Open-ended AI agents frequently hallucinate and loop without financial discipline.
 
-VeritasBio solves this by decoupling strategy from execution through a **fail-closed 6-step loop**:
+PanoptesBio solves this by decoupling strategy from execution through a **fail-closed 6-step loop**:
 1. **Meta Llama 3.1** acts as a Mechanistic Biophysical Prior Planner in strict JSON mode (generating 3D pocket hypotheses, structural contact rationales, and suggested chemistries; zero direct math; zero code execution).
 2. **A Deep Kernel Learning (DKL) Surrogate** actively models non-linear epistasis and selects high-information micro-batches, guided by Llama 3.1's biophysical prior.
 3. **An Immutable SQLite Ledger** enforces hard financial spend caps in `INTEGER` micro-USD ($0.000001). Compute never runs without atomic authorization.
@@ -26,7 +26,7 @@ VeritasBio solves this by decoupling strategy from execution through a **fail-cl
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│                             VERITASBIO 7-LAYER ENGINE                            │
+│                             PANOPTESBIO 7-LAYER ENGINE                            │
 └──────────────────────────────────────────────────────────────────────────────────┘
   [Layer 1: RAG Knowledge Harvester]   (workers/rag_worker.py)
         │ Pulls WT sequence, functional domains, and 3D PDB coordinates (<8.5Å)
@@ -67,7 +67,7 @@ VeritasBio solves this by decoupling strategy from execution through a **fail-cl
 - **Mathematical Coupling:** Injected as a grounded biophysical prior reward bonus into the discrete GFlowNet candidate sampler ($+0.12$ to $+0.36$), mathematically guiding surrogate exploration toward structurally rational regions without violating determinism.
 
 ### Layer 3: Quant Surrogate Engine & Active Learning (`workers/math_worker.py`)
-This is the core mathematical engine of VeritasBio:
+This is the core mathematical engine of PanoptesBio:
 1. **5-Factor Physicochemical Delta Featurization:**
    Each substitution is mapped across 5 standardized biophysical scales:
    $$\mathbf{f}(aa) = [\text{Hydrophobicity (Kyte-Doolittle)}, \text{Mass (Da)}, \text{Net Charge (pH 7.4)}, \text{Polarity (Grantham)}, \text{pI}]$$
@@ -138,11 +138,11 @@ This is the core mathematical engine of VeritasBio:
 
 ## 3. Empirical Benchmark Performance
 
-VeritasBio was rigorously evaluated across two authentic, real-world biological ground-truth landscapes:
+PanoptesBio was rigorously evaluated across two authentic, real-world biological ground-truth landscapes:
 
 ```
 ================================================================================
- VERITASBIO FULL PRODUCTION BENCHMARK — SIDE-BY-SIDE PERFORMANCE
+ PANOPTESBIO FULL PRODUCTION BENCHMARK — SIDE-BY-SIDE PERFORMANCE
 ================================================================================
 Metric                               | TrpB (TRPB_TM9D8)    | avGFP (P42212)      
 ----------------------------------------------------------------------------------

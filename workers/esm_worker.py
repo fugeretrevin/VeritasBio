@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 try:
     import modal
-    app = modal.App("veritasbio-esm")
+    app = modal.App("panoptesbio-esm")
 except ImportError:
     modal = None
     app = None
@@ -285,7 +285,7 @@ def score_variants(
                 fn_getter = getattr(modal.Function, "from_name", getattr(modal.Function, "lookup", None))
                 if fn_getter is None:
                     raise AttributeError("Neither from_name nor lookup found on modal.Function")
-                fn = fn_getter("veritasbio-esm", "score_variants_remote")
+                fn = fn_getter("panoptesbio-esm", "score_variants_remote")
                 return fn.remote(
                     wt_sequence=wt_sequence,
                     variant_sequences=list(variant_sequences),
@@ -348,7 +348,7 @@ def score_variants_cascade(
         try:
             fn_getter = getattr(modal.Function, "from_name", getattr(modal.Function, "lookup", None))
             if fn_getter:
-                fn = fn_getter("veritasbio-esm", "score_variants_cascade_remote")
+                fn = fn_getter("panoptesbio-esm", "score_variants_cascade_remote")
                 return fn.remote(
                     wt_sequence=wt_sequence,
                     variant_sequences=list(variant_sequences),
@@ -389,7 +389,7 @@ def embed_sequences(
         try:
             fn_getter = getattr(modal.Function, "from_name", getattr(modal.Function, "lookup", None))
             if fn_getter:
-                fn = fn_getter("veritasbio-esm", "embed_sequences_remote")
+                fn = fn_getter("panoptesbio-esm", "embed_sequences_remote")
                 return fn.remote(list(sequences), hf_model_id=hf_id)
         except Exception:
             pass

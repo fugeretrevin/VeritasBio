@@ -1,11 +1,11 @@
 """
 scripts/plot_benchmark.py — Publication-Quality Benchmark Visualization Engine.
 
-Generates high-resolution dark-mode charts comparing VeritasBio active learning
+Generates high-resolution dark-mode charts comparing PanoptesBio active learning
 discovery metrics and cloud economics against brute-force screening.
 
 Usage:
-    python scripts/plot_benchmark.py --db ledger/veritasbio_ledger.db --out scripts/benchmark_results.png
+    python scripts/plot_benchmark.py --db ledger/panoptesbio_ledger.db --out scripts/benchmark_results.png
 """
 
 import argparse
@@ -70,7 +70,7 @@ def generate_benchmark_figures(
     except Exception:
         wt_seq = ""
 
-    # Style configuration: VeritasBio Dark Aesthetic
+    # Style configuration: PanoptesBio Dark Aesthetic
     plt.style.use("dark_background")
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), facecolor="#090d16")
 
@@ -104,7 +104,7 @@ def generate_benchmark_figures(
         spends.append(metrics.total_spent_usd)
         best_scores.append(metrics.best_discovered_score)
 
-    ax1.step(spends, best_scores, where="post", color="#00f0ff", linewidth=3, label="VeritasBio Discovery Frontier")
+    ax1.step(spends, best_scores, where="post", color="#00f0ff", linewidth=3, label="PanoptesBio Discovery Frontier")
     ax1.scatter(spends, best_scores, color="#38bdf8", s=80, zorder=5, edgecolor="#ffffff", linewidth=1.5)
 
     # Highlight top discovered variant
@@ -124,11 +124,11 @@ def generate_benchmark_figures(
     ax1.set_ylabel("Peak Fitness / Activity Score", fontsize=11, color="#cbd5e1")
     ax1.legend(loc="lower right", facecolor="#1e293b", edgecolor="#334155")
 
-    # Panel 2: Cloud Economics Comparison (VeritasBio vs Brute Force)
+    # Panel 2: Cloud Economics Comparison (PanoptesBio vs Brute Force)
     ax2.set_facecolor("#0f172a")
     ax2.grid(True, linestyle="--", alpha=0.2, color="#94a3b8", axis="y")
 
-    categories = ["Brute-Force\nCombinatorial", "VeritasBio\nDeterministic Engine"]
+    categories = ["Brute-Force\nCombinatorial", "PanoptesBio\nDeterministic Engine"]
     costs = [metrics.estimated_bruteforce_cost_usd, metrics.total_spent_usd]
     colors = ["#ef4444", "#10b981"]
 
@@ -166,7 +166,7 @@ def generate_benchmark_figures(
 
     # Header / Meta
     plt.suptitle(
-        f"VeritasBio Optimization Report — {final_name} | Spearman ρ = {metrics.spearman_rho:+.4f}",
+        f"PanoptesBio Optimization Report — {final_name} | Spearman ρ = {metrics.spearman_rho:+.4f}",
         fontsize=14,
         fontweight="bold",
         color="#ffffff",
@@ -234,7 +234,7 @@ def generate_side_by_side_figures(
         spends_trpb.append(cum_s)
         scores_trpb.append(c_max)
 
-    ax_trpb_traj.step(spends_trpb, scores_trpb, where="post", color="#10b981", linewidth=3, label="VeritasBio Frontier")
+    ax_trpb_traj.step(spends_trpb, scores_trpb, where="post", color="#10b981", linewidth=3, label="PanoptesBio Frontier")
     ax_trpb_traj.scatter(spends_trpb, scores_trpb, color="#34d399", s=80, zorder=5, edgecolor="#ffffff")
     ax_trpb_traj.axhline(0.4081, color="#f59e0b", linestyle=":", linewidth=1.8, label="Parent Tm9D8* Baseline (0.4081)")
     ax_trpb_traj.axhline(0.6721, color="#fbbf24", linestyle="--", linewidth=1.5, label="Empirical Optimum (0.6721)")
@@ -278,7 +278,7 @@ def generate_side_by_side_figures(
         spends_gfp.append(cum_s)
         scores_gfp.append(c_max)
 
-    ax_gfp_traj.step(spends_gfp, scores_gfp, where="post", color="#00f0ff", linewidth=3, label="VeritasBio Frontier")
+    ax_gfp_traj.step(spends_gfp, scores_gfp, where="post", color="#00f0ff", linewidth=3, label="PanoptesBio Frontier")
     ax_gfp_traj.scatter(spends_gfp, scores_gfp, color="#38bdf8", s=80, zorder=5, edgecolor="#ffffff")
 
     ax_gfp_traj.annotate(
@@ -324,7 +324,7 @@ def generate_side_by_side_figures(
     ax_costs.set_facecolor("#0f172a")
     ax_costs.grid(True, linestyle="--", alpha=0.2, color="#94a3b8", axis="y")
 
-    cost_categories = ["TrpB Brute\n($0.9856)", "TrpB Veritas\n($0.0069)", "GFP Brute\n($0.0184)", "GFP Veritas\n($0.0069)"]
+    cost_categories = ["TrpB Brute\n($0.9856)", "TrpB Panoptes\n($0.0069)", "GFP Brute\n($0.0184)", "GFP Panoptes\n($0.0069)"]
     cost_vals = [m_trpb.estimated_bruteforce_cost_usd, m_trpb.total_spent_usd, m_avgfp.estimated_bruteforce_cost_usd, m_avgfp.total_spent_usd]
     c_colors = ["#ef4444", "#10b981", "#f87171", "#34d399"]
 
@@ -336,7 +336,7 @@ def generate_side_by_side_figures(
     ax_costs.set_title("D. Deterministic Cloud Infrastructure Economics (Modal A10G)", fontsize=12, fontweight="bold", color="#f8fafc")
     ax_costs.set_ylabel("Total Compute Spend (USD)", fontsize=10, color="#cbd5e1")
 
-    plt.suptitle("VeritasBio Dual Production Benchmark — Active Learning & Cloud Economics Engine", fontsize=15, fontweight="bold", color="#ffffff", y=0.98)
+    plt.suptitle("PanoptesBio Dual Production Benchmark — Active Learning & Cloud Economics Engine", fontsize=15, fontweight="bold", color="#ffffff", y=0.98)
     plt.tight_layout(rect=[0, 0.02, 1, 0.95])
     plt.savefig(out_file, dpi=200, facecolor=fig.get_facecolor(), edgecolor="none")
     plt.close(fig)
@@ -345,7 +345,7 @@ def generate_side_by_side_figures(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="VeritasBio Benchmark Visualization Engine")
+    parser = argparse.ArgumentParser(description="PanoptesBio Benchmark Visualization Engine")
     parser.add_argument("--db", type=str, default=None, help="Path to SQLite ledger database")
     parser.add_argument("--target", type=str, default=None, help="Protein target name (TrpB or avGFP)")
     parser.add_argument("--out", type=str, default="scripts/benchmark_results.png", help="Output PNG path")

@@ -1,4 +1,4 @@
-# VeritasBio — Deterministic Cloud Economics Engine for Computational Biology
+# PanoptesBio — Deterministic Cloud Economics Engine for Computational Biology
 
 [![Meta AI Hackathon](https://img.shields.io/badge/Meta_Global_AI_Hackathon-2026-blue.svg)](https://lablab.ai)
 [![Llama 3.1 Powered](https://img.shields.io/badge/Llama_3.1-Strict_JSON_Priors-purple.svg)](https://llama.meta.com/)
@@ -7,11 +7,11 @@
 [![Compliance](https://img.shields.io/badge/FDA_21_CFR_Part_11-Cryptographically_Verified-darkgreen.svg)]()
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)]()
 
-> **VeritasBio** is a deterministic cloud economics engine and active learning platform for generative protein engineering. An LLM (*Meta Llama 3.1*) only proposes biophysical search boundaries; a Gaussian Process actively selects high-yield micro-batches; and an immutable SQLite ledger with a fail-closed Python Gatekeeper guarantees that paid GPU compute (*Modal NVIDIA A10G + ESM-2*) never exceeds the user's hard budget.
+> **PanoptesBio** is a deterministic cloud economics engine and active learning platform for generative protein engineering. An LLM (*Meta Llama 3.1*) only proposes biophysical search boundaries; a Gaussian Process actively selects high-yield micro-batches; and an immutable SQLite ledger with a fail-closed Python Gatekeeper guarantees that paid GPU compute (*Modal NVIDIA A10G + ESM-2*) never exceeds the user's hard budget.
 
 ---
 
-![VeritasBio Benchmark Results](scripts/benchmark_results.png)
+![PanoptesBio Benchmark Results](scripts/benchmark_results.png)
 
 ---
 
@@ -22,8 +22,8 @@ In computational drug discovery and protein engineering, running foundation mode
 2. **Cold-Start Waste**: Cloud serverless instances incur 15–30s container boot times on every invocation, wasting up to 90% of GPU compute budgets on container spin-up rather than tensor operations.
 3. **Agentic Hallucination**: Open-ended autonomous AI agents lack cost predictability, frequently looping or executing hundreds of unconstrained inference calls.
 
-### The VeritasBio Solution
-VeritasBio replaces unpredictable open-ended agents with a **deterministic, fail-closed 6-step active learning cycle**. The engine optimizes proteins for highest biological fitness while mathematically maximizing the **Return on Investment (ROI)** per dollar of cloud spend.
+### The PanoptesBio Solution
+PanoptesBio replaces unpredictable open-ended agents with a **deterministic, fail-closed 6-step active learning cycle**. The engine optimizes proteins for highest biological fitness while mathematically maximizing the **Return on Investment (ROI)** per dollar of cloud spend.
 
 ---
 
@@ -31,7 +31,7 @@ VeritasBio replaces unpredictable open-ended agents with a **deterministic, fail
 
 Validated against the gold-standard **ProteinGym / Sarkisyan et al. GFP Deep Mutational Scanning (DMS)** benchmark:
 
-| Metric | VeritasBio Guided Search | Brute-Force Random Screening | Improvement / Value |
+| Metric | PanoptesBio Guided Search | Brute-Force Random Screening | Improvement / Value |
 |---|---|---|---|
 | **Spearman Rank Correlation ($\rho$)** | **+0.9718** ($p = 9.72 \times 10^{-13}$) | +0.1200 | **High ranking fidelity** |
 | **Pearson Correlation ($r$)** | **+1.0000** ($p = 2.13 \times 10^{-38}$) | +0.0900 | **Exact calibration** |
@@ -50,7 +50,7 @@ A harder and stricter test. The avGFP assay is sparse and survivorship-biased; t
 of the engineered parent Tm9D8\* were measured, so the global optimum is *known* to be in the pool
 and nothing is missing.
 
-| Metric | VeritasBio Guided Search | Random Screening (n=200 draws) |
+| Metric | PanoptesBio Guided Search | Random Screening (n=200 draws) |
 |---|---|---|
 | **Variants screened** | 125 of 159,999 (0.078%) | 125 |
 | **Top-1% hits found** | **36** | 1.17 |
@@ -135,7 +135,7 @@ python scripts/run_trastuzumab_benchmark.py --rounds 5 --batch-size 25
 ## 4. Key Innovations
 
 ### 1. Two-State Cold/Warm Container Cost Model
-A standard serverless cold container takes 20s to boot ($t_{\text{boot}} = 20.0\text{s}$ at \$1.10/hr = \$0.00612), while warm containers eliminate boot overhead ($t_{\text{boot}} = 0.0\text{s}$). By utilizing Modal's `scaledown_window=120`, VeritasBio schedules batches within the warm keep-alive window, achieving a **~21x reduction in cost per micro-batch**.
+A standard serverless cold container takes 20s to boot ($t_{\text{boot}} = 20.0\text{s}$ at \$1.10/hr = \$0.00612), while warm containers eliminate boot overhead ($t_{\text{boot}} = 0.0\text{s}$). By utilizing Modal's `scaledown_window=120`, PanoptesBio schedules batches within the warm keep-alive window, achieving a **~21x reduction in cost per micro-batch**.
 
 ### 2. Physicochemical Property Featurization
 Instead of treating amino acid substitutions as arbitrary one-hot tokens, mutations are featurized across 5 standardized biophysical scales:
@@ -159,9 +159,9 @@ Directly bridges in silico active learning to physical robotics:
 
 ---
 
-## 5. User & Dashboard Guide: How to Run VeritasBio
+## 5. User & Dashboard Guide: How to Run PanoptesBio
 
-VeritasBio can be run in two modes: an **Interactive Web Dashboard** (Gradio) for real-time visualization and parameter tuning, and a **Production CLI Pipeline** for automated benchmark campaigns.
+PanoptesBio can be run in two modes: an **Interactive Web Dashboard** (Gradio) for real-time visualization and parameter tuning, and a **Production CLI Pipeline** for automated benchmark campaigns.
 
 ### A. Running the Interactive Web UI
 
@@ -247,7 +247,7 @@ python scripts/plot_benchmark.py --target avgfp --out scripts/benchmark_avgfp.pn
 
 ### C. Running the Complete Test Suite
 
-VeritasBio includes 148 automated unit tests across 24 test suites covering all 7 layers:
+PanoptesBio includes 148 automated unit tests across 24 test suites covering all 7 layers:
 ```bash
 python -m unittest discover -s tests -v
 ```
@@ -257,7 +257,7 @@ python -m unittest discover -s tests -v
 ## 6. Directory Structure
 
 ```
-VeritasBio/
+PanoptesBio/
 ├── controller/
 │   ├── gatekeeper.py       # Pydantic validation, two-state cost model, ROI evaluator
 │   ├── prompts.py          # Llama 3.1 combinatorial search strategy prompts & parser
@@ -301,7 +301,7 @@ VeritasBio/
 ## 7. License & Credits
 
 Built for the **Meta Global AI Developer Hackathon**.
-- **Architecture & Engine**: VeritasBio Team
+- **Architecture & Engine**: PanoptesBio Team
 - **Foundation Models**: Meta Llama 3.1, Meta Fair ESM-2
 - **Infrastructure**: Modal Labs (NVIDIA A10G Serverless)
 - **Benchmark Data**: Sarkisyan et al. (2016) *Nature* (ProteinGym GFP DMS)

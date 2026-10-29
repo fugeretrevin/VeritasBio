@@ -2,7 +2,7 @@
 scripts/run_gb1_benchmark.py — Real-World Active Learning Benchmark on the Protein G (GB1) Landscape.
 
 Purpose:
-    Benchmarks VeritasBio's deterministic cloud-economics active-learning loop
+    Benchmarks PanoptesBio's deterministic cloud-economics active-learning loop
     against the 149,361 empirical variant measurements from the four-site combinatorial
     landscape of Streptococcal Protein G B1 domain (Wu, Dai, Olson et al. 2016, eLife).
 
@@ -50,7 +50,7 @@ from workers.rag_worker import fetch_protein_metadata
 from workers.spatial_filter import SpatialContactMap
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger("veritasbio.gb1_benchmark")
+logger = logging.getLogger("panoptesbio.gb1_benchmark")
 
 DATA_CSV = ROOT_DIR / "scripts" / "data" / "GB1_STRSG_Wu_2016.csv"
 PARENT_ACCESSION = "SPG1_STRSG"

@@ -1,5 +1,5 @@
 -- =============================================================================
--- VeritasBio Enterprise Multi-Tenant PostgreSQL Schema with Row-Level Security
+-- PanoptesBio Enterprise Multi-Tenant PostgreSQL Schema with Row-Level Security
 -- Standard: FDA 21 CFR Part 11 & SOC-2 Type II Regulatory Audit Compliance
 -- =============================================================================
 
