@@ -18,7 +18,7 @@ class FirebaseConfig(BaseModel):
     """Configuration for PanoptesBio Firebase instance."""
 
     api_key: str = Field(
-        default_factory=lambda: os.getenv("FIREBASE_API_KEY", "AIzaSyB4nBuxqnKFqFeyS_RZVCNlK6ox0iXEbq8")
+        default_factory=lambda: os.getenv("FIREBASE_API_KEY", "")
     )
     auth_domain: str = Field(
         default_factory=lambda: os.getenv("FIREBASE_AUTH_DOMAIN", "panoptesbio.firebaseapp.com")
