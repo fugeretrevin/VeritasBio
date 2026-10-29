@@ -58,6 +58,15 @@ export default function Protein3DViewer({
             { stick: { color: '#fbbf24', radius: 0.3 } }
           );
         }
+
+        // Render cofactors / bound ligands (HETATM: PLP, 0JO, HEM, etc.) in bright rose crimson
+        viewer.addStyle(
+          { hetflag: true },
+          {
+            stick: { color: '#f43f5e', radius: 0.32 },
+            sphere: { color: '#fb7185', radius: 0.45, opacity: 0.95 },
+          }
+        );
       }
 
       viewer.zoomTo();

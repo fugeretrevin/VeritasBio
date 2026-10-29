@@ -224,6 +224,10 @@ def generate_3d_viewer_html(
                 <span>{catalytic_label}</span>
             </div>
             <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: #f43f5e;"></span>
+                <span>Cofactor / Ligand (HETATM)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
                 <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #06b6d4; box-shadow: 0 0 6px #06b6d4;"></span>
                 <span>Active Candidate Mutations</span>
             </div>
@@ -295,6 +299,19 @@ def generate_3d_viewer_html(
                     borderColor: "#f59e0b"
                 }});
             }}
+
+            // 2b. Catalytic cofactors & bound ligands (HETATM: PLP, 0JO, HEM, etc.) in rose crimson sticks & spheres
+            glviewer.addStyle({{hetflag: true}}, {{
+                stick: {{
+                    color: "#f43f5e",
+                    radius: 0.32
+                }},
+                sphere: {{
+                    color: "#fb7185",
+                    radius: 0.45,
+                    opacity: 0.95
+                }}
+            }});
 
             // 3. Highlight active candidate mutations in glowing cyan spheres
             let activeMutPositions = {mutations_json};
