@@ -19,11 +19,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import logging
 import sys
 import time
+import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # Add repository root to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -37,29 +39,46 @@ logger = logging.getLogger("ingest_plate_data")
 
 
 def parse_plate_csv(
-    csv_path: Path,
+    csv_path: Union[Path, str, io.StringIO],
     normalize_to_wt: bool = True,
 ) -> Dict[str, Any]:
     """
-    Parses plate reader CSV files. Supports VeritasBio robotic layout and generic plate reader exports.
+    Parses plate reader CSV files or raw CSV text. Supports VeritasBio robotic layout and generic plate reader exports.
     """
-    if not csv_path.is_file():
-        raise FileNotFoundError(f"Plate CSV file not found: {csv_path}")
+    close_stream = False
+    if isinstance(csv_path, io.StringIO):
+        reader_file = csv_path
+    elif isinstance(csv_path, Path):
+        if not csv_path.is_file():
+            raise FileNotFoundError(f"Plate CSV file not found: {csv_path}")
+        reader_file = open(csv_path, "r", encoding="utf-8-sig")
+        close_stream = True
+    elif isinstance(csv_path, str):
+        if "\n" in csv_path or not Path(csv_path).is_file():
+            reader_file = io.StringIO(csv_path)
+        else:
+            reader_file = open(Path(csv_path), "r", encoding="utf-8-sig")
+            close_stream = True
+    else:
+        raise ValueError(f"Invalid csv_path type: {type(csv_path)}")
 
-    rows: List[Dict[str, str]] = []
-    with open(csv_path, "r", encoding="utf-8-sig") as f:
-        reader = csv.reader(f)
+    try:
+        reader = csv.reader(reader_file)
         header = [h.strip() for h in next(reader)]
         header_lower = [h.lower() for h in header]
 
+        rows: List[Dict[str, str]] = []
         for raw_row in reader:
             if not raw_row or not any(raw_row):
                 continue
             row_dict = {k: v.strip() for k, v in zip(header_lower, raw_row) if k}
             rows.append(row_dict)
+    finally:
+        if close_stream:
+            reader_file.close()
 
     if not rows:
-        raise ValueError(f"No data rows found in plate CSV: {csv_path}")
+        raise ValueError("No data rows found in plate CSV.")
 
     # Detect score column
     score_col = None
@@ -149,21 +168,27 @@ def parse_plate_csv(
 
 
 def ingest_plate_csv(
-    csv_path: Union[str, Path],
+    csv_path: Optional[Union[str, Path, io.StringIO]] = None,
     db_path: Optional[Union[str, Path]] = None,
     target_accession: str = "P42212",
     normalize_to_wt: bool = True,
     nominal_cost_usd: float = 0.000100,
+    operator_uid: Optional[str] = None,
+    operator_email: Optional[str] = None,
+    csv_input: Optional[Union[str, Path, io.StringIO]] = None,
 ) -> Dict[str, Any]:
     """
     Programmatic entrypoint to ingest plate reader data into SQLite ledger.
     """
-    csv_file = Path(csv_path)
-    parsed = parse_plate_csv(csv_file, normalize_to_wt=normalize_to_wt)
+    target_input = csv_path if csv_path is not None else csv_input
+    if target_input is None:
+        raise ValueError("Must provide csv_path or csv_input")
+
+    parsed = parse_plate_csv(target_input, normalize_to_wt=normalize_to_wt)
     variants = parsed["valid_variants"]
 
     if not variants:
-        raise ValueError(f"No candidate variants found in {csv_file}")
+        raise ValueError("No candidate variants found in plate input.")
 
     # Fetch reference wild-type sequence from UniProt
     metadata = fetch_protein_metadata(target_accession)
@@ -204,13 +229,15 @@ def ingest_plate_csv(
         ledger_db.init_db(resolved_db)
         ledger_db.create_budget(total_allocation=5.00, db_path=resolved_db)
 
-    job_id = f"job-wetlab-plate-{int(time.time())}"
+    job_id = f"job-wetlab-plate-{int(time.time())}-{uuid.uuid4().hex[:6]}"
     authorized = ledger_db.authorize_spend(
         job_id=job_id,
         target_model="wetlab_plate_reader",
         variant_count=len(evidence_tuples),
         estimated_cost=nominal_cost_usd,
         db_path=resolved_db,
+        operator_uid=operator_uid,
+        operator_email=operator_email,
     )
 
     if not authorized:
@@ -224,9 +251,15 @@ def ingest_plate_csv(
     annotated_variants.sort(key=lambda x: x["normalized_score"], reverse=True)
     top_hit = annotated_variants[0]
 
+    # Retrieve latest Merkle audit block
+    audit_blocks = ledger_db.list_audit_blocks(db_path=resolved_db)
+    latest_block = audit_blocks[-1] if audit_blocks else {}
+
+    csv_desc = str(csv_input) if isinstance(csv_input, (str, Path)) and "\n" not in str(csv_input) else "in-memory / uploaded microplate"
+
     return {
         "job_id": job_id,
-        "csv_path": str(csv_file),
+        "csv_path": csv_desc,
         "target_protein": metadata.protein_name,
         "target_accession": metadata.accession,
         "variants_ingested": len(evidence_tuples),
@@ -234,7 +267,10 @@ def ingest_plate_csv(
         "wt_baseline_score": parsed["wt_baseline_score"],
         "top_fitness_discovered": top_hit["normalized_score"],
         "top_variant": top_hit["mutations"],
-        "top_variants_ranked": annotated_variants[:5],
+        "top_variants_ranked": annotated_variants[:10],
+        "block_hash": latest_block.get("block_hash"),
+        "block_index": latest_block.get("block_index"),
+        "timestamp": latest_block.get("timestamp"),
     }
 
 
@@ -248,7 +284,7 @@ def main() -> None:
     args = parser.parse_args()
 
     result = ingest_plate_csv(
-        csv_path=Path(args.plate_csv),
+        csv_input=Path(args.plate_csv),
         db_path=Path(args.db_path) if args.db_path else None,
         target_accession=args.target_accession,
         normalize_to_wt=not args.no_normalize_wt,
@@ -263,6 +299,8 @@ def main() -> None:
     print(f"Barrier Wells Ignored:  {result['barrier_wells_ignored']}")
     print(f"WT Parent Baseline:     {result['wt_baseline_score']}")
     print(f"Champion Variant:       {result['top_variant']} (Score: {result['top_fitness_discovered']:.4f})")
+    if result.get("block_hash"):
+        print(f"Audit Block Hash:       {result['block_hash']}")
     print("=" * 60)
 
 

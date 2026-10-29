@@ -84,6 +84,52 @@ class TestServerAPI(unittest.TestCase):
         self.assertIn("audit_integrity", data)
         self.assertTrue(data["audit_integrity"]["is_valid"])
 
+    def test_ingest_plate_json_endpoint(self) -> None:
+        """Verifies microplate reader CSV ingestion via JSON body into SQLite ledger."""
+        csv_payload = (
+            "Well,Sample_Type,Sample_Name,Reading\n"
+            "A01,evaporation_barrier,H2O,0.01\n"
+            "A02,evaporation_barrier,H2O,0.01\n"
+            "B02,control_wt,WT,1.00\n"
+            "B03,variant,S65T:V68L,1.85\n"
+            "B04,variant,T203Y,1.40\n"
+        )
+        resp = self.client.post(
+            "/api/campaign/ingest-plate",
+            json={
+                "csv_content": csv_payload,
+                "target_accession": "P42212",
+                "normalize_to_wt": True,
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data.get("success"))
+        self.assertEqual(data.get("variants_ingested"), 3)
+        self.assertEqual(data.get("barrier_wells_ignored"), 2)
+        self.assertAlmostEqual(data.get("wt_baseline_score"), 1.00)
+        self.assertAlmostEqual(data.get("top_fitness_discovered"), 1.85)
+        self.assertIn("block_hash", data)
+
+    def test_ingest_plate_multipart_endpoint(self) -> None:
+        """Verifies microplate reader CSV ingestion via multipart file upload."""
+        csv_payload = (
+            "Well,Sample_Type,Sample_Name,Reading\n"
+            "A01,evaporation_barrier,H2O,0.02\n"
+            "B02,control_wt,WT,1.00\n"
+            "B05,variant,F64L:S65T,2.20\n"
+        )
+        files = {"file": ("tecan_plate_data.csv", csv_payload.encode("utf-8"), "text/csv")}
+        data = {"target_accession": "P42212", "normalize_to_wt": "true"}
+        resp = self.client.post("/api/campaign/ingest-plate", files=files, data=data)
+        self.assertEqual(resp.status_code, 200)
+        res_data = resp.json()
+        self.assertTrue(res_data.get("success"))
+        self.assertEqual(res_data.get("variants_ingested"), 2)
+        self.assertEqual(res_data.get("barrier_wells_ignored"), 1)
+        self.assertAlmostEqual(res_data.get("top_fitness_discovered"), 2.20)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, status
+from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -42,6 +42,7 @@ from ledger import database as ledger_db
 from workers.diffusion_worker import DeNovoBinderRequest, generate_budgeted_de_novo_binders
 from workers.mock_workers import MockLLMWorker
 from workers.rag_worker import fetch_protein_metadata
+from scripts.ingest_plate_data import ingest_plate_csv
 from workers.wetlab_worker import (
     generate_cryptographic_audit_certificate,
     generate_opentrons_protocol,
@@ -416,6 +417,69 @@ def export_wetlab_manifests(target_name: str = "PanoptesBio_Leads") -> Dict[str,
         "opentrons_script": opentrons_py,
         "fda_certificate_json": json.dumps(fda_cert, indent=2),
     }
+
+
+@app.post("/api/campaign/ingest-plate")
+async def ingest_plate_endpoint(request: Request) -> Dict[str, Any]:
+    """
+    Ingests physical 96-well / 384-well microplate reader CSV experimental data
+    into the VeritasBio SQLite ledger and Merkle audit trail.
+    Supports:
+      - Multipart form-data with file upload ('file')
+      - Form fields ('csv_content', 'target_accession', 'normalize_to_wt', 'auth_token')
+      - JSON body ({"csv_content": "...", "target_accession": "...", "normalize_to_wt": True})
+    """
+    try:
+        content_type = request.headers.get("content-type", "")
+        csv_text = ""
+        target_accession = "P42212"
+        normalize_to_wt = True
+        auth_token = "panoptes_demo_token"
+
+        if "application/json" in content_type:
+            body = await request.json()
+            csv_text = body.get("csv_content", "")
+            target_accession = body.get("target_accession", "P42212")
+            normalize_to_wt = bool(body.get("normalize_to_wt", True))
+            auth_token = body.get("auth_token", "panoptes_demo_token")
+        elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+            form = await request.form()
+            if "file" in form and hasattr(form["file"], "read"):
+                uploaded = form["file"]
+                raw_bytes = await uploaded.read()
+                csv_text = raw_bytes.decode("utf-8-sig", errors="replace")
+            elif "csv_content" in form:
+                csv_text = str(form["csv_content"])
+            target_accession = str(form.get("target_accession", "P42212"))
+            norm_val = form.get("normalize_to_wt", "true")
+            normalize_to_wt = str(norm_val).lower() in ("true", "1", "yes")
+            auth_token = str(form.get("auth_token", "panoptes_demo_token"))
+        else:
+            raw_bytes = await request.body()
+            csv_text = raw_bytes.decode("utf-8-sig", errors="replace")
+
+        if not csv_text.strip():
+            raise HTTPException(status_code=400, detail="Microplate CSV content or file is empty.")
+
+        # Authenticate operator if token provided
+        user = verify_firebase_id_token(auth_token) if auth_token else None
+        operator_uid = user.uid if user else "usr_panoptes_operator"
+        operator_email = user.email if user else "scientist@panoptesbio.com"
+
+        res = ingest_plate_csv(
+            csv_input=csv_text,
+            db_path=DEFAULT_DB_PATH,
+            target_accession=target_accession,
+            normalize_to_wt=normalize_to_wt,
+            operator_uid=operator_uid,
+            operator_email=operator_email,
+        )
+        return {"success": True, **res}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Microplate data ingestion failed: %s", exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 if __name__ == "__main__":
