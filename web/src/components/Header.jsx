@@ -30,7 +30,7 @@ export default function Header({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 0 16px rgba(2, 132, 199, 0.4)',
+            boxShadow: '0 4px 14px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
           }}
         >
           <Cpu size={24} color="#ffffff" />
@@ -56,14 +56,14 @@ export default function Header({
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
         {/* Active Operator Identity Pill */}
         <div
-          className="glass-panel"
           style={{
             padding: '6px 14px',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
             borderRadius: 'var(--radius-full)',
-            background: 'rgba(15, 23, 42, 0.6)',
+            background: 'rgba(15, 23, 42, 0.7)',
+            border: '1px solid var(--border-subtle)',
           }}
         >
           <UserCheck size={16} color="var(--emerald-bright)" />

@@ -197,7 +197,7 @@ export default function CampaignStudio({ onRefreshLedger }) {
             <span style={{ fontWeight: 600, color: 'var(--text-main)', display: 'block' }}>
               Hierarchical Pocket-Hopping
             </span>
-            <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>
+            <span style={{ color: 'var(--text-dim)', fontSize: '12px' }}>
               Lock lead mutations on regret saturation & sweep coupled secondary loop
             </span>
           </label>
@@ -231,7 +231,7 @@ export default function CampaignStudio({ onRefreshLedger }) {
             <span className="terminal-circle" style={{ background: '#ef4444' }} />
             <span className="terminal-circle" style={{ background: '#f59e0b' }} />
             <span className="terminal-circle" style={{ background: '#10b981' }} />
-            <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '6px' }}>
+            <span style={{ fontSize: '12px', color: '#94a3b8', marginLeft: '6px' }}>
               panoptesbio-kernel :: live-event-stream.log
             </span>
           </div>

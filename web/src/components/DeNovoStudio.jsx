@@ -187,11 +187,11 @@ export default function DeNovoStudio({ onRefreshLedger }) {
 
         {generationResult && (
           <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-            <button onClick={handleDownloadTwist} className="btn btn-secondary" style={{ flex: 1, fontSize: '11px' }}>
+            <button onClick={handleDownloadTwist} className="btn btn-secondary" style={{ flex: 1, fontSize: '12px' }}>
               <FileSpreadsheet size={14} color="var(--emerald-bright)" />
               <span>Twist CSV</span>
             </button>
-            <button onClick={handleDownloadOpentrons} className="btn btn-secondary" style={{ flex: 1, fontSize: '11px' }}>
+            <button onClick={handleDownloadOpentrons} className="btn btn-secondary" style={{ flex: 1, fontSize: '12px' }}>
               <Bot size={14} color="var(--cyan-bright)" />
               <span>Opentrons .py</span>
             </button>
@@ -268,7 +268,7 @@ export default function DeNovoStudio({ onRefreshLedger }) {
                         <button
                           onClick={() => setSelectedDesign(design)}
                           className="btn btn-secondary"
-                          style={{ padding: '4px 10px', fontSize: '11px' }}
+                          style={{ padding: '4px 10px', fontSize: '12px' }}
                         >
                           View 3D
                         </button>

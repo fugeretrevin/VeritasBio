@@ -39,7 +39,7 @@ export default function KpiBar({
             <DollarSign size={20} />
           </div>
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '6px' }}>
+        <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '6px' }}>
           Exact micro-USD integer precision
         </div>
       </div>
@@ -66,7 +66,7 @@ export default function KpiBar({
             <Flame size={20} />
           </div>
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '6px' }}>
+        <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '6px' }}>
           Modal A10G cold/warm amortized
         </div>
       </div>
@@ -93,7 +93,7 @@ export default function KpiBar({
             <Award size={20} />
           </div>
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '6px' }}>
+        <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '6px' }}>
           Lead-locked epistatic optimum
         </div>
       </div>
@@ -123,7 +123,7 @@ export default function KpiBar({
             <TrendingUp size={20} />
           </div>
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '6px' }}>
+        <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '6px' }}>
           Compared to unguided brute force
         </div>
       </div>

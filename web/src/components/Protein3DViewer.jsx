@@ -109,7 +109,7 @@ export default function Protein3DViewer({
           position: 'absolute',
           bottom: '8px',
           right: '12px',
-          fontSize: '11px',
+          fontSize: '12px',
           color: 'var(--text-dim)',
           fontFamily: 'var(--font-mono)',
         }}

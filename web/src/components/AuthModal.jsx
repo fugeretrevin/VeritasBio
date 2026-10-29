@@ -175,7 +175,7 @@ export default function AuthModal({ isOpen, onClose, currentUser, onSelectUser }
             <div
               className="mono"
               style={{
-                fontSize: '11px',
+                fontSize: '12px',
                 padding: '12px',
                 borderRadius: '8px',
                 background: '#060911',
