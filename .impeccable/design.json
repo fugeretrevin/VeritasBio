@@ -1,0 +1,727 @@
+{
+ "schemaVersion": 2,
+ "generatedAt": "2026-10-29T00:00:00Z",
+ "title": "Design System: PanoptesBio",
+ "extensions": {
+  "colorMeta": {
+   "bg": {
+    "role": "neutral",
+    "displayName": "Ground",
+    "canonical": "#070a12",
+    "tonalRamp": [
+     "#04060b",
+     "#070a12",
+     "#0e1424",
+     "#151d33",
+     "#1e2a48",
+     "#27365c",
+     "#334155",
+     "#475569"
+    ]
+   },
+   "bg-panel": {
+    "role": "neutral",
+    "displayName": "Panel",
+    "canonical": "#0e1424",
+    "tonalRamp": [
+     "#04060b",
+     "#070a12",
+     "#0e1424",
+     "#151d33",
+     "#1e2a48",
+     "#27365c",
+     "#334155",
+     "#475569"
+    ]
+   },
+   "bg-card": {
+    "role": "neutral",
+    "displayName": "Card",
+    "canonical": "#151d33",
+    "tonalRamp": [
+     "#04060b",
+     "#070a12",
+     "#0e1424",
+     "#151d33",
+     "#1e2a48",
+     "#27365c",
+     "#334155",
+     "#475569"
+    ]
+   },
+   "bg-card-hi": {
+    "role": "neutral",
+    "displayName": "Raised Card",
+    "canonical": "#1e2a48",
+    "tonalRamp": [
+     "#04060b",
+     "#070a12",
+     "#0e1424",
+     "#151d33",
+     "#1e2a48",
+     "#27365c",
+     "#334155",
+     "#475569"
+    ]
+   },
+   "fg": {
+    "role": "neutral",
+    "displayName": "Primary Text",
+    "canonical": "#f7f9fc",
+    "tonalRamp": [
+     "#0f172a",
+     "#1e293b",
+     "#334155",
+     "#475569",
+     "#64748b",
+     "#8795ae",
+     "#9aa8bf",
+     "#f1f5f9"
+    ]
+   },
+   "fg-muted": {
+    "role": "neutral",
+    "displayName": "Muted Text",
+    "canonical": "#9aa8bf",
+    "tonalRamp": [
+     "#0f172a",
+     "#1e293b",
+     "#334155",
+     "#475569",
+     "#64748b",
+     "#8795ae",
+     "#9aa8bf",
+     "#f1f5f9"
+    ]
+   },
+   "fg-dim": {
+    "role": "neutral",
+    "displayName": "Dim Text",
+    "canonical": "#8795ae",
+    "tonalRamp": [
+     "#0f172a",
+     "#1e293b",
+     "#334155",
+     "#475569",
+     "#64748b",
+     "#8795ae",
+     "#9aa8bf",
+     "#f1f5f9"
+    ]
+   },
+   "emerald": {
+    "role": "secondary",
+    "displayName": "Verified Emerald",
+    "canonical": "#34d399",
+    "tonalRamp": [
+     "#064e3b",
+     "#065f46",
+     "#047857",
+     "#059669",
+     "#10b981",
+     "#34d399",
+     "#6ee7b7",
+     "#a7f3d0"
+    ]
+   },
+   "amber": {
+    "role": "secondary",
+    "displayName": "Waiting Amber",
+    "canonical": "#fbbf24",
+    "tonalRamp": [
+     "#78350f",
+     "#92400e",
+     "#b45309",
+     "#d97706",
+     "#f59e0b",
+     "#fbbf24",
+     "#fcd34d",
+     "#fde68a"
+    ]
+   },
+   "rose": {
+    "role": "secondary",
+    "displayName": "Refused Rose",
+    "canonical": "#f43f5e",
+    "tonalRamp": [
+     "#881337",
+     "#9f1239",
+     "#be123c",
+     "#e11d48",
+     "#f43f5e",
+     "#fb7185",
+     "#fda4af",
+     "#fecdd3"
+    ]
+   },
+   "rose-hi": {
+    "role": "secondary",
+    "displayName": "Legible Rose",
+    "canonical": "#fb7185",
+    "tonalRamp": [
+     "#881337",
+     "#9f1239",
+     "#be123c",
+     "#e11d48",
+     "#f43f5e",
+     "#fb7185",
+     "#fda4af",
+     "#fecdd3"
+    ]
+   },
+   "violet": {
+    "role": "tertiary",
+    "displayName": "Analytic Violet",
+    "canonical": "#c084fc",
+    "tonalRamp": [
+     "#4c1d95",
+     "#5b21b6",
+     "#6d28d9",
+     "#7c3aed",
+     "#8b5cf6",
+     "#a78bfa",
+     "#c084fc",
+     "#ddd6fe"
+    ]
+   },
+   "accent": {
+    "role": "primary",
+    "displayName": "Signal Blue",
+    "canonical": "#4d9fff",
+    "tonalRamp": [
+     "#06182f",
+     "#0b2a53",
+     "#113d78",
+     "#1a559e",
+     "#2a72c6",
+     "#3a89e4",
+     "#4d9fff",
+     "#8fc2ff"
+    ]
+   },
+   "accent-hi": {
+    "role": "primary",
+    "displayName": "Accent Hover",
+    "canonical": "#7ab4ff",
+    "derived": true
+   },
+   "accent-ink": {
+    "role": "neutral",
+    "displayName": "Accent Ink",
+    "canonical": "#05101f",
+    "derived": true
+   },
+   "accent-edge": {
+    "role": "primary",
+    "displayName": "Accent Edge",
+    "canonical": "rgba(77,159,255,0.32)",
+    "derived": true
+   },
+   "accent-ring": {
+    "role": "primary",
+    "displayName": "Accent Ring",
+    "canonical": "rgba(77,159,255,0.10)",
+    "derived": true
+   },
+   "emerald-edge": {
+    "role": "secondary",
+    "displayName": "Emerald Edge",
+    "canonical": "rgba(52,211,153,0.3)",
+    "derived": true
+   },
+   "amber-edge": {
+    "role": "secondary",
+    "displayName": "Amber Edge",
+    "canonical": "rgba(251,191,36,0.3)",
+    "derived": true
+   },
+   "rose-edge": {
+    "role": "secondary",
+    "displayName": "Rose Edge",
+    "canonical": "rgba(244,63,94,0.3)",
+    "derived": true
+   },
+   "bg-raised-hi": {
+    "role": "neutral",
+    "displayName": "Raised Hover",
+    "canonical": "#27365c",
+    "derived": true
+   },
+   "bg-sunk": {
+    "role": "neutral",
+    "displayName": "Sunk",
+    "canonical": "#04070e",
+    "derived": true
+   },
+   "thumb-hi": {
+    "role": "neutral",
+    "displayName": "Scrollbar Thumb Hover",
+    "canonical": "#2e3e66",
+    "derived": true
+   },
+   "wash-faint": {
+    "role": "neutral",
+    "displayName": "Faint Wash",
+    "canonical": "rgba(255,255,255,0.02)",
+    "derived": true
+   },
+   "wash-soft": {
+    "role": "neutral",
+    "displayName": "Soft Wash",
+    "canonical": "rgba(255,255,255,0.04)",
+    "derived": true
+   },
+   "wash": {
+    "role": "neutral",
+    "displayName": "Wash",
+    "canonical": "rgba(255,255,255,0.05)",
+    "derived": true
+   },
+   "track": {
+    "role": "neutral",
+    "displayName": "Meter Track",
+    "canonical": "rgba(255,255,255,0.07)",
+    "derived": true
+   }
+  },
+  "typographyMeta": {
+   "display": {
+    "displayName": "Display",
+    "purpose": "Landing hero only. One per page.",
+    "scaleToken": "fluid"
+   },
+   "headline": {
+    "displayName": "Headline",
+    "purpose": "Landing section headings. The only place fluid clamp sizing is correct.",
+    "scaleToken": "fluid"
+   },
+   "title": {
+    "displayName": "Title",
+    "purpose": "Console pane headings. Fixed, never fluid.",
+    "scaleToken": "--t-3xl"
+   },
+   "body": {
+    "displayName": "Body",
+    "purpose": "Default copy. Prose holds a 65-75ch measure.",
+    "scaleToken": "--t-lg"
+   },
+   "label": {
+    "displayName": "Label",
+    "purpose": "Table headers, metric keys, pills, stage chips, rail groups. 11px floor.",
+    "scaleToken": "--t-xs"
+   },
+   "code": {
+    "displayName": "Code",
+    "purpose": "Mutation notation, accessions, job IDs, worker names, event log. Never prose.",
+    "scaleToken": "--t-md"
+   }
+  },
+  "shadows": [
+   {
+    "name": "state-ring",
+    "value": "0 0 0 1px rgba(77,159,255,0.10)",
+    "purpose": "The only box-shadow in the console. A second hairline reinforcing a live round's blue border. Zero offset, zero blur: a ring, not an elevation."
+   },
+   {
+    "name": "deck-glow",
+    "value": "0 0 24px rgba(0,240,255,0.35)",
+    "purpose": "Presentation and marketing surfaces ONLY. Never in product UI, where a coloured halo is decoration competing with the one live signal. Still cyan: the deck has not been brought onto the blue palette yet."
+   },
+   {
+    "name": "deck-drop",
+    "value": "0 10px 30px rgba(0,0,0,0.5)",
+    "purpose": "Presentation surfaces only. Lifts deck cards off the ground plane."
+   }
+  ],
+  "motion": [
+   {
+    "name": "duration-state",
+    "value": "150ms",
+    "purpose": "Button background and border-color transitions. Users are in a task; nothing waits on choreography."
+   },
+   {
+    "name": "ease-standard",
+    "value": "ease",
+    "purpose": "Default easing for state transitions."
+   },
+   {
+    "name": "pulse-live",
+    "value": "2s ease-in-out infinite",
+    "purpose": "The single authored moment: the dot on a running status pill. Suppressed under prefers-reduced-motion."
+   },
+   {
+    "name": "press",
+    "value": "translateY(1px)",
+    "purpose": "Button :active. The only positional feedback in the system."
+   }
+  ],
+  "breakpoints": [
+   {
+    "name": "claim",
+    "value": "620px"
+   },
+   {
+    "name": "rail-collapse",
+    "value": "860px"
+   },
+   {
+    "name": "run-grid",
+    "value": "900px"
+   }
+  ],
+  "typeScale": [
+   {
+    "name": "--t-xs",
+    "value": "0.6875rem",
+    "px@16": "11px",
+    "purpose": "Labels, chips, pills, table headers. The floor."
+   },
+   {
+    "name": "--t-sm",
+    "value": "0.75rem",
+    "px@16": "12px",
+    "purpose": "Hints, meta, field labels."
+   },
+   {
+    "name": "--t-md",
+    "value": "0.8125rem",
+    "px@16": "13px",
+    "purpose": "Dense copy, the event log."
+   },
+   {
+    "name": "--t-base",
+    "value": "0.875rem",
+    "px@16": "14px",
+    "purpose": "Default UI text, buttons, nav."
+   },
+   {
+    "name": "--t-lg",
+    "value": "0.9375rem",
+    "px@16": "15px",
+    "purpose": "Body copy, card headings."
+   },
+   {
+    "name": "--t-xl",
+    "value": "1.1875rem",
+    "px@16": "19px",
+    "purpose": "Subheads, wordmark, quota amount."
+   },
+   {
+    "name": "--t-2xl",
+    "value": "1.3125rem",
+    "px@16": "21px",
+    "purpose": "Metric values."
+   },
+   {
+    "name": "--t-3xl",
+    "value": "1.5rem",
+    "px@16": "24px",
+    "purpose": "Pane and auth headings."
+   },
+   {
+    "name": "--t-4xl",
+    "value": "1.875rem",
+    "px@16": "30px",
+    "purpose": "Stat values."
+   }
+  ],
+  "radii": [
+   {
+    "name": "--r-xs",
+    "value": "3px",
+    "purpose": "Budget meter."
+   },
+   {
+    "name": "--r-chip",
+    "value": "4px",
+    "purpose": "Stage chips — read as a strip, not pressed."
+   },
+   {
+    "name": "--r-sm",
+    "value": "6px",
+    "purpose": "Controls: buttons, inputs, residue chips, nav items."
+   },
+   {
+    "name": "--r-md",
+    "value": "9px",
+    "purpose": "Containers: cards, clusters, rounds, exports."
+   },
+   {
+    "name": "--r-lg",
+    "value": "10px",
+    "purpose": "Outermost card, drop zone."
+   },
+   {
+    "name": "--r-pill",
+    "value": "999px",
+    "purpose": "Status pills."
+   }
+  ],
+  "fluidSteps": [
+   {
+    "name": "display",
+    "value": "clamp(2.375rem, 7vw, 4.125rem)",
+    "purpose": "Landing hero only, one per page."
+   },
+   {
+    "name": "headline",
+    "value": "clamp(1.5rem, 4vw, 2.125rem)",
+    "purpose": "Landing section headings."
+   },
+   {
+    "name": "claim-figure",
+    "value": "clamp(2.125rem, 5vw, 2.75rem)",
+    "purpose": "Hero claim numbers."
+   },
+   {
+    "name": "lede",
+    "value": "clamp(1rem, 2.2vw, 1.1875rem)",
+    "purpose": "Landing lede paragraph."
+   }
+  ],
+  "fluidStepNote": "Fluid steps interpolate BETWEEN scale steps, so their clamp() endpoints are deliberately not scale tokens: 1rem, 2.75rem and 4.125rem exist only as the ends of a range. Fluid type is confined to the landing page; nothing in the console uses it. A detector reading only the frontmatter roles will flag these endpoints.",
+  "spacingScale": [
+   {
+    "name": "--sp-xs",
+    "value": "6px",
+    "purpose": "Tightest grouping: label to its value."
+   },
+   {
+    "name": "--sp-sm",
+    "value": "10px",
+    "purpose": "Detail under a label."
+   },
+   {
+    "name": "--sp-md",
+    "value": "14px",
+    "purpose": "Within a group."
+   },
+   {
+    "name": "--sp-lg",
+    "value": "18px",
+    "purpose": "Default card padding; between groups."
+   },
+   {
+    "name": "--sp-xl",
+    "value": "22px",
+    "purpose": "The work grid gap; separating blocks."
+   },
+   {
+    "name": "--sp-2xl",
+    "value": "26px",
+    "purpose": "Widest separation inside a pane."
+   }
+  ]
+ },
+ "components": [
+  {
+   "name": "Primary Button",
+   "kind": "button",
+   "refersTo": "button-primary",
+   "description": "The single committing action on a view. Exactly one per screen.",
+   "html": "<button class=\"ds-btn ds-btn-primary\">Accept scope and set budget</button>",
+   "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif; font-weight: 600; font-size: 0.875rem; border-radius: 6px; padding: 10px 18px; border: 1px solid transparent; transition: background .15s, border-color .15s; cursor: pointer; } .ds-btn-primary { background: #4d9fff; color: #05101f; } .ds-btn-primary:hover { background: #7ab4ff; } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { outline: 2px solid #4d9fff; outline-offset: 2px; } .ds-btn-primary[disabled] { opacity: .4; cursor: not-allowed; }"
+  },
+  {
+   "name": "Ghost Button",
+   "kind": "button",
+   "refersTo": "button-ghost",
+   "description": "Secondary and tertiary actions. Quiet at rest; cyan on hover.",
+   "html": "<button class=\"ds-btn ds-btn-ghost\">Save as draft</button>",
+   "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif; font-weight: 600; font-size: 0.875rem; border-radius: 6px; padding: 10px 18px; transition: background .15s, border-color .15s; cursor: pointer; } .ds-btn-ghost { background: transparent; border: 1px solid rgba(255,255,255,0.16); color: #9aa8bf; } .ds-btn-ghost:hover { border-color: #4d9fff; color: #4d9fff; background: rgba(77,159,255,0.14); } .ds-btn-ghost:active { transform: translateY(1px); } .ds-btn-ghost:focus-visible { outline: 2px solid #4d9fff; outline-offset: 2px; }"
+  },
+  {
+   "name": "Status Pill",
+   "kind": "chip",
+   "refersTo": "pill-running",
+   "description": "The state vocabulary. Running carries a pulsing dot; the other four are static.",
+   "html": "<span class=\"ds-pill ds-pill-run\">Round 3 running</span>\n<span class=\"ds-pill ds-pill-ok\">Complete</span>\n<span class=\"ds-pill ds-pill-warn\">Waiting on bench</span>\n<span class=\"ds-pill ds-pill-stop\">Refused</span>\n<span class=\"ds-pill ds-pill-idle\">Draft</span>",
+   "css": ".ds-pill { display: inline-flex; align-items: center; gap: 6px; font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; border-radius: 999px; padding: 3px 10px; white-space: nowrap; margin-right: 6px; } .ds-pill-run { color: #4d9fff; background: rgba(77,159,255,0.14); border: 1px solid rgba(77,159,255,0.32); } .ds-pill-run::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: ds-pulse 2s ease-in-out infinite; } @keyframes ds-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } } @media (prefers-reduced-motion: reduce) { .ds-pill-run::before { animation: none; } } .ds-pill-ok { color: #34d399; background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.3); } .ds-pill-warn { color: #fbbf24; background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.3); } .ds-pill-stop { color: #fb7185; background: rgba(244,63,94,0.12); border: 1px solid rgba(244,63,94,0.3); } .ds-pill-idle { color: #9aa8bf; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); }"
+  },
+  {
+   "name": "Card",
+   "kind": "card",
+   "refersTo": "card",
+   "description": "The default content surface. Flat, outlined, no shadow.",
+   "html": "<div class=\"ds-card\"><h3 class=\"ds-card-h\">Chromophore environment</h3><p class=\"ds-card-p\">Residues 65&ndash;67 form the chromophore triad; 64 and 68 set its local packing.</p></div>",
+   "css": ".ds-card { background: #151d33; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 18px; max-width: 420px; } .ds-card-h { font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; color: #f7f9fc; margin: 0; line-height: 1.2; } .ds-card-p { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 0.8125rem; color: #9aa8bf; margin: 8px 0 0; line-height: 1.6; max-width: 72ch; }"
+  },
+  {
+   "name": "Input Field",
+   "kind": "input",
+   "refersTo": "input",
+   "description": "Recessed into the card rather than raised off it. Focus shifts the border to cyan.",
+   "html": "<div class=\"ds-field\"><label class=\"ds-label\" for=\"ds-acc\">UniProt accession</label><input class=\"ds-input\" id=\"ds-acc\" value=\"P42212\"><span class=\"ds-hint\">Green fluorescent protein &middot; 238 aa</span></div>",
+   "css": ".ds-field { display: flex; flex-direction: column; gap: 6px; max-width: 280px; } .ds-label { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 0.75rem; font-weight: 600; color: #9aa8bf; } .ds-input { background: #070a12; border: 1px solid rgba(255,255,255,0.16); border-radius: 6px; color: #f7f9fc; padding: 9px 12px; font-family: 'Fira Code', ui-monospace, monospace; font-size: 0.875rem; width: 100%; caret-color: #4d9fff; } .ds-input:focus { border-color: #4d9fff; outline: none; } .ds-hint { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 0.75rem; color: #8795ae; }"
+  },
+  {
+   "name": "Rail Navigation",
+   "kind": "nav",
+   "refersTo": "nav-item-active",
+   "description": "Console left rail. Current item is cyan on cyan wash; sign out is separated and dimmed.",
+   "html": "<nav class=\"ds-rail\"><div class=\"ds-grp\">Work</div><button class=\"ds-nav ds-nav-on\">Campaigns</button><button class=\"ds-nav\">New campaign</button><div class=\"ds-grp ds-grp-sp\">Account</div><button class=\"ds-nav\">Quota</button><div class=\"ds-sep\"></div><button class=\"ds-nav ds-nav-leave\">Sign out</button></nav>",
+   "css": ".ds-rail { background: #0e1424; border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; padding: 14px 10px; display: grid; gap: 2px; width: 216px; } .ds-grp { font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #8795ae; padding: 0 10px 6px; } .ds-grp-sp { padding-top: 14px; } .ds-nav { display: flex; align-items: center; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 6px; padding: 8px 10px; color: #9aa8bf; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 0.875rem; cursor: pointer; } .ds-nav:hover { background: rgba(255,255,255,0.04); color: #f7f9fc; } .ds-nav-on { background: rgba(77,159,255,0.14); color: #4d9fff; font-weight: 600; } .ds-nav-leave { color: #8795ae; font-size: 0.8125rem; } .ds-sep { height: 1px; background: rgba(255,255,255,0.08); margin: 10px 10px 8px; }"
+  },
+  {
+   "name": "Budget Meter",
+   "kind": "custom",
+   "refersTo": null,
+   "description": "Signature component. Fills as money is spent, sits under the word 'spent', colour is the warning.",
+   "html": "<div class=\"ds-quota\"><div class=\"ds-quota-top\"><span class=\"ds-quota-lab\">Quota left</span><span class=\"ds-quota-amt\">$22.41</span></div><div class=\"ds-quota-foot\">$2.59 of $25.00 spent &middot; resets 1 Nov</div><div class=\"ds-meter\" role=\"img\" aria-label=\"10.4% of the monthly quota used\"><i style=\"width:10.4%\"></i></div></div>",
+   "css": ".ds-quota { background: #151d33; border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; padding: 14px; width: 216px; } .ds-quota-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; } .ds-quota-lab { font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #8795ae; } .ds-quota-amt { font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif; font-size: 1.1875rem; font-weight: 700; color: #f7f9fc; font-variant-numeric: tabular-nums; } .ds-quota-foot { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 0.8125rem; color: #8795ae; margin-top: 7px; font-variant-numeric: tabular-nums; } .ds-meter { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.07); overflow: hidden; margin-top: 9px; } .ds-meter > i { display: block; height: 100%; min-width: 3px; border-radius: 3px; background: #4d9fff; }"
+  },
+  {
+   "name": "Stage Strip",
+   "kind": "custom",
+   "refersTo": null,
+   "description": "Signature component. The six fixed loop steps, shown only on a running or refused round.",
+   "html": "<div class=\"ds-chips\"><span class=\"ds-chip ds-chip-done\">Ingest</span><span class=\"ds-chip ds-chip-done\">Propose</span><span class=\"ds-chip ds-chip-done\">Select</span><span class=\"ds-chip ds-chip-done\">Authorise</span><span class=\"ds-chip ds-chip-now\">Score</span><span class=\"ds-chip\">Record</span></div>",
+   "css": ".ds-chips { display: flex; gap: 5px; flex-wrap: wrap; } .ds-chip { font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; border-radius: 4px; padding: 2px 7px; background: rgba(255,255,255,0.05); color: #9aa8bf; border: 1px solid transparent; } .ds-chip-done { color: #34d399; background: rgba(52,211,153,0.12); } .ds-chip-now { color: #4d9fff; background: rgba(77,159,255,0.14); border-color: rgba(77,159,255,0.32); } .ds-chip-fail { color: #fb7185; background: rgba(244,63,94,0.12); }"
+  },
+  {
+   "name": "Authorisation Projection",
+   "kind": "custom",
+   "refersTo": null,
+   "description": "The budget step's answer card: what the chosen limits actually buy, and which one binds first.",
+   "html": "<div class=\"ds-proj-card\"><div class=\"ds-eyebrow\">What this authorises</div><div class=\"ds-proj\"><div class=\"ds-line\"><span>Priced per variant, warm</span><b>$0.00000768</b></div><div class=\"ds-line\"><span>Cost of one full round</span><b>$0.000192</b></div><div class=\"ds-line\"><span>Cost if every round runs</span><b>$0.001536</b></div><div class=\"ds-binds\">All 8 rounds cost $0.001536 against a $0.0500 authorisation. <b>The round cap binds first</b> &mdash; the campaign stops at 8 rounds with budget to spare.</div></div></div>",
+   "css": ".ds-proj-card { background: #151d33; border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; padding: 18px; max-width: 460px; } .ds-eyebrow { font-family: 'Outfit', ui-sans-serif, sans-serif; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #4d9fff; } .ds-proj { display: grid; gap: 10px; margin-top: 10px; font-size: 0.8125rem; } .ds-line { display: flex; gap: 10px; align-items: baseline; } .ds-line > :first-child { flex: 1; color: #9aa8bf; } .ds-line b { font-family: 'Fira Code', ui-monospace, monospace; font-weight: 400; color: #f7f9fc; } .ds-binds { margin-top: 6px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 0.8125rem; color: #9aa8bf; line-height: 1.6; } .ds-binds b { color: #fbbf24; font-weight: 600; }"
+  }
+ ],
+ "narrative": {
+  "northStar": "The Ledger in Plain Sight",
+  "overview": "The obvious thing is obvious. Whatever the user came to do — read a campaign's state, confirm which residues the planner may touch, decide what goes to the bench — sits in front, uncluttered, at full contrast. Nothing competes with it for attention. The surface is quiet enough that a single blue element reads as *the* live thing on the screen.\n\nUnderneath that clean surface, every decision is accounted for and nothing is hidden. The ledger shows refusals next to approvals. The benchmark shows the held-out correlation next to the enrichment. A round that was priced too high and rejected stays on screen as a card of its own. This is not decoration or humility theatre: it is the product's actual claim, so the visual system has to make the record inspectable rather than tuck it behind a disclosure.\n\nThe register is precise, sober and unembellished. Density is earned, never performed — tables run dense because a scientist is comparing rows, while prose stays at a readable measure. Accent colour is scarce and always means something. The world is deliberately single-theme dark and will not be given a light mode.",
+  "keyCharacteristics": [
+   "Near-black blue ground (#070a12) with a four-step tonal surface ramp instead of shadows",
+   "One scarce blue accent reserved for live state, current selection and primary action",
+   "Outfit for display and labels, Inter for body, Fira Code only for code, data and measurement",
+   "Semantic colour vocabulary that is stable across every surface: blue running, emerald complete, amber waiting, rose refused, neutral idle",
+   "Evidence stays visible — refusals, limits and negative results are designed for, not hidden"
+  ],
+  "rules": [
+   {
+    "name": "The One Live Thing Rule",
+    "body": "Signal Blue marks what is happening now. If a screen shows two different blue elements claiming liveness, one of them is wrong. Current selection and primary action may also carry it, but a screen with blue on more than roughly a tenth of its area has lost the signal.",
+    "section": "colors"
+   },
+   {
+    "name": "The Stable Meaning Rule",
+    "body": "A colour means the same thing on every surface. Emerald is never 'a nice green for a heading'; rose is never 'an attention grabber'. If a new state needs a colour and none of the five fits, the state is probably neutral.",
+    "section": "colors"
+   },
+   {
+    "name": "The Tinted Text Rule",
+    "body": "Any accent text sitting on its own tint must be contrast-checked against the composited background, not against the tint value. Two of the five accents needed a lighter step to clear AA; assume the next one will too.",
+    "section": "colors"
+   },
+   {
+    "name": "The Eleven Pixel Floor",
+    "body": "No text below 11px, and tracked uppercase especially. Labels were lifted off 9.5px and 10px because tracked caps at that size stop being readable and start being texture.",
+    "section": "typography"
+   },
+   {
+    "name": "The Mono Means Data Rule",
+    "body": "Fira Code marks code, identifiers, measurements and tabular figures. It is never a costume for 'technical'. Prose in a monospace face is a bug.",
+    "section": "typography"
+   },
+   {
+    "name": "The Tabular Figures Rule",
+    "body": "Every number that sits in a column or changes in place carries font-variant-numeric: tabular-nums. Costs, fitness values, counts and timestamps must not jitter as they update.",
+    "section": "typography"
+   },
+   {
+    "name": "The Shrinkable Item Rule",
+    "body": "Every grid or flex item that can contain a table carries min-width: 0. A grid item defaults to min-width: auto, which sizes it to the min-content of its widest nowrap table and drags the whole page into horizontal scroll. An overflow-x: auto wrapper cannot save a parent that refuses to shrink.",
+    "section": "layout"
+   },
+   {
+    "name": "The Sticky Clearance Rule",
+    "body": "The prototype bar is sticky, so html carries scroll-padding-top: 64px. Any in-page scroll target — an anchor, a pane switch calling scrollIntoView — must clear fixed chrome, or it lands underneath it.",
+    "section": "layout"
+   },
+   {
+    "name": "The No Horizontal Scroll Rule",
+    "body": "The page holds at 360px with no horizontal overflow. Wide tables scroll inside their own wrapper; the document never does.",
+    "section": "layout"
+   },
+   {
+    "name": "The Tonal-Not-Shadow Rule",
+    "body": "Product UI conveys depth by surface step and hairline. If a console element needs a shadow to read as separate, the real problem is that it is on the wrong surface step.",
+    "section": "elevation"
+   },
+   {
+    "name": "The Deck-Only Glow Rule",
+    "body": "Accent halos belong to the deck. A zero-offset coloured glow in the console is decoration, and the console has no decoration budget.",
+    "section": "elevation"
+   },
+   {
+    "name": "The No Accent Rail Rule",
+    "body": "No coloured border-left or border-right above 1px on cards, list items or callouts. Accent rails were removed from stats and the honest-limits callout deliberately; state belongs in the figure's own colour, not in a stripe beside it.",
+    "section": "shapes"
+   },
+   {
+    "name": "The Dashed Means Provisional Rule",
+    "body": "A dashed border is reserved for the not-yet and the set-aside. A solid border is a committed thing.",
+    "section": "shapes"
+   },
+   {
+    "name": "The No Literal Sizes Rule",
+    "body": "Every font-size is a scale token. A new size is a decision about the scale, made in DESIGN.md first — the page once carried 21 distinct sizes for nine roles, which is how a scale rots.",
+    "section": "typography"
+   },
+   {
+    "name": "The Reader’s Base Size Rule",
+    "body": "The scale is in rem and nothing sets html { font-size }, so a reader who raises their browser default gets a bigger page. Layout must survive it: every row that can run out of space wraps. Verified at 200% text on a 400px viewport with no horizontal overflow.",
+    "section": "typography"
+   },
+   {
+    "name": "The Fluid Endpoints Rule",
+    "body": "Only the landing page uses fluid type, and a fluid step’s clamp() endpoints are not scale tokens — they are the ends of a range. Console type is fixed, because a heading that shrinks inside a narrow work area looks broken rather than responsive.",
+    "section": "typography"
+   },
+   {
+    "name": "The One Spacing Scale Rule",
+    "body": "Margins and gaps come from the six --sp tokens. The markup once carried ten different inline margin values against a grid with its own 22px gap, which is two spacing systems competing; a value off the scale is a decision about the scale, made in DESIGN.md first.",
+    "section": "layout"
+   },
+   {
+    "name": "The Binding Limit Rule",
+    "body": "Where the user sets several limits at once, the interface names which one actually bites. A budget field alone makes spend a number to type; saying the round cap stops you first, or that the ledger would refuse the first round, makes it a consequence to read.",
+    "section": "components"
+   },
+   {
+    "name": "The Capped ViewBox Rule",
+    "body": "An SVG chart caps its width, because the viewBox scales its text with it. Uncapped in a wide column a 10px axis label renders at 22px, which is how a chart stops looking like part of the interface.",
+    "section": "components"
+   },
+   {
+    "name": "The Category Is Not A State Rule",
+    "body": "Structural annotations borrow shape, size or position rather than a status hue. The residue track marks catalytic positions by height because the five status colours each already mean one thing, and a sixth meaning for amber would cost more than it bought.",
+    "section": "colors"
+   }
+  ],
+  "dos": [
+   "Do keep Signal Blue scarce. One live thing per screen; primary action and current selection may share it, but roughly a tenth of the screen is the ceiling.",
+   "Do convey depth with the surface ramp and 1px hairlines, never with a shadow, in product UI.",
+   "Do check accent text against the composited background. #f43f5e on rgba(244,63,94,0.12) over the card is 4.11:1, not the ratio the raw values suggest.",
+   "Do give every grid or flex item that may contain a table min-width: 0.",
+   "Do use tabular-nums on every figure in a column or one that updates in place.",
+   "Do set scroll-padding-top to clear the sticky bar on any in-page scroll target.",
+   "Do show refusals, limits and negative results at full contrast. The ledger's refused rows and the benchmark's held-out correlation are designed for, not disclosed away.",
+   "Do keep tracked uppercase labels at 11px or above.",
+   "Do theme the surfaces the browser draws — selection, caret, accent-color, scrollbars. Default light scrollbars on a near-black page are the giveaway that nobody looked.",
+   "Do keep every font-size, radius and tint on a token. The five one-off hexes and sixteen rgba literals that used to sit in the stylesheet are what made the accent drift to seven different alphas."
+  ],
+  "donts": [
+   "Don't add a light theme or a theme toggle. The dark-only commitment is intentional and binding.",
+   "Don't reach for gradient text, neon halos, glass or blur as decoration, or animated mesh backgrounds. Confirmed anti-reference.",
+   "Don't soften the product into consumer-SaaS friendliness — pastel rounding, illustrations, mascots, emoji as iconography, chirpy microcopy. Confirmed anti-reference.",
+   "Don't wear monospace as a costume. Fira Code is for code, identifiers, data and measurement; no CRT scanlines, no ASCII chrome. Confirmed anti-reference.",
+   "Don't put a kicker or eyebrow above a heading. A standalone label that is the heading of a card is fine; a tracked-caps line stacked on top of an h2 is not, and these were removed deliberately.",
+   "Don't give a card a coloured accent rail above 1px.",
+   "Don't de-emphasise with opacity on anything containing text. An excluded cluster was at 0.45 and became unreadable — move it to the Panel surface and keep its text legible instead.",
+   "Don't use fluid clamp() type in the console. Fluid sizing belongs to the landing page; a console heading that shrinks in a narrow work area looks broken.",
+   "Don't let a status colour drift from its meaning, and don't give Analytic Violet a state meaning — it exists only to separate a third figure.",
+   "Don't add motion that doesn't carry state. The pulsing dot on a running pill is the one authored moment, and it honours prefers-reduced-motion."
+  ]
+ }
+}

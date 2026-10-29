@@ -1,4 +1,4 @@
-<title>VeritasBio Console</title>
+<title>PanoptesBio Console</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -8,25 +8,72 @@
 /* Layout: public landing is a single scroll column; the console is a fixed left rail
    plus a scrolling work area. Single dark theme, carried over from presentation.html. */
 :root {
-  --bg:          #060910;
-  --bg-panel:    #0d1321;
-  --bg-card:     #141d30;
-  --bg-card-hi:  #1c2944;
+  --bg:          #070a12;
+  --bg-panel:    #0e1424;
+  --bg-card:     #151d33;
+  --bg-card-hi:  #1e2a48;
   --border:      rgba(255,255,255,0.08);
   --border-hi:   rgba(255,255,255,0.16);
-  --fg:          #f8fafc;
-  --fg-muted:    #94a3b8;
-  --fg-dim:      #64748b;
-  --cyan:        #00f0ff;
-  --cyan-dim:    rgba(0,240,255,0.12);
-  --emerald:     #10b981;
-  --emerald-dim: rgba(16,185,129,0.12);
-  --amber:       #f59e0b;
-  --amber-dim:   rgba(245,158,11,0.12);
+  --fg:          #f7f9fc;
+  --fg-muted:    #9aa8bf;
+  --fg-dim:      #8795ae;
+  /* Hue-neutral name: the accent moved from cyan to blue once, and the token
+     should not have to be renamed if it ever moves again. */
+  --accent:      #4d9fff;
+  --accent-dim:  rgba(77,159,255,0.14);
+  --emerald:     #34d399;
+  --emerald-dim: rgba(52,211,153,0.12);
+  --amber:       #fbbf24;
+  --amber-dim:   rgba(251,191,36,0.12);
   --rose:        #f43f5e;
+  --rose-hi:     #fb7185;
   --rose-dim:    rgba(244,63,94,0.12);
-  --violet:      #8b5cf6;
-  --violet-dim:  rgba(139,92,246,0.12);
+  --violet:      #c084fc;
+
+  /* Derived values that were one-off literals until now. */
+  --accent-hi:   #7ab4ff;                  /* primary button hover */
+  --accent-ink:  #05101f;                  /* text on an accent fill */
+  --accent-edge: rgba(77,159,255,0.32);    /* any accent border */
+  --accent-ring: rgba(77,159,255,0.10);    /* the live-round ring, focus wash */
+  --emerald-edge:rgba(52,211,153,0.3);
+  --amber-edge:  rgba(251,191,36,0.3);
+  --rose-edge:   rgba(244,63,94,0.3);
+  --bg-raised-hi:#27365c;                  /* default button hover */
+  --bg-sunk:     #04070e;                  /* log box, inset below the ground */
+  --thumb-hi:    #2e3e66;                  /* scrollbar thumb hover */
+  --wash-faint:  rgba(255,255,255,0.02);   /* table row hover */
+  --wash-soft:   rgba(255,255,255,0.04);   /* nav hover, idle pill, row rules */
+  --wash:        rgba(255,255,255,0.05);   /* chip fill */
+  --track:       rgba(255,255,255,0.07);   /* meter track */
+
+  /* Type scale in rem so the reader's own font-size setting still does something.
+     Nine steps for nine roles; the old near-duplicates (11.5/12.5/13.5/14.5px)
+     were drift, not intent. */
+  --t-xs:        0.6875rem;  /* 11px  labels, chips, pills, table headers */
+  --t-sm:        0.75rem;    /* 12px  hints, meta, field labels */
+  --t-md:        0.8125rem;  /* 13px  dense copy, log */
+  --t-base:      0.875rem;   /* 14px  default UI text, buttons, nav */
+  --t-lg:        0.9375rem;  /* 15px  body copy, card headings */
+  --t-xl:        1.1875rem;  /* 19px  subheads, wordmark, quota amount */
+  --t-2xl:       1.3125rem;  /* 21px  metric values */
+  --t-3xl:       1.5rem;     /* 24px  pane and auth headings */
+  --t-4xl:       1.875rem;   /* 30px  stat values */
+
+  /* Spacing. The grid and the margins now draw from one scale instead of two. */
+  --sp-xs:       6px;
+  --sp-sm:       10px;
+  --sp-md:       14px;
+  --sp-lg:       18px;
+  --sp-xl:       22px;
+  --sp-2xl:      26px;
+
+  /* Radius: controls, containers, outer cards. 7px and 8px were drift. */
+  --r-xs:        3px;
+  --r-chip:      4px;
+  --r-sm:        6px;
+  --r-md:        9px;
+  --r-lg:        10px;
+  --r-pill:      999px;
 
   --display: 'Outfit', ui-sans-serif, system-ui, sans-serif;
   --body:    'Inter', ui-sans-serif, system-ui, sans-serif;
@@ -37,12 +84,15 @@
 
 * { box-sizing: border-box; }
 
+html { scroll-padding-top: 64px; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
   font-family: var(--body);
-  font-size: 15px;
+  font-size: var(--t-lg);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
@@ -54,7 +104,17 @@ button { font: inherit; color: inherit; cursor: pointer; }
 code, .mono { font-family: var(--mono); font-variant-ligatures: none; }
 .nums { font-variant-numeric: tabular-nums; }
 
-:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; border-radius: 4px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Surfaces the browser draws for us. Left at their defaults they ship a light-theme
+   scrollbar and a white caret onto a near-black page. */
+::selection { background: var(--accent-edge); color: var(--fg); }
+:root { scrollbar-color: var(--bg-card-hi) var(--bg); accent-color: var(--accent); caret-color: var(--accent); }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--bg-card-hi); border: 3px solid var(--bg); border-radius: var(--r-pill); }
+::-webkit-scrollbar-thumb:hover { background: var(--thumb-hi); }
+::-webkit-scrollbar-corner { background: var(--bg); }
 
 /* ---------- prototype switcher ---------- */
 .proto-bar {
@@ -66,19 +126,19 @@ code, .mono { font-family: var(--mono); font-variant-ligatures: none; }
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 .proto-tag {
-  font-family: var(--display); font-size: 10px; font-weight: 700;
+  font-family: var(--display); font-size: var(--t-xs); font-weight: 700;
   letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--amber); background: var(--amber-dim);
-  border: 1px solid rgba(245,158,11,0.35); border-radius: 999px; padding: 3px 9px;
+  border: 1px solid var(--amber-edge); border-radius: var(--r-pill); padding: 3px 9px;
 }
-.proto-note { font-size: 12px; color: var(--fg-dim); min-width: 0; }
+.proto-note { font-size: var(--t-sm); color: var(--fg-dim); min-width: 0; }
 .proto-jump { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
 .proto-jump button {
   background: var(--bg-card); border: 1px solid var(--border);
-  color: var(--fg-muted); border-radius: 6px; padding: 4px 10px; font-size: 12px;
+  color: var(--fg-muted); border-radius: var(--r-sm); padding: 4px 10px; font-size: var(--t-sm);
 }
 .proto-jump button:hover { background: var(--bg-card-hi); color: var(--fg); }
-.proto-jump button[aria-current="true"] { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
+.proto-jump button[aria-current="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
 
 /* ---------- shared primitives ---------- */
 .wrap {
@@ -87,116 +147,156 @@ code, .mono { font-family: var(--mono); font-variant-ligatures: none; }
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 .eyebrow {
-  font-family: var(--display); font-size: 11px; font-weight: 700;
-  letter-spacing: 0.16em; text-transform: uppercase; color: var(--cyan);
+  font-family: var(--display); font-size: var(--t-sm); font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent);
 }
 .muted { color: var(--fg-muted); }
 .dim { color: var(--fg-dim); }
 .card {
   background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 10px; padding: 18px;
+  border-radius: var(--r-lg); padding: 18px; min-width: 0;
 }
 .pill {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-family: var(--display); font-size: 10px; font-weight: 700;
-  letter-spacing: 0.1em; text-transform: uppercase;
-  border-radius: 999px; padding: 3px 9px; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--display); font-size: var(--t-xs); font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  border-radius: var(--r-pill); padding: 3px 10px; white-space: nowrap;
 }
-.pill.ok   { color: var(--emerald); background: var(--emerald-dim); border: 1px solid rgba(16,185,129,0.3); }
-.pill.run  { color: var(--cyan);    background: var(--cyan-dim);    border: 1px solid rgba(0,240,255,0.3); }
-.pill.warn { color: var(--amber);   background: var(--amber-dim);   border: 1px solid rgba(245,158,11,0.3); }
-.pill.stop { color: var(--rose);    background: var(--rose-dim);    border: 1px solid rgba(244,63,94,0.3); }
-.pill.idle { color: var(--fg-dim);  background: rgba(255,255,255,0.04); border: 1px solid var(--border); }
+/* The one live-state signal on the page: a running campaign has to look running. */
+.pill.run::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .pill.run::before { animation: none; } }
+.pill.ok   { color: var(--emerald); background: var(--emerald-dim); border: 1px solid var(--emerald-edge); }
+.pill.run  { color: var(--accent);    background: var(--accent-dim);    border: 1px solid var(--accent-edge); }
+.pill.warn { color: var(--amber);   background: var(--amber-dim);   border: 1px solid var(--amber-edge); }
+.pill.stop { color: var(--rose-hi); background: var(--rose-dim);    border: 1px solid var(--rose-edge); }
+.pill.idle { color: var(--fg-muted); background: var(--wash-soft); border: 1px solid var(--border); }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  font-family: var(--display); font-weight: 600; font-size: 14px;
-  border-radius: 8px; padding: 10px 18px; border: 1px solid transparent;
+  font-family: var(--display); font-weight: 600; font-size: var(--t-base);
+  border-radius: var(--r-sm); padding: 10px 18px; border: 1px solid transparent;
   background: var(--bg-card-hi); color: var(--fg); transition: background .15s, border-color .15s;
 }
-.btn:hover { background: #253457; }
-.btn.primary { background: var(--cyan); color: #04121a; }
-.btn.primary:hover { background: #5df5ff; }
+.btn:hover { background: var(--bg-raised-hi); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { background: var(--accent-hi); }
 .btn.ghost { background: transparent; border-color: var(--border-hi); color: var(--fg-muted); }
-.btn.ghost:hover { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
-.btn.sm { font-size: 12px; padding: 6px 12px; border-radius: 6px; }
+.btn.ghost:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.btn.sm { font-size: var(--t-sm); padding: 6px 12px; border-radius: var(--r-sm); }
+.btn[disabled] { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active { transform: none; } }
 
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.field label { font-size: 12px; font-weight: 600; color: var(--fg-muted); }
+.field label { font-size: var(--t-sm); font-weight: 600; color: var(--fg-muted); }
 .field input, .field select, .field textarea {
-  background: var(--bg); border: 1px solid var(--border-hi); border-radius: 7px;
-  color: var(--fg); padding: 9px 12px; font: inherit; font-size: 14px; width: 100%;
+  background: var(--bg); border: 1px solid var(--border-hi); border-radius: var(--r-sm);
+  color: var(--fg); padding: 9px 12px; font: inherit; font-size: var(--t-base); width: 100%;
 }
-.field input:focus, .field select:focus { border-color: var(--cyan); outline: none; }
-.field .hint { font-size: 12px; color: var(--fg-dim); }
+.field input:focus, .field select:focus { border-color: var(--accent); outline: none; }
+.field .hint { font-size: var(--t-sm); color: var(--fg-dim); }
 
 .table-scroll { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* Only focusable when it actually overflows — see makeScrollablesFocusable().
+   An always-on tab stop would add five dead stops at desktop width. */
+.table-scroll:focus-visible, .logbox:focus-visible { outline-offset: -2px; border-radius: var(--r-sm); }
+table { width: 100%; border-collapse: collapse; font-size: var(--t-md); }
 th {
-  text-align: left; font-family: var(--display); font-size: 10px; font-weight: 700;
-  letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-dim);
+  text-align: left; font-family: var(--display); font-size: var(--t-xs); font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-dim);
   padding: 8px 12px; border-bottom: 1px solid var(--border); white-space: nowrap;
 }
-td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap; }
-tbody tr:hover { background: rgba(255,255,255,0.02); }
+td { padding: 10px 12px; border-bottom: 1px solid var(--wash-soft); white-space: nowrap; }
+tbody tr:hover { background: var(--wash-faint); }
+tbody tr:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-ring); }
 
-.variant { font-family: var(--mono); font-size: 12.5px; color: var(--fg); }
-.variant .pos { color: var(--cyan); }
+.variant { font-family: var(--mono); font-size: var(--t-sm); color: var(--fg); }
+.variant .pos { color: var(--accent); }
 
 /* ---------- landing ---------- */
 .lp-nav {
-  display: flex; align-items: center; gap: 24px; padding-block: 20px;
-  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 16px 24px; padding-block: 20px;
+  flex-wrap: wrap; border-bottom: 1px solid var(--border);
 }
-.logo { display: flex; align-items: baseline; gap: 2px; font-family: var(--display); font-weight: 800; font-size: 18px; letter-spacing: -0.01em; }
-.logo .b { color: var(--cyan); }
-.lp-nav .links { margin-left: auto; display: flex; gap: 20px; align-items: center; font-size: 14px; }
+.logo { display: flex; align-items: baseline; gap: 2px; font-family: var(--display); font-weight: 800; font-size: var(--t-xl); letter-spacing: -0.01em; }
+.logo .b { color: var(--accent); }
+.lp-nav .links { margin-left: auto; display: flex; gap: 12px 20px; align-items: center; flex-wrap: wrap; font-size: var(--t-base); }
 .lp-nav .links a { color: var(--fg-muted); text-decoration: none; }
 .lp-nav .links a:hover { color: var(--fg); }
 
 .hero { padding-block: 72px 56px; display: grid; gap: 28px; }
-.hero h1 { font-size: clamp(38px, 7vw, 66px); font-weight: 800; letter-spacing: -0.03em; }
-.hero h1 .cy { color: var(--cyan); }
-.hero .lede { font-size: clamp(16px, 2.2vw, 19px); color: var(--fg-muted); max-width: 60ch; }
+.hero h1 { font-size: clamp(2.375rem, 7vw, 4.125rem); font-weight: 800; letter-spacing: -0.03em; }
+.hero h1 .ac { color: var(--accent); }
+.hero .lede { font-size: clamp(1rem, 2.2vw, 1.1875rem); color: var(--fg-muted); max-width: 60ch; }
 .hero .cta { display: flex; gap: 12px; flex-wrap: wrap; }
 
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
 .stat {
   background: var(--bg-card); border: 1px solid var(--border);
-  border-left: 2px solid var(--cyan); border-radius: 8px; padding: 16px 18px;
+  border-radius: var(--r-sm); padding: 16px 18px;
 }
-.stat .v { font-family: var(--display); font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
-.stat .k { font-size: 12px; color: var(--fg-muted); margin-top: 2px; }
-.stat.em { border-left-color: var(--emerald); }
-.stat.vi { border-left-color: var(--violet); }
+.stat .v { font-family: var(--display); font-size: var(--t-4xl); font-weight: 700; letter-spacing: -0.02em; color: var(--accent); }
+.stat .k { font-size: var(--t-sm); color: var(--fg-muted); margin-top: 2px; }
+.stat.em .v { color: var(--emerald); }
+.stat.vi .v { color: var(--violet); }
 
-.section { padding-block: 56px; border-top: 1px solid var(--border); }
-.section h2 { font-size: clamp(24px, 4vw, 34px); font-weight: 700; letter-spacing: -0.02em; }
+/* The hero numbers are the argument, not a data readout: no card, bigger figures,
+   separated by rules. The benchmarks row keeps the card treatment because it IS a
+   data readout, and the two should not look like the same component. */
+.stat-row.claim { gap: 0; border-top: 1px solid var(--border); }
+.claim .stat {
+  background: none; border: 0; border-radius: 0;
+  border-bottom: 1px solid var(--border); padding: 20px 0 22px;
+}
+.claim .stat .v { font-size: clamp(2.125rem, 5vw, 2.75rem); }
+.claim .stat .k { font-size: var(--t-md); max-width: 26ch; margin-top: 4px; }
+@media (min-width: 620px) {
+  .claim .stat { border-bottom: 0; padding: 22px 26px; border-left: 1px solid var(--border); }
+  .claim .stat:first-child { border-left: 0; padding-left: 0; }
+}
+
+.section { padding-block: 76px 56px; border-top: 1px solid var(--border); }
+.section h2 { font-size: clamp(1.5rem, 4vw, 2.125rem); font-weight: 700; letter-spacing: -0.02em; }
 .section .sub { color: var(--fg-muted); margin-top: 10px; max-width: 62ch; }
 
-.steps { display: grid; gap: 10px; margin-top: 28px; }
+/* Six identical cards would read as six unrelated facts. The loop's whole claim is
+   that the order is fixed, so the steps hang off one continuous rail instead. */
+.steps { display: grid; margin-top: 32px; }
 .step {
-  display: grid; grid-template-columns: 44px 1fr; gap: 16px; align-items: start;
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 9px; padding: 16px 18px;
+  position: relative;
+  display: grid; grid-template-columns: 34px 1fr; gap: 18px; align-items: start;
+  padding: 18px 0 18px 4px;
 }
+.step + .step { border-top: 1px solid var(--border); }
+.step::before {
+  content: ""; position: absolute; left: 20px; top: 0; bottom: 0; width: 1px;
+  background: var(--border);
+}
+.step:first-child::before { top: 26px; }
+.step:last-child::before { bottom: calc(100% - 26px); }
 .step .n {
-  font-family: var(--display); font-weight: 800; font-size: 13px; color: var(--cyan);
-  background: var(--cyan-dim); border: 1px solid rgba(0,240,255,0.25);
-  border-radius: 7px; width: 34px; height: 34px;
+  position: relative; z-index: 1;
+  font-family: var(--display); font-weight: 800; font-size: var(--t-sm); color: var(--accent);
+  background: var(--bg); border: 1px solid var(--accent-edge);
+  border-radius: 50%; width: 34px; height: 34px;
   display: grid; place-items: center;
 }
-.step h4 { font-size: 15px; font-weight: 600; }
-.step p { font-size: 13.5px; color: var(--fg-muted); margin-top: 3px; }
-.step .who { font-size: 11px; color: var(--fg-dim); font-family: var(--mono); margin-top: 6px; }
+.step h3 { font-size: var(--t-lg); font-weight: 600; }
+.step p { font-size: var(--t-md); color: var(--fg-muted); margin-top: 4px; max-width: 68ch; }
+.step .who { font-size: var(--t-sm); color: var(--fg-dim); font-family: var(--mono); margin-top: 6px; }
 
 .honest {
   background: var(--bg-panel); border: 1px solid var(--border);
-  border-left: 2px solid var(--amber); border-radius: 9px; padding: 22px; margin-top: 28px;
+  border-radius: var(--r-md); padding: 22px; margin-top: 32px;
 }
-.honest h4 { font-size: 15px; color: var(--amber); }
-.honest p { color: var(--fg-muted); font-size: 14px; margin-top: 8px; max-width: 70ch; }
+.honest h3 { font-size: var(--t-lg); color: var(--amber); }
+.honest p { color: var(--fg-muted); font-size: var(--t-base); margin-top: 8px; max-width: 70ch; }
 
-.lp-foot { padding-block: 32px 48px; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; }
+.lp-foot { padding-block: 32px 48px; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: var(--t-md); display: flex; gap: 16px; flex-wrap: wrap; }
 
 /* ---------- auth ---------- */
 .auth-screen { min-height: 70vh; display: grid; place-items: center; padding-block: 48px; }
@@ -212,69 +312,214 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 .rail nav { display: grid; gap: 2px; }
 .rail nav button {
   display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
-  background: transparent; border: 0; border-radius: 7px; padding: 8px 10px;
-  color: var(--fg-muted); font-size: 14px;
+  background: transparent; border: 0; border-radius: var(--r-sm); padding: 8px 10px;
+  color: var(--fg-muted); font-size: var(--t-base);
 }
-.rail nav button:hover { background: rgba(255,255,255,0.04); color: var(--fg); }
-.rail nav button[aria-current="true"] { background: var(--cyan-dim); color: var(--cyan); font-weight: 600; }
-.rail .grp { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fg-dim); font-family: var(--display); font-weight: 700; padding: 0 10px 6px; }
+.rail nav button:hover { background: var(--wash-soft); color: var(--fg); }
+.rail nav button[aria-current="true"] { background: var(--accent-dim); color: var(--accent); font-weight: 600; }
+.rail .grp { font-size: var(--t-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-dim); font-family: var(--display); font-weight: 700; padding: 0 10px 6px; }
+/* Sign out is not a destination; it should not sit in the list of destinations. */
+.rail nav .sep { height: 1px; background: var(--border); margin: 10px 10px 8px; }
+.rail nav button.leave { color: var(--fg-dim); font-size: var(--t-md); }
 
-.quota { margin-top: auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: 9px; padding: 14px; }
+.quota { margin-top: auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px; }
 .quota .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.quota .lab { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.1em; font-family: var(--display); font-weight: 700; }
-.quota .amt { font-family: var(--display); font-size: 19px; font-weight: 700; }
-.meter { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 9px; }
-.meter > i { display: block; height: 100%; background: linear-gradient(90deg, var(--cyan), var(--emerald)); }
-.quota .foot { font-size: 11.5px; color: var(--fg-dim); margin-top: 7px; }
+.quota .lab { font-size: var(--t-sm); color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.1em; font-family: var(--display); font-weight: 700; }
+.quota .amt { font-family: var(--display); font-size: var(--t-xl); font-weight: 700; }
+/* The bar fills as money is spent, which is the direction every budget meter moves.
+   Colour is the warning, so it is a token swap and not a decorative gradient. */
+.meter { height: 6px; border-radius: var(--r-xs); background: var(--track); overflow: hidden; margin-top: 9px; }
+.meter > i { display: block; height: 100%; min-width: 3px; border-radius: var(--r-xs); background: var(--accent); }
+.meter.warn > i { background: var(--amber); }
+.meter.stop > i { background: var(--rose); }
+.quota .foot { font-size: var(--t-sm); color: var(--fg-dim); margin-top: 7px; }
 
 .work { min-width: 0; padding: 26px 26px 60px; display: grid; gap: 22px; align-content: start; }
+.work > section { min-width: 0; }
+[data-pane-body="new"], [data-pane-body="account"] { max-width: 880px; }
+.work-head > * { min-width: 0; }
 .work-head { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
-.work-head h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
-.work-head .sub { font-size: 13.5px; color: var(--fg-muted); margin-top: 4px; }
+.work-head h2 { font-size: var(--t-3xl); font-weight: 700; letter-spacing: -0.02em; }
+.work-head .sub { font-size: var(--t-md); color: var(--fg-muted); margin-top: 4px; }
 .work-head .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
 
 @media (max-width: 860px) {
   .console { grid-template-columns: 1fr; }
   .rail { border-right: 0; border-bottom: 1px solid var(--border); }
-  .rail nav { grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); display: grid; }
+  /* A horizontal nav of three destinations needs no group headings, and an
+     auto-fit grid would stretch "Sign out" into looking like a fourth one. */
+  .rail nav { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .rail nav .grp, .rail nav .sep { display: none; }
+  .rail nav button { width: auto; }
+  .rail nav button.leave { margin-left: auto; }
   .quota { margin-top: 0; }
   .work { padding: 20px max(16px, env(safe-area-inset-left,0px)) 48px; }
 }
 
 /* ---------- campaign list ---------- */
-.camp-row td .name { font-family: var(--display); font-weight: 600; font-size: 14px; }
-.camp-row td .tgt { font-size: 12px; color: var(--fg-dim); font-family: var(--mono); }
+.camp-row td .name { font-family: var(--display); font-weight: 600; font-size: var(--t-base); }
+.camp-row td .tgt { font-size: var(--t-sm); color: var(--fg-dim); font-family: var(--mono); }
 .camp-row { cursor: pointer; }
 
 /* ---------- stepper ---------- */
 .stepper { display: flex; gap: 8px; flex-wrap: wrap; }
 .stepper .s {
-  display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-dim);
-  border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; background: var(--bg-card);
+  display: flex; align-items: center; gap: 8px; font-size: var(--t-md); color: var(--fg-dim);
+  border: 1px solid var(--border); border-radius: var(--r-pill); padding: 6px 14px;
+  background: var(--bg-card); font-family: inherit; cursor: pointer;
+  transition: color .15s, border-color .15s;
 }
-.stepper .s b { font-family: var(--display); font-size: 11px; }
-.stepper .s.on { color: var(--cyan); border-color: rgba(0,240,255,0.4); background: var(--cyan-dim); }
-.stepper .s.done { color: var(--emerald); border-color: rgba(16,185,129,0.3); }
+.stepper .s:hover { color: var(--fg); border-color: var(--border-hi); }
+.stepper .s b { font-family: var(--display); font-size: var(--t-xs); }
+.stepper .s.on { color: var(--accent); border-color: var(--accent-edge); background: var(--accent-dim); }
+.stepper .s.done { color: var(--emerald); border-color: var(--emerald-edge); }
 
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
 
+/* ---------- planner reasoning (Llama CoT) ---------- */
+.cot { display: grid; gap: var(--sp-sm); }
+.cot .think {
+  border-left: 1px solid var(--border-hi); padding-left: var(--sp-md);
+  font-size: var(--t-md); color: var(--fg-muted); max-width: 72ch;
+}
+.cot .think b { color: var(--fg); font-weight: 600; }
+.jsonbox {
+  background: var(--bg-sunk); border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: var(--sp-md); font-family: var(--mono); font-size: var(--t-md);
+  line-height: 1.7; color: var(--fg-muted); overflow-x: auto;
+}
+.jsonbox .k { color: var(--accent); }
+.jsonbox .s { color: var(--emerald); }
+.jsonbox .n { color: var(--amber); }
+
+/* ---------- search space: residue track + latent scatter ---------- */
+.viewport {
+  border: 1px dashed var(--border-hi); border-radius: var(--r-md); background: var(--bg-sunk);
+  display: grid; place-items: center; gap: var(--sp-xs); padding: var(--sp-2xl) var(--sp-lg);
+  text-align: center; min-height: 190px;
+}
+.viewport p { font-size: var(--t-md); color: var(--fg-dim); max-width: 46ch; }
+.legend { display: flex; gap: var(--sp-md); flex-wrap: wrap; font-size: var(--t-sm); color: var(--fg-muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+
+.track-wrap { overflow-x: auto; }
+.restrack { display: flex; align-items: flex-end; gap: 1px; min-width: 480px; height: 34px; }
+.restrack i {
+  flex: 1; height: 26px; background: var(--wash-soft); border-radius: 1px; display: block;
+}
+/* Catalytic positions are a structural category, not a state, so they are marked
+   by height rather than by borrowing a hue the status vocabulary already owns. */
+.restrack i.site { height: 34px; background: var(--fg); }
+.restrack i.pocket { background: var(--accent); }
+.restrack i.ban { background: var(--rose); }
+.track-scale {
+  display: flex; justify-content: space-between; min-width: 480px;
+  font-family: var(--mono); font-size: var(--t-sm); color: var(--fg-dim); margin-top: 6px;
+}
+
+/* The viewBox scales everything inside it, text included, so an uncapped chart
+   renders its 10px labels at 22px in a wide column. */
+.chart { width: 100%; max-width: 480px; height: auto; display: block; }
+.chart text { font-family: var(--body); fill: var(--fg-dim); font-size: 10px; }
+.chart .grid { stroke: var(--border); stroke-width: 1; }
+.chart .axis { stroke: var(--border-hi); stroke-width: 1; }
+
+/* ---------- economics ---------- */
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: var(--sp-md); }
+.compare .c { border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--sp-md); background: var(--bg-card); }
+.compare .c.win { border-color: var(--accent-edge); }
+.compare .c .t { font-size: var(--t-sm); color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.1em; font-family: var(--display); font-weight: 700; }
+.compare .c .v { font-family: var(--display); font-size: var(--t-2xl); font-weight: 700; margin-top: 4px; }
+.compare .c.win .v { color: var(--accent); }
+.compare .c .d { font-size: var(--t-sm); color: var(--fg-muted); margin-top: 4px; }
+
+/* ---------- generated file preview ---------- */
+.filebox {
+  background: var(--bg-sunk); border: 1px solid var(--border); border-radius: var(--r-md);
+  overflow: hidden; margin-top: var(--sp-md);
+}
+.filebox .fh {
+  display: flex; align-items: center; gap: var(--sp-sm); flex-wrap: wrap;
+  padding: var(--sp-sm) var(--sp-md); border-bottom: 1px solid var(--border); background: var(--bg-card);
+}
+/* A filename is one unbreakable token; at large text sizes it has to be allowed
+   to break rather than push the row past the viewport. */
+.filebox .fh .name {
+  font-family: var(--mono); font-size: var(--t-md); color: var(--fg);
+  min-width: 0; overflow-wrap: anywhere;
+}
+.filebox .fh .actions { margin-left: auto; }
+.filebox pre {
+  margin: 0; padding: var(--sp-md); font-family: var(--mono); font-size: var(--t-md);
+  line-height: 1.7; color: var(--fg-muted); overflow-x: auto; max-height: 260px; overflow-y: auto;
+}
+
+/* Budget step. The projection is the point: a number you set, and what it buys. */
+.budget-note { font-size: var(--t-md); color: var(--fg-muted); max-width: 70ch; }
+
+/* Engine options are on/off capabilities, not values, so they read as switches
+   rather than another row of selects. */
+.switches { display: grid; gap: 2px; }
+.switch {
+  display: flex; align-items: flex-start; gap: 12px; cursor: pointer;
+  padding: 10px; border-radius: var(--r-sm); transition: background .15s;
+}
+.switch:hover { background: var(--wash-soft); }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch .track {
+  flex: none; margin-top: 2px; width: 34px; height: 20px; border-radius: var(--r-pill);
+  background: var(--bg); border: 1px solid var(--border-hi); position: relative;
+  transition: background .15s, border-color .15s;
+}
+.switch .track::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--fg-dim); transition: transform .15s, background .15s;
+}
+.switch input:checked + .track { background: var(--accent-dim); border-color: var(--accent-edge); }
+.switch input:checked + .track::after { transform: translateX(14px); background: var(--accent); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch .lab { min-width: 0; }
+.switch .lab b { display: block; font-size: var(--t-base); font-weight: 600; color: var(--fg); }
+.switch .lab span { display: block; font-size: var(--t-sm); color: var(--fg-dim); margin-top: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .switch, .switch .track, .switch .track::after { transition: none; }
+}
+.proj { display: grid; gap: var(--sp-sm); margin-top: var(--sp-sm); font-size: var(--t-md); }
+.proj .line { display: flex; gap: var(--sp-sm); align-items: baseline; }
+.proj .line > :first-child { flex: 1; color: var(--fg-muted); }
+.proj .line b { font-family: var(--mono); font-weight: 400; color: var(--fg); }
+.proj .binds {
+  margin-top: var(--sp-xs); padding-top: var(--sp-sm); border-top: 1px solid var(--border);
+  font-size: var(--t-md); color: var(--fg-muted);
+}
+.proj .binds b { color: var(--amber); font-weight: 600; }
+
 /* ---------- site review (the human-override screen) ---------- */
 .cluster {
-  border: 1px solid var(--border); border-radius: 9px; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-card);
   padding: 16px; display: grid; gap: 12px;
 }
-.cluster.excluded { opacity: 0.45; }
+/* Excluded clusters still have to be readable — you cannot reconsider a decision you
+   cannot read. De-emphasis comes off the surface, never off the text's contrast. */
+.cluster.excluded { background: var(--bg-panel); border-style: dashed; }
+.cluster.excluded h3 { color: var(--fg-muted); }
 .cluster .ch { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.cluster h4 { font-size: 14.5px; font-weight: 600; }
-.cluster .src { font-size: 12px; color: var(--fg-dim); }
-.cluster .why { font-size: 13px; color: var(--fg-muted); }
+.cluster h3 { font-size: var(--t-base); font-weight: 600; }
+.cluster .src { font-size: var(--t-sm); color: var(--fg-dim); }
+.cluster .why { font-size: var(--t-md); color: var(--fg-muted); max-width: 72ch; }
 .resgrid { display: flex; gap: 6px; flex-wrap: wrap; }
 .res {
-  font-family: var(--mono); font-size: 12.5px; border-radius: 6px; padding: 4px 9px;
-  border: 1px solid rgba(0,240,255,0.3); background: var(--cyan-dim); color: var(--cyan);
+  font-family: var(--mono); font-size: var(--t-sm); border-radius: var(--r-sm); padding: 4px 9px;
+  border: 1px solid var(--accent-edge); background: var(--accent-dim); color: var(--accent);
 }
-.res.off { border-color: var(--border); background: transparent; color: var(--fg-dim); text-decoration: line-through; }
-.res.ban { border-color: rgba(244,63,94,0.35); background: var(--rose-dim); color: var(--rose); }
+.res.off { border-color: var(--border); background: transparent; color: var(--fg-muted); text-decoration: line-through; }
+.res.ban { border-color: var(--rose-edge); background: var(--rose-dim); color: var(--rose-hi); }
+/* An add control is not a banned residue; it should not borrow the ban's colour. */
+button.res.add {
+  border: 1px dashed var(--border-hi); background: transparent; color: var(--fg-muted);
+}
+button.res.add:hover { border-color: var(--accent); color: var(--accent); border-style: solid; }
 .toggle { margin-left: auto; display: flex; gap: 6px; }
 
 /* ---------- live run ---------- */
@@ -282,63 +527,90 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 @media (max-width: 900px) { .run-grid { grid-template-columns: 1fr; } }
 
 .round {
-  border: 1px solid var(--border); border-radius: 9px; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-card);
   padding: 14px 16px; display: grid; gap: 10px;
 }
-.round.live { border-color: rgba(0,240,255,0.35); box-shadow: 0 0 0 1px rgba(0,240,255,0.08); }
-.round.halted { border-color: rgba(244,63,94,0.3); }
+.round.live { border-color: var(--accent-edge); box-shadow: 0 0 0 1px var(--accent-ring); }
+.round.halted { border-color: var(--rose-edge); }
 .round .rh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.round .rh h4 { font-size: 14px; font-weight: 600; }
-.round .rh .cost { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--fg-muted); }
+.round .rh h3 { font-size: var(--t-base); font-weight: 600; }
+.round .rh .cost { margin-left: auto; font-family: var(--mono); font-size: var(--t-sm); color: var(--fg-muted); }
 .chips { display: flex; gap: 5px; flex-wrap: wrap; }
 .chip {
-  font-family: var(--display); font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em;
-  text-transform: uppercase; border-radius: 4px; padding: 3px 7px;
-  background: rgba(255,255,255,0.05); color: var(--fg-dim); border: 1px solid transparent;
+  font-family: var(--display); font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; border-radius: var(--r-chip); padding: 2px 7px;
+  background: var(--wash); color: var(--fg-muted); border: 1px solid transparent;
 }
 .chip.done { color: var(--emerald); background: var(--emerald-dim); }
-.chip.now  { color: var(--cyan); background: var(--cyan-dim); border-color: rgba(0,240,255,0.3); }
-.chip.fail { color: var(--rose); background: var(--rose-dim); }
-.round .res-line { font-size: 13px; color: var(--fg-muted); }
+.chip.now  { color: var(--accent); background: var(--accent-dim); border-color: var(--accent-edge); }
+.chip.fail { color: var(--rose-hi); background: var(--rose-dim); }
+.round .res-line { font-size: var(--t-md); color: var(--fg-muted); max-width: 70ch; }
+/* A finished round's six green chips say only "it finished", which the pill already
+   says. The stage strip is kept where the stage is the news: running, and refused. */
+.round .stages { display: none; }
+.round.live .stages, .round.halted .stages { display: flex; }
 
 .logbox {
-  background: #03060c; border: 1px solid var(--border); border-radius: 9px;
-  padding: 14px; font-family: var(--mono); font-size: 11.5px; line-height: 1.75;
+  background: var(--bg-sunk); border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: 14px; font-family: var(--mono); font-size: var(--t-xs); line-height: 1.75;
   max-height: 290px; overflow: auto; color: var(--fg-muted);
 }
 .logbox .t { color: var(--fg-dim); }
 .logbox .ok { color: var(--emerald); }
-.logbox .cy { color: var(--cyan); }
+.logbox .ac { color: var(--accent); }
 .logbox .rs { color: var(--rose); }
 .logbox .am { color: var(--amber); }
 
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .tabs button {
   background: transparent; border: 0; border-bottom: 2px solid transparent;
-  color: var(--fg-muted); padding: 9px 14px; font-size: 13.5px; font-weight: 500;
+  color: var(--fg-muted); padding: 9px 14px; font-size: var(--t-md); font-weight: 500;
 }
 .tabs button:hover { color: var(--fg); }
-.tabs button[aria-current="true"] { color: var(--cyan); border-bottom-color: var(--cyan); }
+.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
 
 .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 14px; }
-.kv .i .k { font-size: 11px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.1em; font-family: var(--display); font-weight: 700; }
-.kv .i .v { font-family: var(--display); font-size: 21px; font-weight: 700; margin-top: 2px; }
+.kv .i .k { font-size: var(--t-sm); color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.1em; font-family: var(--display); font-weight: 700; }
+.kv .i .v { font-family: var(--display); font-size: var(--t-2xl); font-weight: 700; margin-top: 2px; }
+/* Spent against authorised is the promise the whole product makes. Two unrelated
+   figures side by side do not show it; a bar under them does. */
+.kv .i .of { font-size: var(--t-sm); color: var(--fg-dim); margin-top: 3px; }
+.kv .i .meter { margin-top: 7px; max-width: 140px; }
+
+/* Drops the long prototype note before it forces a third row of sticky header. */
+@media (max-width: 620px) { .proto-note { display: none; } }
 
 /* ---------- drop zone ---------- */
 .drop {
-  border: 1px dashed var(--border-hi); border-radius: 10px; padding: 30px 20px;
+  border: 1px dashed var(--border-hi); border-radius: var(--r-lg); padding: 30px 20px;
   text-align: center; background: var(--bg-card); display: grid; gap: 8px; justify-items: center;
 }
-.drop h4 { font-size: 15px; font-weight: 600; }
-.drop p { font-size: 13px; color: var(--fg-muted); max-width: 48ch; }
+.drop h3 { font-size: var(--t-lg); font-weight: 600; }
+.drop p { font-size: var(--t-md); color: var(--fg-muted); max-width: 48ch; }
 
 .export-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 14px; }
 .export {
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 9px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-md);
   padding: 16px; display: grid; gap: 8px; align-content: start;
 }
-.export h4 { font-size: 14px; font-weight: 600; }
-.export p { font-size: 12.5px; color: var(--fg-muted); }
+.export h3 { font-size: var(--t-base); font-weight: 600; }
+
+/* Patterns that were repeated inline. Each had two or more identical copies. */
+.card.flush { padding: 0; }                 /* card wrapping a full-bleed table */
+.fig-good { color: var(--emerald); }        /* a figure that beat its baseline */
+.fig-bad  { color: var(--rose-hi); }        /* a figure that did not */
+.btn.block { width: 100%; }
+.cond { display: flex; gap: var(--sp-sm); }
+.cond > :first-child { flex: 1; }
+.rule-line { flex: 1; height: 1px; background: var(--border); }
+.export p { font-size: var(--t-sm); color: var(--fg-muted); }
+
+/* Back out of a campaign without hunting the rail for it. */
+.backlink {
+  display: inline-flex; align-items: center; gap: 7px; background: none; border: 0; padding: 0;
+  font-size: var(--t-md); color: var(--fg-muted); margin-bottom: 8px;
+}
+.backlink:hover { color: var(--accent); }
 
 [hidden] { display: none !important; }
 </style>
@@ -352,22 +624,21 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 <!-- ============================= LANDING ============================= -->
 <div id="view-landing">
   <div class="wrap">
-    <div class="lp-nav">
-      <div class="logo">Veritas<span class="b">Bio</span></div>
-      <div class="links">
+    <header class="lp-nav">
+      <div class="logo">Panoptes<span class="b">Bio</span></div>
+      <nav class="links" aria-label="Main">
         <a href="#how">How it works</a>
         <a href="#proof">Benchmarks</a>
         <button class="btn sm ghost" data-go="signin">Sign in</button>
-      </div>
-    </div>
+      </nav>
+    </header>
 
     <div class="hero">
       <div>
-        <div class="eyebrow">Enzyme campaign platform</div>
-        <h1 style="margin-top:14px">160,000 variants.<br><span class="cy">125 wells.</span></h1>
+        <h1>160,000 variants.<br><span class="ac">125 wells.</span></h1>
       </div>
       <p class="lede">
-        VeritasBio ranks a combinatorial mutant library before anything reaches the bench, then
+        PanoptesBio ranks a combinatorial mutant library before anything reaches the bench, then
         hands you the 125 wells worth making. A hard budget gate sits in front of every GPU call,
         so a campaign cannot cost more than you authorised.
       </p>
@@ -377,7 +648,7 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
       </div>
     </div>
 
-    <div class="stat-row">
+    <div class="stat-row claim">
       <div class="stat">
         <div class="v nums">30.9&times;</div>
         <div class="k">Top-1% hits vs. random screening</div>
@@ -395,35 +666,34 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 
   <div class="section" id="how">
     <div class="wrap">
-      <div class="eyebrow">The loop</div>
-      <h2 style="margin-top:12px">Six steps, in a fixed order, every round</h2>
+      <h2>Six steps, in a fixed order, every round</h2>
       <p class="sub">
         The model proposes where to look. It never decides what to spend, what to run, or when to stop.
         Those are separate components, and you can see each one's decision in the ledger.
       </p>
       <div class="steps">
         <div class="step"><div class="n">1</div><div>
-          <h4>Ingest the target</h4>
+          <h3>Ingest the target</h3>
           <p>UniProt annotations for your accession &mdash; active site, binding residues, domain boundaries.</p>
           <div class="who">rag_worker</div></div></div>
         <div class="step"><div class="n">2</div><div>
-          <h4>Propose search boundaries</h4>
+          <h3>Propose search boundaries</h3>
           <p>The language model reads those annotations and nominates residue clusters worth saturating. You confirm or overrule them before anything runs.</p>
           <div class="who">prompts &rarr; your review</div></div></div>
         <div class="step"><div class="n">3</div><div>
-          <h4>Select the micro-batch</h4>
+          <h3>Select the micro-batch</h3>
           <p>A Gaussian process over physicochemical deltas ranks candidates by expected improvement per dollar.</p>
           <div class="who">math_worker</div></div></div>
         <div class="step"><div class="n">4</div><div>
-          <h4>Authorise the spend</h4>
+          <h3>Authorise the spend</h3>
           <p>The gatekeeper prices the batch cold or warm, then asks the ledger for the money. No authorisation, no run.</p>
           <div class="who">gatekeeper &rarr; ledger</div></div></div>
         <div class="step"><div class="n">5</div><div>
-          <h4>Score on GPU</h4>
+          <h3>Score on GPU</h3>
           <p>ESM-2 650M on an A10G, batched inside the container keep-alive window so you pay for tensors, not boots.</p>
           <div class="who">esm_worker</div></div></div>
         <div class="step"><div class="n">6</div><div>
-          <h4>Record and re-fit</h4>
+          <h3>Record and re-fit</h3>
           <p>Scores append to an immutable evidence log. The surrogate re-fits and the next round starts narrower.</p>
           <div class="who">ledger &rarr; math_worker</div></div></div>
       </div>
@@ -432,19 +702,18 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 
   <div class="section" id="proof">
     <div class="wrap">
-      <div class="eyebrow">Benchmarks</div>
-      <h2 style="margin-top:12px">Measured on a library where the answer is known</h2>
+      <h2>Measured on a library where the answer is known</h2>
       <p class="sub">
         The TrpB active-site landscape of Tm9D8* is combinatorially complete: all 20<sup>4</sup> combinations at
         residues 183, 184, 227 and 228 were measured, so the global optimum is definitely in the pool.
       </p>
-      <div class="stat-row" style="margin-top:24px">
+      <div class="stat-row" style="margin-top:var(--sp-xl)">
         <div class="stat"><div class="v nums">125 / 159,999</div><div class="k">Variants screened</div></div>
         <div class="stat em"><div class="v nums">36</div><div class="k">Top-1% hits found (random: 1.17)</div></div>
         <div class="stat vi"><div class="v nums">0.8005</div><div class="k">Best fitness (parent 0.4081)</div></div>
       </div>
       <div class="honest">
-        <h4>What this does not show</h4>
+        <h3>What this does not show</h3>
         <p>
           Held-out Spearman on TrpB is &minus;0.037. The surrogate's global ranking does not generalise
           across an epistatic active site from 125 measurements. Expected improvement still concentrates
@@ -458,57 +727,55 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 
   <div class="section">
     <div class="wrap">
-      <div class="eyebrow">Access</div>
-      <h2 style="margin-top:12px">Invite-only while we are in private beta</h2>
+      <h2>Invite-only while we are in private beta</h2>
       <p class="sub">
         Accounts run on our Modal and model credits with a per-account spend cap, so there is nothing
         to configure and no key for you to hold. Tell us the protein you want to work on and we will
         set a quota that fits it.
       </p>
-      <div style="margin-top:22px"><button class="btn primary" data-go="signin">Request access</button></div>
+      <div style="margin-top:var(--sp-xl)"><button class="btn primary" data-go="signin">Request access</button></div>
     </div>
   </div>
 
-  <div class="wrap"><div class="lp-foot">
-    <span>VeritasBio</span><span>&middot;</span>
+  <div class="wrap"><footer class="lp-foot">
+    <span>PanoptesBio</span><span>&middot;</span>
     <span>Benchmarks: Sarkisyan 2016, Johnston 2024</span><span>&middot;</span>
     <span>Apache 2.0</span>
-  </div></div>
+  </footer></div>
 </div>
 
 <!-- ============================= SIGN IN ============================= -->
 <div id="view-signin" hidden>
   <div class="wrap">
-    <div class="lp-nav">
-      <div class="logo">Veritas<span class="b">Bio</span></div>
-      <div class="links"><button class="btn sm ghost" data-go="landing">Back</button></div>
-    </div>
+    <header class="lp-nav">
+      <div class="logo">Panoptes<span class="b">Bio</span></div>
+      <nav class="links" aria-label="Main"><button class="btn sm ghost" data-go="landing">Back</button></nav>
+    </header>
     <div class="auth-screen">
       <div class="auth-card">
         <div>
-          <div class="eyebrow">Private beta</div>
-          <h2 style="font-size:26px;margin-top:10px">Sign in to the console</h2>
-          <p class="muted" style="font-size:14px;margin-top:8px">
+          <h2 style="font-size: var(--t-3xl)">Sign in to the private beta</h2>
+          <p class="muted" style="font-size: var(--t-base);margin-top:var(--sp-sm)">
             Sign in with your institutional Google account, or have a one-time link sent to your inbox.
           </p>
         </div>
         <div class="card">
-          <button class="btn" data-go="app" style="width:100%">Continue with Google</button>
-          <div style="display:flex;align-items:center;gap:12px;color:var(--fg-dim);font-size:11px;
+          <button class="btn block" data-go="app">Continue with Google</button>
+          <div style="display:flex;align-items:center;gap:12px;color:var(--fg-dim);font-size: var(--t-xs);
                       font-family:var(--display);font-weight:700;letter-spacing:0.12em">
-            <span style="flex:1;height:1px;background:var(--border)"></span>OR<span style="flex:1;height:1px;background:var(--border)"></span>
+            <span class="rule-line"></span>OR<span class="rule-line"></span>
           </div>
           <div class="field">
             <label for="auth-email">Work email</label>
             <input id="auth-email" type="email" value="r.okafor@example.edu" autocomplete="email">
           </div>
-          <button class="btn primary" data-go="app" style="width:100%">Email me a sign-in link</button>
-          <p class="dim" style="font-size:12px">
-            Signing in does not grant access. Your address is checked against the beta list, and your
-            spend quota is attached on our side &mdash; not in the browser.
+          <button class="btn primary block" data-go="app">Email me a sign-in link</button>
+          <p class="dim" style="font-size: var(--t-sm)">
+            Access is granted per address. We check yours against the beta list and attach your spend
+            quota on our side &mdash; never in the browser.
           </p>
         </div>
-        <p class="dim" style="font-size:12.5px">
+        <p class="dim" style="font-size: var(--t-sm)">
           No access yet? Ask for an invite and tell us your target protein and rough library size.
         </p>
       </div>
@@ -520,22 +787,25 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 <div id="view-app" hidden>
   <div class="console">
     <aside class="rail">
-      <div class="logo" style="padding:0 10px">Veritas<span class="b">Bio</span></div>
-      <nav id="railnav">
+      <div class="logo" style="padding:0 10px">Panoptes<span class="b">Bio</span></div>
+      <nav id="railnav" aria-label="Console">
         <div class="grp">Work</div>
         <button data-pane="campaigns" aria-current="true">Campaigns</button>
         <button data-pane="new">New campaign</button>
         <div class="grp" style="padding-top:14px">Account</div>
-        <button data-pane="account">Quota &amp; keys</button>
-        <button data-go="landing">Sign out</button>
+        <button data-pane="account">Quota</button>
+        <div class="sep"></div>
+        <button class="leave" data-go="landing">Sign out</button>
       </nav>
       <div class="quota">
         <div class="top">
           <span class="lab">Quota left</span>
           <span class="amt nums">$22.41</span>
         </div>
-        <div class="meter"><i style="width:89.6%"></i></div>
-        <div class="foot nums">$2.59 of $25.00 used &middot; resets 1 Nov</div>
+        <div class="foot nums">$2.59 of $25.00 spent &middot; resets 1 Nov</div>
+        <div class="meter" role="img" aria-label="10.4% of the monthly quota used">
+          <i style="width:10.4%"></i>
+        </div>
       </div>
     </aside>
 
@@ -551,32 +821,32 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
           <div class="actions"><button class="btn primary sm" data-pane-go="new">New campaign</button></div>
         </div>
 
-        <div class="card" style="padding:0;margin-top:22px">
-          <div class="table-scroll"><table>
+        <div class="card flush" style="margin-top:var(--sp-xl)">
+          <div class="table-scroll" role="region" aria-label="Campaigns table"><table>
             <thead><tr>
               <th>Campaign</th><th>Status</th><th>Rounds</th><th>Measured</th>
               <th>Best fitness</th><th>Spent</th><th>Updated</th>
             </tr></thead>
             <tbody>
-              <tr class="camp-row" data-pane-go="run">
+              <tr class="camp-row" data-pane-go="run" tabindex="0" role="link">
                 <td><div class="name">avGFP brightness</div><div class="tgt">P42212 &middot; 238 aa</div></td>
                 <td><span class="pill run">Round 3 running</span></td>
                 <td class="nums">3</td><td class="nums">75</td>
                 <td class="nums">1.2818</td><td class="nums">$0.000512</td><td class="dim">just now</td>
               </tr>
-              <tr class="camp-row" data-pane-go="run">
+              <tr class="camp-row" data-pane-go="run" tabindex="0" role="link">
                 <td><div class="name">TrpB active site</div><div class="tgt">Tm9D8* &middot; 183/184/227/228</div></td>
                 <td><span class="pill ok">Complete</span></td>
                 <td class="nums">5</td><td class="nums">125</td>
                 <td class="nums">0.8005</td><td class="nums">$0.001750</td><td class="dim">26 Oct</td>
               </tr>
-              <tr class="camp-row" data-pane-go="run">
+              <tr class="camp-row" data-pane-go="run" tabindex="0" role="link">
                 <td><div class="name">TrpB &mdash; assay round 2</div><div class="tgt">Tm9D8* &middot; awaiting plate data</div></td>
                 <td><span class="pill warn">Waiting on bench</span></td>
                 <td class="nums">2</td><td class="nums">48</td>
                 <td class="nums">0.7310</td><td class="nums">$0.000640</td><td class="dim">24 Oct</td>
               </tr>
-              <tr class="camp-row" data-pane-go="run">
+              <tr class="camp-row" data-pane-go="run" tabindex="0" role="link">
                 <td><div class="name">avGFP thermostability</div><div class="tgt">P42212 &middot; draft</div></td>
                 <td><span class="pill idle">Draft</span></td>
                 <td class="nums">0</td><td class="nums">0</td>
@@ -596,14 +866,27 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
           </div>
         </div>
 
-        <div class="stepper" style="margin-top:18px">
-          <div class="s done"><b>1</b> Target</div>
-          <div class="s on"><b>2</b> Search scope</div>
-          <div class="s"><b>3</b> Budget</div>
+        <div class="stepper" id="ncsteps" style="margin-top:var(--sp-lg)">
+          <button class="s done" data-step="target"><b>1</b> Target</button>
+          <button class="s on" data-step="scope"><b>2</b> Search scope</button>
+          <button class="s" data-step="budget"><b>3</b> Budget</button>
         </div>
 
-        <div class="card" style="margin-top:18px">
+        <div data-step-body="target" hidden>
+        <div class="card" style="margin-top:var(--sp-lg)">
           <div class="form-grid">
+            <div class="field">
+              <label for="nc-target">Target</label>
+              <select id="nc-target">
+                <option value="P42212" selected>avGFP &middot; fluorescent protein &middot; 54K DMS</option>
+                <option value="TRPB_TM9D8">TrpB Tm9D8* &middot; tryptophan synthase &beta; &middot; 160K DMS</option>
+                <option value="SPG1_STRSG">Protein G GB1 &middot; binding domain &middot; 150K DMS</option>
+                <option value="HER2_TRASTUZUMAB">Trastuzumab CDR-H3 &middot; antibody &middot; 38K DMS</option>
+                <option value="SCFV_9004G_CN2">scFv 9004G : Cn2 &middot; scorpion antivenom &middot; 2YBR</option>
+                <option value="custom">Custom accession&hellip;</option>
+              </select>
+              <span class="hint">Benchmarked targets have a known answer to score against.</span>
+            </div>
             <div class="field">
               <label for="nc-acc">UniProt accession</label>
               <input id="nc-acc" class="mono" value="P42212">
@@ -625,20 +908,25 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
             </div>
           </div>
         </div>
+        <div style="display:flex;gap:10px;margin-top:var(--sp-xl);flex-wrap:wrap">
+          <button class="btn primary" data-step-go="scope">Continue to search scope</button>
+          <button class="btn ghost" data-pane-go="campaigns">Save as draft</button>
+        </div>
+        </div>
 
-        <div style="margin-top:26px">
-          <div class="eyebrow">Step 2 &middot; your call</div>
-          <h3 style="font-size:19px;margin-top:8px">The model proposed four clusters. Confirm what it may touch.</h3>
-          <p class="muted" style="font-size:13.5px;margin-top:6px;max-width:66ch">
+        <div data-step-body="scope">
+        <div style="margin-top:var(--sp-xl)">
+          <h3 style="font-size: var(--t-xl)">The model proposed four clusters. Confirm what it may touch.</h3>
+          <p class="muted" style="font-size: var(--t-md);margin-top:var(--sp-xs);max-width:66ch">
             Read from UniProt P42212 annotations. Nothing is saturated until you accept it, and anything
             you ban here is refused by the validator for the whole campaign, not just this round.
           </p>
         </div>
 
-        <div style="display:grid;gap:12px;margin-top:16px">
+        <div style="display:grid;gap:12px;margin-top:var(--sp-md)">
           <div class="cluster">
             <div class="ch">
-              <h4>Chromophore environment</h4>
+              <h3>Chromophore environment</h3>
               <span class="pill ok">Accepted</span>
               <div class="toggle"><button class="btn sm ghost" data-excl>Exclude</button></div>
             </div>
@@ -652,7 +940,7 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 
           <div class="cluster">
             <div class="ch">
-              <h4>Dimer interface</h4>
+              <h3>Dimer interface</h3>
               <span class="pill ok">Accepted</span>
               <div class="toggle"><button class="btn sm ghost" data-excl>Exclude</button></div>
             </div>
@@ -665,7 +953,7 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 
           <div class="cluster excluded">
             <div class="ch">
-              <h4>Barrel strand 7</h4>
+              <h3>Barrel strand 7</h3>
               <span class="pill idle">Excluded by you</span>
               <div class="toggle"><button class="btn sm ghost" data-excl>Re-include</button></div>
             </div>
@@ -678,20 +966,134 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 
           <div class="cluster">
             <div class="ch">
-              <h4>Never mutate</h4>
-              <span class="pill stop">Hard ban</span>
+              <h3>Never mutate</h3>
+              <span class="pill stop">Always refused</span>
             </div>
             <div class="resgrid">
               <span class="res ban">65</span><span class="res ban">222</span>
-              <span class="res ban">+ add position</span>
+              <button type="button" class="res add">+ Add position</button>
             </div>
             <p class="why">Positions the validator must refuse regardless of what any round proposes. Yours to set; the planner cannot remove them.</p>
           </div>
         </div>
 
-        <div style="display:flex;gap:10px;margin-top:22px;flex-wrap:wrap">
-          <button class="btn primary" data-pane-go="run">Accept scope and set budget</button>
-          <button class="btn ghost" data-pane-go="campaigns">Save as draft</button>
+        <div style="display:flex;gap:10px;margin-top:var(--sp-xl);flex-wrap:wrap">
+          <button class="btn primary" data-step-go="budget">Accept scope and set budget</button>
+          <button class="btn ghost" data-step-go="target">Back to target</button>
+        </div>
+        </div>
+
+        <!-- ---------- step 3: budget and limits ---------- -->
+        <div data-step-body="budget" hidden>
+          <div style="margin-top:var(--sp-xl)">
+            <h3 style="font-size: var(--t-xl)">What this campaign may spend, and when it stops.</h3>
+            <p class="budget-note" style="margin-top:var(--sp-xs)">
+              Every GPU call is priced before it runs and charged against these limits as whole
+              micro-dollars. A call that would cross one is refused outright rather than trimmed,
+              and the refusal is written to the ledger. Nothing queues; nothing overdraws.
+            </p>
+          </div>
+
+          <div class="card" style="margin-top:var(--sp-md)">
+            <div class="form-grid">
+              <div class="field">
+                <label for="nc-budget">Total authorisation</label>
+                <input id="nc-budget" class="mono nums" value="0.0500" inputmode="decimal">
+                <span class="hint">US dollars. The hard ceiling for the whole campaign.</span>
+              </div>
+              <div class="field">
+                <label for="nc-cap">Per-round ceiling</label>
+                <input id="nc-cap" class="mono nums" value="0.000500" inputmode="decimal">
+                <span class="hint">Refuses any single round priced above this.</span>
+              </div>
+              <div class="field">
+                <label for="nc-model">Scoring model</label>
+                <select id="nc-model">
+                  <option value="650">ESM-2 650M &middot; high precision</option>
+                  <option value="150">ESM-2 150M &middot; fast screening</option>
+                  <option value="cascade">Cascade 150M &rarr; 650M &middot; multi-fidelity</option>
+                  <option value="0">Mock scorer &middot; no cloud cost</option>
+                  <option value="0c">Mock cascade &middot; no cloud cost</option>
+                </select>
+                <span class="hint">Sets the per-variant rate.</span>
+              </div>
+              <div class="field">
+                <label for="nc-modality">Campaign modality</label>
+                <select id="nc-modality">
+                  <option value="25" selected>In-silico rapid &middot; batch 25</option>
+                  <option value="88">Plate-scale wet-lab &middot; 96-well &middot; batch 56&ndash;88</option>
+                  <option value="308">Plate-scale wet-lab &middot; 384-well &middot; batch 308</option>
+                </select>
+                <span class="hint">Cloud simulation, or batches sized to a physical plate.</span>
+              </div>
+              <div class="field">
+                <label for="nc-batch">Variants per round</label>
+                <select id="nc-batch">
+                  <option>25</option><option>50</option><option>88</option><option>100</option><option>308</option>
+                </select>
+                <span class="hint">Batched inside the container keep-alive window.</span>
+              </div>
+              <div class="field">
+                <label for="nc-cold">Cold-start batch size</label>
+                <input id="nc-cold" class="mono nums" value="48" inputmode="numeric">
+                <span class="hint">Round 1 runs larger to amortise the 25s container spin-up.</span>
+              </div>
+              <div class="field">
+                <label for="nc-rounds">Round cap</label>
+                <select id="nc-rounds">
+                  <option>5</option><option selected>8</option><option>12</option>
+                </select>
+                <span class="hint">Stops after this many rounds whatever the budget allows.</span>
+              </div>
+              <div class="field">
+                <label for="nc-plateau">Stop after no improvement for</label>
+                <select id="nc-plateau">
+                  <option>2 rounds</option><option selected>3 rounds</option><option>Never</option>
+                </select>
+                <span class="hint">Preserves unspent budget when the search flattens.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:var(--sp-md)">
+            <div class="eyebrow">Engine options</div>
+            <div class="switches" style="margin-top:var(--sp-sm)">
+              <label class="switch">
+                <input type="checkbox" id="nc-llm">
+                <span class="track"></span>
+                <span class="lab"><b>Live Meta Llama 3.1 planner</b>
+                  <span>Calls the Meta API in strict JSON mode. Off, a rule-based planner reads the same annotations offline.</span></span>
+              </label>
+              <label class="switch">
+                <input type="checkbox" id="nc-cascade">
+                <span class="track"></span>
+                <span class="lab"><b>Multi-fidelity cloud cascade</b>
+                  <span>Screens on ESM-2 150M, promotes only the survivors to 650M. Cheaper per candidate, one more round trip.</span></span>
+              </label>
+              <label class="switch">
+                <input type="checkbox" id="nc-polish">
+                <span class="track"></span>
+                <span class="lab"><b>Hamming-1 lead polish</b>
+                  <span>After the last round, sweeps the single-mutation sphere around the best variant found.</span></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:var(--sp-md)">
+            <div class="eyebrow">What this authorises</div>
+            <div class="proj" id="proj">
+              <div class="line"><span>Priced per variant, warm</span><b id="pj-rate">&mdash;</b></div>
+              <div class="line"><span>Cost of one full round</span><b id="pj-round">&mdash;</b></div>
+              <div class="line"><span>Cost if every round runs</span><b id="pj-total">&mdash;</b></div>
+              <div class="line"><span>Of your remaining quota</span><b id="pj-quota">&mdash;</b></div>
+              <div class="binds" id="pj-binds">&mdash;</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:var(--sp-xl);flex-wrap:wrap">
+            <button class="btn primary" data-pane-go="run">Start campaign</button>
+            <button class="btn ghost" data-step-go="scope">Back to search scope</button>
+          </div>
         </div>
       </section>
 
@@ -699,8 +1101,8 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
       <section data-pane-body="run" hidden>
         <div class="work-head">
           <div>
-            <div class="eyebrow">Campaign</div>
-            <h2 style="margin-top:6px">avGFP brightness</h2>
+            <button class="backlink" data-pane-go="campaigns">&larr; All campaigns</button>
+            <h2>avGFP brightness</h2>
             <p class="sub mono">P42212 &middot; 238 aa &middot; max 3 mutations &middot; ESM-2 650M on A10G</p>
           </div>
           <div class="actions">
@@ -711,29 +1113,36 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 
         <div class="kv card">
           <div class="i"><div class="k">Authorised</div><div class="v nums">$0.0500</div></div>
-          <div class="i"><div class="k">Spent</div><div class="v nums">$0.000512</div></div>
+          <div class="i">
+            <div class="k">Spent</div><div class="v nums">$0.000512</div>
+            <div class="of nums">1.0% of the authorisation</div>
+            <div class="meter" role="img" aria-label="1.0% of the authorised budget spent"><i style="width:1%"></i></div>
+          </div>
           <div class="i"><div class="k">Measured</div><div class="v nums">75</div></div>
-          <div class="i"><div class="k">Best fitness</div><div class="v nums" style="color:var(--emerald)">1.2818</div></div>
+          <div class="i"><div class="k">Best fitness</div><div class="v nums fig-good">1.2818</div></div>
         </div>
 
-        <div class="tabs" id="runtabs">
-          <button data-tab="rounds" aria-current="true">Rounds</button>
-          <button data-tab="variants">Variants</button>
-          <button data-tab="ledger">Ledger</button>
-          <button data-tab="bench">Wet-lab handoff</button>
-          <button data-tab="measure">Measurements</button>
+        <div class="tabs" id="runtabs" role="tablist" aria-label="Campaign detail">
+          <button role="tab" data-tab="rounds" aria-selected="true" tabindex="0">Rounds</button>
+          <button role="tab" data-tab="planner" aria-selected="false" tabindex="-1">Planner</button>
+          <button role="tab" data-tab="space" aria-selected="false" tabindex="-1">Search space</button>
+          <button role="tab" data-tab="variants" aria-selected="false" tabindex="-1">Variants</button>
+          <button role="tab" data-tab="ledger" aria-selected="false" tabindex="-1">Ledger</button>
+          <button role="tab" data-tab="bench" aria-selected="false" tabindex="-1">Wet-lab handoff</button>
+          <button role="tab" data-tab="measure" aria-selected="false" tabindex="-1">Measurements</button>
+          <button role="tab" data-tab="econ" aria-selected="false" tabindex="-1">Economics</button>
         </div>
 
         <!-- tab: rounds -->
-        <div data-tab-body="rounds">
+        <div data-tab-body="rounds" role="tabpanel" tabindex="0">
           <div class="run-grid">
             <div style="display:grid;gap:10px;min-width:0">
               <div class="round live">
                 <div class="rh">
-                  <h4>Round 3</h4><span class="pill run">Running</span>
+                  <h3>Round 3</h3><span class="pill run">Running</span>
                   <span class="cost nums">$0.000192 authorised</span>
                 </div>
-                <div class="chips">
+                <div class="chips stages">
                   <span class="chip done">Ingest</span><span class="chip done">Propose</span>
                   <span class="chip done">Select</span><span class="chip done">Authorise</span>
                   <span class="chip now">Score</span><span class="chip">Record</span>
@@ -743,10 +1152,10 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 
               <div class="round">
                 <div class="rh">
-                  <h4>Round 2</h4><span class="pill ok">Complete</span>
+                  <h3>Round 2</h3><span class="pill ok">Complete</span>
                   <span class="cost nums">$0.000192</span>
                 </div>
-                <div class="chips">
+                <div class="chips stages">
                   <span class="chip done">Ingest</span><span class="chip done">Propose</span>
                   <span class="chip done">Select</span><span class="chip done">Authorise</span>
                   <span class="chip done">Score</span><span class="chip done">Record</span>
@@ -756,10 +1165,10 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 
               <div class="round halted">
                 <div class="rh">
-                  <h4>Round 2 &middot; first attempt</h4><span class="pill stop">Refused</span>
+                  <h3>Round 2 &middot; first attempt</h3><span class="pill stop">Refused</span>
                   <span class="cost nums">$0.004100 requested</span>
                 </div>
-                <div class="chips">
+                <div class="chips stages">
                   <span class="chip done">Ingest</span><span class="chip done">Propose</span>
                   <span class="chip done">Select</span><span class="chip fail">Authorise</span>
                   <span class="chip">Score</span><span class="chip">Record</span>
@@ -772,10 +1181,10 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 
               <div class="round">
                 <div class="rh">
-                  <h4>Round 1</h4><span class="pill ok">Complete</span>
+                  <h3>Round 1</h3><span class="pill ok">Complete</span>
                   <span class="cost nums">$0.000128</span>
                 </div>
-                <div class="chips">
+                <div class="chips stages">
                   <span class="chip done">Ingest</span><span class="chip done">Propose</span>
                   <span class="chip done">Select</span><span class="chip done">Authorise</span>
                   <span class="chip done">Score</span><span class="chip done">Record</span>
@@ -786,14 +1195,14 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
 
             <div style="display:grid;gap:12px;min-width:0">
               <div>
-                <div class="eyebrow" style="margin-bottom:8px">Event stream</div>
-                <div class="logbox">
-<span class="t">14:22:01</span> <span class="cy">[INGEST]</span>   P42212 from cache &middot; 238 aa<br>
-<span class="t">14:22:01</span> <span class="cy">[PROPOSE]</span>  2 clusters, 8 positions in scope<br>
-<span class="t">14:22:02</span> <span class="cy">[SELECT]</span>   ranked 4,522 candidates &rarr; top 25<br>
+                <div class="eyebrow" style="margin-bottom:var(--sp-sm)">Event stream</div>
+                <div class="logbox" role="log" aria-live="polite" aria-label="Event stream">
+<span class="t">14:22:01</span> <span class="ac">[INGEST]</span>   P42212 from cache &middot; 238 aa<br>
+<span class="t">14:22:01</span> <span class="ac">[PROPOSE]</span>  2 clusters, 8 positions in scope<br>
+<span class="t">14:22:02</span> <span class="ac">[SELECT]</span>   ranked 4,522 candidates &rarr; top 25<br>
 <span class="t">14:22:02</span> <span class="am">[PRICE]</span>    warm container, 25 &times; 0.31s @ $1.10/hr<br>
 <span class="t">14:22:02</span> <span class="ok">[AUTHORISE]</span> 192 &micro;USD approved &middot; job 7f3a9c<br>
-<span class="t">14:22:03</span> <span class="cy">[SCORE]</span>    batch submitted to A10G<br>
+<span class="t">14:22:03</span> <span class="ac">[SCORE]</span>    batch submitted to A10G<br>
 <span class="t">14:22:14</span> <span class="ok">[RECORD]</span>   18 of 25 returned<br>
 <span class="t">14:21:40</span> <span class="rs">[REFUSED]</span>  4100 &micro;USD &gt; 500 &micro;USD round cap<br>
 <span class="t">14:21:40</span> <span class="am">[REPLAN]</span>   batch 400 &rarr; 25, cold &rarr; warm<br>
@@ -802,11 +1211,156 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
               </div>
               <div class="card">
                 <div class="eyebrow">Stop conditions</div>
-                <div style="display:grid;gap:7px;margin-top:10px;font-size:13px">
-                  <div style="display:flex;gap:10px"><span class="muted" style="flex:1">Budget exhausted</span><span class="mono dim">$0.0500</span></div>
-                  <div style="display:flex;gap:10px"><span class="muted" style="flex:1">Round cap</span><span class="mono dim">8 rounds</span></div>
-                  <div style="display:flex;gap:10px"><span class="muted" style="flex:1">No improvement for</span><span class="mono dim">3 rounds</span></div>
-                  <div style="display:flex;gap:10px"><span class="muted" style="flex:1">Per-round ceiling</span><span class="mono dim">$0.000500</span></div>
+                <div style="display:grid;gap:7px;margin-top:var(--sp-sm);font-size: var(--t-md)">
+                  <div class="cond"><span class="muted">Budget exhausted</span><span class="mono dim">$0.0500</span></div>
+                  <div class="cond"><span class="muted">Round cap</span><span class="mono dim">8 rounds</span></div>
+                  <div class="cond"><span class="muted">No improvement for</span><span class="mono dim">3 rounds</span></div>
+                  <div class="cond"><span class="muted">Per-round ceiling</span><span class="mono dim">$0.000500</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- tab: planner reasoning -->
+        <div data-tab-body="planner" role="tabpanel" tabindex="0" hidden>
+          <p class="sub muted" style="font-size: var(--t-md)">
+            What the language model was asked, what it reasoned, and the strict JSON it returned.
+            It proposes boundaries and nothing else &mdash; it never prices a batch, picks a variant
+            or decides when to stop.
+          </p>
+
+          <div class="card" style="margin-top:var(--sp-md)">
+            <div class="eyebrow">Round 3 &middot; prompt context</div>
+            <div class="cot" style="margin-top:var(--sp-sm)">
+              <p class="think">
+                UniProt P42212, 238 residues. Annotations supplied: <b>MOD_RES 66</b> (chromophore),
+                <b>REGION 206..223</b> (dimer interface), 8 positions already in scope, 2 positions
+                on the campaign ban list, and 50 measured variants from rounds 1&ndash;2.
+              </p>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:var(--sp-md)">
+            <div class="eyebrow">Mechanistic chain-of-thought</div>
+            <div class="cot" style="margin-top:var(--sp-sm)">
+              <p class="think">
+                <b>1 &middot; Read the evidence.</b> The two strongest variants so far both carry
+                T203 substitutions paired with a change at E222. That pairing recurs in 4 of the top
+                6, which is more than the sampling rate would predict.
+              </p>
+              <p class="think">
+                <b>2 &middot; Form a hypothesis.</b> T203 stacks against the chromophore and E222 sits
+                on the proton-relay wire. A substitution at one plausibly changes what is tolerated at
+                the other, so these positions should be saturated together rather than independently.
+              </p>
+              <p class="think">
+                <b>3 &middot; Check the constraints.</b> Position 65 and 222 are on the user ban list.
+                222 is load-bearing for the hypothesis, so the proposal keeps 203 and proposes 205 and
+                145 as the second shell instead, and says so rather than silently dropping it.
+              </p>
+              <p class="think">
+                <b>4 &middot; Propose, do not decide.</b> Nominating 10 positions across 2 clusters.
+                Batch size, price and stop condition are not mine to set.
+              </p>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:var(--sp-md)">
+            <div class="eyebrow">Strict JSON returned</div>
+            <div class="jsonbox" style="margin-top:var(--sp-sm)" role="region" aria-label="Planner JSON output">
+{<br>
+&nbsp;&nbsp;<span class="k">"clusters"</span>: [<br>
+&nbsp;&nbsp;&nbsp;&nbsp;{ <span class="k">"name"</span>: <span class="s">"chromophore environment"</span>,
+<span class="k">"positions"</span>: [<span class="n">64</span>, <span class="n">65</span>, <span class="n">66</span>, <span class="n">67</span>, <span class="n">68</span>],
+<span class="k">"confidence"</span>: <span class="n">0.91</span> },<br>
+&nbsp;&nbsp;&nbsp;&nbsp;{ <span class="k">"name"</span>: <span class="s">"proton relay second shell"</span>,
+<span class="k">"positions"</span>: [<span class="n">145</span>, <span class="n">203</span>, <span class="n">205</span>],
+<span class="k">"confidence"</span>: <span class="n">0.68</span> }<br>
+&nbsp;&nbsp;],<br>
+&nbsp;&nbsp;<span class="k">"refused_positions"</span>: [<span class="n">65</span>, <span class="n">222</span>],<br>
+&nbsp;&nbsp;<span class="k">"refusal_reason"</span>: <span class="s">"on campaign ban list"</span><br>
+}
+            </div>
+            <p class="dim" style="font-size: var(--t-sm);margin-top:var(--sp-sm)">
+              Parsed by the validator before anything runs. A malformed response, an unknown position
+              or a banned residue fails closed &mdash; the round does not start.
+            </p>
+          </div>
+        </div>
+
+        <!-- tab: search space -->
+        <div data-tab-body="space" role="tabpanel" tabindex="0" hidden>
+          <p class="sub muted" style="font-size: var(--t-md)">
+            Where the search is looking, along the sequence and in the surrogate&rsquo;s latent space.
+          </p>
+
+          <div class="run-grid" style="margin-top:var(--sp-md)">
+            <div class="card" style="min-width:0">
+              <div class="eyebrow">Latent physicochemical projection</div>
+              <p class="dim" style="font-size: var(--t-sm);margin-top:6px">
+                Two principal components of the 5-factor featurisation. Measured variants, shaded by fitness.
+              </p>
+              <svg class="chart" viewBox="0 0 340 230" role="img"
+                   aria-label="Scatter of 75 measured variants in two principal components; the best variants cluster upper right">
+                <g class="grid">
+                  <line x1="30" y1="20" x2="330" y2="20"/><line x1="30" y1="70" x2="330" y2="70"/>
+                  <line x1="30" y1="120" x2="330" y2="120"/><line x1="30" y1="170" x2="330" y2="170"/>
+                </g>
+                <line class="axis" x1="30" y1="200" x2="330" y2="200"/>
+                <line class="axis" x1="30" y1="20" x2="30" y2="200"/>
+                <g fill="var(--fg-dim)" opacity="0.55">
+                  <circle cx="62" cy="178" r="3"/><circle cx="78" cy="166" r="3"/><circle cx="95" cy="183" r="3"/>
+                  <circle cx="110" cy="158" r="3"/><circle cx="126" cy="172" r="3"/><circle cx="141" cy="150" r="3"/>
+                  <circle cx="88" cy="140" r="3"/><circle cx="104" cy="131" r="3"/><circle cx="70" cy="152" r="3"/>
+                  <circle cx="155" cy="163" r="3"/><circle cx="133" cy="137" r="3"/><circle cx="119" cy="146" r="3"/>
+                </g>
+                <g fill="var(--accent)" opacity="0.7">
+                  <circle cx="168" cy="120" r="3.5"/><circle cx="183" cy="112" r="3.5"/><circle cx="196" cy="126" r="3.5"/>
+                  <circle cx="210" cy="104" r="3.5"/><circle cx="175" cy="96" r="3.5"/><circle cx="222" cy="118" r="3.5"/>
+                  <circle cx="204" cy="88" r="3.5"/><circle cx="190" cy="80" r="3.5"/>
+                </g>
+                <g fill="var(--emerald)">
+                  <circle cx="244" cy="72" r="4"/><circle cx="262" cy="58" r="4"/><circle cx="238" cy="54" r="4"/>
+                  <circle cx="276" cy="44" r="5"/>
+                </g>
+                <text x="276" y="36" text-anchor="middle" fill="var(--emerald)">1.2818</text>
+                <text x="180" y="218" text-anchor="middle">PC1 &middot; hydrophobicity &amp; volume</text>
+                <text x="14" y="112" text-anchor="middle" transform="rotate(-90 14 112)">PC2 &middot; charge</text>
+              </svg>
+              <div class="legend" style="margin-top:var(--sp-sm)">
+                <span><i style="background:var(--fg-dim)"></i>Round 1</span>
+                <span><i style="background:var(--accent)"></i>Round 2</span>
+                <span><i style="background:var(--emerald)"></i>Round 3 &middot; best</span>
+              </div>
+            </div>
+
+            <div style="display:grid;gap:var(--sp-md);min-width:0">
+              <div class="card">
+                <div class="eyebrow">Sequence positions in play</div>
+                <div class="track-wrap" style="margin-top:var(--sp-sm)" role="region" aria-label="Residue track for 238 positions">
+                  <div class="restrack" id="restrack"></div>
+                  <div class="track-scale"><span>1</span><span>60</span><span>120</span><span>180</span><span>238</span></div>
+                </div>
+                <div class="legend" style="margin-top:var(--sp-sm)">
+                  <span><i style="background:var(--fg);height:14px;border-radius:1px"></i>Catalytic</span>
+                  <span><i style="background:var(--accent)"></i>In scope</span>
+                  <span><i style="background:var(--rose)"></i>Banned</span>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="eyebrow">Crystal structure</div>
+                <div class="viewport" style="margin-top:var(--sp-sm)">
+                  <p>The 3D backbone renders here from PDB <span class="mono">1EMA</span>, with
+                     catalytic residues and the exploration pockets picked out.</p>
+                  <p class="dim" style="font-size: var(--t-sm)">Interactive in the console; this
+                     prototype ships no viewer library.</p>
+                </div>
+                <div style="display:flex;gap:10px;margin-top:var(--sp-sm);flex-wrap:wrap">
+                  <button class="btn sm ghost">Cartoon</button>
+                  <button class="btn sm ghost">Surface</button>
+                  <button class="btn sm ghost">Spin</button>
                 </div>
               </div>
             </div>
@@ -814,16 +1368,16 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
         </div>
 
         <!-- tab: variants -->
-        <div data-tab-body="variants" hidden>
+        <div data-tab-body="variants" role="tabpanel" tabindex="0" hidden>
           <div class="work-head" style="margin-bottom:0">
             <p class="sub" style="margin:0">75 scored in silico. Select what goes to the bench.</p>
-            <div class="actions"><button class="btn sm primary">Send 12 selected to handoff</button></div>
+            <div class="actions"><button class="btn sm primary">Send 12 variants to the bench</button></div>
           </div>
-          <div class="card" style="padding:0;margin-top:14px">
-            <div class="table-scroll"><table>
+          <div class="card flush" style="margin-top:var(--sp-md)">
+            <div class="table-scroll" role="region" aria-label="Scored variants table"><table>
               <thead><tr><th>Rank</th><th>Variant</th><th>Predicted fitness</th><th>Uncertainty</th><th>Round</th><th>Job</th></tr></thead>
               <tbody>
-                <tr><td class="nums">1</td><td><span class="variant">T203F<span class="pos">:</span>E222G</span></td><td class="nums" style="color:var(--emerald)">1.2818</td><td class="nums dim">&plusmn;0.082</td><td class="nums">2</td><td class="mono dim">7f3a9c</td></tr>
+                <tr><td class="nums">1</td><td><span class="variant">T203F<span class="pos">:</span>E222G</span></td><td class="nums fig-good">1.2818</td><td class="nums dim">&plusmn;0.082</td><td class="nums">2</td><td class="mono dim">7f3a9c</td></tr>
                 <tr><td class="nums">2</td><td><span class="variant">S65T<span class="pos">:</span>T203Y</span></td><td class="nums">1.1904</td><td class="nums dim">&plusmn;0.071</td><td class="nums">2</td><td class="mono dim">7f3a9c</td></tr>
                 <tr><td class="nums">3</td><td><span class="variant">S65T<span class="pos">:</span>Y66H</span></td><td class="nums">1.0442</td><td class="nums dim">&plusmn;0.094</td><td class="nums">1</td><td class="mono dim">2b81e4</td></tr>
                 <tr><td class="nums">4</td><td><span class="variant">T203Y<span class="pos">:</span>E222G</span></td><td class="nums">0.9871</td><td class="nums dim">&plusmn;0.110</td><td class="nums">2</td><td class="mono dim">7f3a9c</td></tr>
@@ -836,12 +1390,12 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
         </div>
 
         <!-- tab: ledger -->
-        <div data-tab-body="ledger" hidden>
-          <p class="sub muted" style="font-size:13.5px">
+        <div data-tab-body="ledger" role="tabpanel" tabindex="0" hidden>
+          <p class="sub muted" style="font-size: var(--t-md)">
             Every paid call, approved or refused. Rows are append-only &mdash; the database refuses updates.
           </p>
-          <div class="card" style="padding:0;margin-top:14px">
-            <div class="table-scroll"><table>
+          <div class="card flush" style="margin-top:var(--sp-md)">
+            <div class="table-scroll" role="region" aria-label="Ledger table"><table>
               <thead><tr><th>Job</th><th>Model</th><th>Variants</th><th>Priced</th><th>Cost</th><th>Decision</th><th>Time</th></tr></thead>
               <tbody>
                 <tr><td class="mono">7f3a9c</td><td class="mono dim">esm2_650m</td><td class="nums">25</td><td class="dim">warm</td><td class="nums">$0.000192</td><td><span class="pill ok">Approved</span></td><td class="dim nums">14:22:02</td></tr>
@@ -851,41 +1405,78 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
               </tbody>
             </table></div>
           </div>
-          <p class="dim" style="font-size:12.5px;margin-top:10px">
+          <p class="dim" style="font-size: var(--t-sm);margin-top:var(--sp-sm)">
             Stored as integer micro-USD. Refusals are recorded with the same weight as approvals.
+          </p>
+
+          <div style="margin-top:var(--sp-2xl)">
+            <div class="eyebrow">Cryptographic state-transition blocks</div>
+            <p class="dim" style="font-size: var(--t-sm);margin-top:6px;max-width:70ch">
+              Every ledger write is a block whose hash covers its parent, so a row cannot be altered
+              after the fact without breaking the chain below it. This is the 21 CFR Part 11 record.
+            </p>
+          </div>
+          <div class="card flush" style="margin-top:var(--sp-md)">
+            <div class="table-scroll" role="region" aria-label="Audit chain blocks"><table>
+              <thead><tr><th>Block</th><th>Time</th><th>Action</th><th>Block hash</th><th>Parent</th><th>Signature</th></tr></thead>
+              <tbody>
+                <tr><td class="nums">4</td><td class="dim nums">14:22:02</td><td>Authorise</td><td class="mono dim">9c41e7&hellip;</td><td class="mono dim">b07d12&hellip;</td><td><span class="pill ok">Verified</span></td></tr>
+                <tr><td class="nums">3</td><td class="dim nums">14:21:40</td><td>Refuse</td><td class="mono dim">b07d12&hellip;</td><td class="mono dim">5fa330&hellip;</td><td><span class="pill ok">Verified</span></td></tr>
+                <tr><td class="nums">2</td><td class="dim nums">14:19:31</td><td>Authorise</td><td class="mono dim">5fa330&hellip;</td><td class="mono dim">2b81e4&hellip;</td><td><span class="pill ok">Verified</span></td></tr>
+                <tr><td class="nums">1</td><td class="dim nums">14:17:12</td><td>Authorise</td><td class="mono dim">2b81e4&hellip;</td><td class="mono dim">000000&hellip;</td><td><span class="pill ok">Verified</span></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <p class="dim" style="font-size: var(--t-sm);margin-top:var(--sp-sm)">
+            Block 1&rsquo;s parent is the genesis hash. Re-verification runs on export and on demand.
           </p>
         </div>
 
         <!-- tab: wet-lab handoff -->
-        <div data-tab-body="bench" hidden>
-          <p class="sub muted" style="font-size:13.5px">
+        <div data-tab-body="bench" role="tabpanel" tabindex="0" hidden>
+          <p class="sub muted" style="font-size: var(--t-md)">
             12 variants selected. Everything below is generated from those sequences.
           </p>
-          <div class="export-grid" style="margin-top:16px">
+          <div class="export-grid" style="margin-top:var(--sp-md)">
             <div class="export">
-              <h4>Synthesis order sheet</h4>
+              <h3>Synthesis order sheet</h3>
               <p>Codon-optimised cDNA for <em>E. coli</em> K12, Gibson overhangs for pET-28a(+). Twist and IDT column formats.</p>
               <button class="btn sm ghost">Download CSV</button>
             </div>
             <div class="export">
-              <h4>Opentrons OT-2 protocol</h4>
+              <h3>Opentrons OT-2 protocol</h3>
               <p>96-well plate map and pipetting script for the selected mutagenesis set.</p>
               <button class="btn sm ghost">Download .py</button>
             </div>
             <div class="export">
-              <h4>Audit certificate</h4>
+              <h3>Audit certificate</h3>
               <p>SHA-256 over the ledger rows behind this selection, for 21 CFR Part 11 records.</p>
               <button class="btn sm ghost">Download certificate</button>
             </div>
             <div class="export">
-              <h4>Plate template</h4>
+              <h3>Plate template</h3>
               <p>Blank result sheet matching the plate map, ready to fill in once the assay reads out.</p>
               <button class="btn sm ghost">Download CSV</button>
             </div>
           </div>
-          <div class="card" style="margin-top:18px">
+          <div class="filebox">
+            <div class="fh">
+              <span class="name">panoptesbio_P42212_round3_twist.csv</span>
+              <span class="pill idle">12 rows</span>
+              <span class="actions"><button class="btn sm ghost">Download</button></span>
+            </div>
+            <pre role="region" aria-label="Generated synthesis file preview" tabindex="0">well,variant,cdna_sequence,length_bp,overhang_5,overhang_3
+A1,T203F:E222G,ATGAGTAAAGGAGAAGAACTTTTCACTGGA...,717,GGATCCGCC,GCGGCCGCTT
+A2,S65T:T203Y,ATGAGTAAAGGAGAAGAACTTTTCACTGGA...,717,GGATCCGCC,GCGGCCGCTT
+A3,S65T:Y66H,ATGAGTAAAGGAGAAGAACTTTTCACTGGA...,717,GGATCCGCC,GCGGCCGCTT
+A4,T203Y:E222G,ATGAGTAAAGGAGAAGAACTTTTCACTGGA...,717,GGATCCGCC,GCGGCCGCTT
+A5,S65T,ATGAGTAAAGGAGAAGAACTTTTCACTGGA...,717,GGATCCGCC,GCGGCCGCTT
+# codon-optimised for E. coli K12 &middot; Gibson overhangs for pET-28a(+)</pre>
+          </div>
+
+          <div class="card" style="margin-top:var(--sp-lg)">
             <div class="eyebrow">Selected for synthesis</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:var(--sp-sm)">
               <span class="res">T203F:E222G</span><span class="res">S65T:T203Y</span>
               <span class="res">S65T:Y66H</span><span class="res">T203Y:E222G</span>
               <span class="res">S65T</span><span class="res">Y66H:T203F</span>
@@ -895,7 +1486,7 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
         </div>
 
         <!-- tab: measurements -->
-        <div data-tab-body="measure" hidden>
+        <div data-tab-body="measure" role="tabpanel" tabindex="0" hidden>
           <div class="work-head" style="margin-bottom:0">
             <div>
               <p class="sub" style="margin:0;max-width:64ch">
@@ -905,21 +1496,21 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
             </div>
           </div>
 
-          <div class="drop" style="margin-top:16px">
-            <h4>Drop the plate results here</h4>
+          <div class="drop" style="margin-top:var(--sp-md)">
+            <h3>Drop the plate results here</h3>
             <p>CSV with <code>variant, measured_value, assay, date</code>. Variants are checked against this campaign's notation and the campaign's banned positions before anything is written.</p>
             <button class="btn sm primary">Choose file</button>
           </div>
 
-          <div class="card" style="margin-top:16px">
+          <div class="card" style="margin-top:var(--sp-md)">
             <div class="eyebrow">Last import &middot; 24 Oct</div>
-            <div class="kv" style="margin-top:12px">
-              <div class="i"><div class="k">Rows accepted</div><div class="v nums" style="color:var(--emerald)">44</div></div>
-              <div class="i"><div class="k">Rejected</div><div class="v nums" style="color:var(--rose)">4</div></div>
+            <div class="kv" style="margin-top:var(--sp-sm)">
+              <div class="i"><div class="k">Rows accepted</div><div class="v nums fig-good">44</div></div>
+              <div class="i"><div class="k">Rejected</div><div class="v nums fig-bad">4</div></div>
               <div class="i"><div class="k">Rank agreement</div><div class="v nums">&rho; 0.61</div></div>
-              <div class="i"><div class="k">Surrogate</div><div class="v nums" style="font-size:16px">re-fitted</div></div>
+              <div class="i"><div class="k">Surrogate</div><div class="v nums" style="font-size: var(--t-lg)">re-fitted</div></div>
             </div>
-            <div class="table-scroll" style="margin-top:14px"><table>
+            <div class="table-scroll" role="region" aria-label="Last import rows" style="margin-top:var(--sp-md)"><table>
               <thead><tr><th>Row</th><th>Variant</th><th>Measured</th><th>Predicted</th><th>Status</th></tr></thead>
               <tbody>
                 <tr><td class="nums dim">7</td><td><span class="variant">T203F<span class="pos">:</span>E222G</span></td><td class="nums">1.3402</td><td class="nums dim">1.2818</td><td><span class="pill ok">Accepted</span></td></tr>
@@ -929,9 +1520,72 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
                 <tr><td class="nums dim">19</td><td><span class="variant">Y66H<span class="pos">:</span>T203F</span></td><td class="nums">0.4120</td><td class="nums dim">0.8755</td><td><span class="pill warn">Accepted &middot; large miss</span></td></tr>
               </tbody>
             </table></div>
-            <p class="dim" style="font-size:12.5px;margin-top:12px">
+            <p class="dim" style="font-size: var(--t-sm);margin-top:var(--sp-sm)">
               Rejected rows are never partially written. Fix the file and re-upload, or export the
               rejects to correct them in place.
+            </p>
+          </div>
+        </div>
+        <!-- tab: economics -->
+        <div data-tab-body="econ" role="tabpanel" tabindex="0" hidden>
+          <p class="sub muted" style="font-size: var(--t-md)">
+            What the guided search cost against what screening the same library by brute force would
+            have cost. Measured on TrpB, where the global optimum is known to be in the pool.
+          </p>
+
+          <div class="compare" style="margin-top:var(--sp-md)">
+            <div class="c win">
+              <div class="t">Guided</div>
+              <div class="v nums">$0.00175</div>
+              <div class="d">125 variants scored, 36 of them top-1% hits.</div>
+            </div>
+            <div class="c">
+              <div class="t">Brute force</div>
+              <div class="v nums">$0.9852</div>
+              <div class="d">The full 159,999-variant library at the same rate.</div>
+            </div>
+            <div class="c">
+              <div class="t">Random, same spend</div>
+              <div class="v nums">1.17</div>
+              <div class="d">Top-1% hits expected from 125 random draws.</div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:var(--sp-md)">
+            <div class="eyebrow">Hits found per dollar</div>
+            <svg class="chart" viewBox="0 0 340 170" role="img"
+                 aria-label="Guided search found 36 top-1 percent hits for $0.00175; random screening at the same spend found 1.17">
+              <line class="axis" x1="54" y1="140" x2="330" y2="140"/>
+              <g class="grid">
+                <line x1="54" y1="110" x2="330" y2="110"/>
+                <line x1="54" y1="80" x2="330" y2="80"/>
+                <line x1="54" y1="50" x2="330" y2="50"/>
+                <line x1="54" y1="20" x2="330" y2="20"/>
+              </g>
+              <rect x="86" y="20" width="58" height="120" fill="var(--accent)" rx="2"/>
+              <rect x="210" y="136" width="58" height="4" fill="var(--fg-dim)" rx="2"/>
+              <text x="115" y="14" text-anchor="middle" fill="var(--accent)">36</text>
+              <text x="239" y="130" text-anchor="middle">1.17</text>
+              <text x="115" y="156" text-anchor="middle">Guided</text>
+              <text x="239" y="156" text-anchor="middle">Random</text>
+              <text x="44" y="24" text-anchor="end">40</text>
+              <text x="44" y="84" text-anchor="end">20</text>
+              <text x="44" y="144" text-anchor="end">0</text>
+            </svg>
+            <p class="dim" style="font-size: var(--t-sm);margin-top:var(--sp-sm);max-width:70ch">
+              <b style="color:var(--fg-muted);font-weight:600">30.9&times; enrichment</b> over random
+              screening at 0.078% of the screening cost, reaching 0.8005 fitness against a known
+              optimum of 1.00 after 125 measurements.
+            </p>
+          </div>
+
+          <div class="honest" style="margin-top:var(--sp-md)">
+            <h3>What this does not show</h3>
+            <p>
+              Held-out Spearman on TrpB is &minus;0.037. The surrogate&rsquo;s global ranking does not
+              generalise across an epistatic active site from 125 measurements. Expected improvement
+              still concentrates sampling in good regions, which is why the hit rate rises while the
+              correlation does not. The enrichment is load-bearing; the correlation is not.
             </p>
           </div>
         </div>
@@ -941,25 +1595,25 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
       <section data-pane-body="account" hidden>
         <div class="work-head">
           <div>
-            <h2>Quota &amp; keys</h2>
-            <p class="sub">Compute runs on VeritasBio credentials. There is no key for you to hold.</p>
+            <h2>Quota</h2>
+            <p class="sub">Compute runs on PanoptesBio credentials. There is no key for you to hold.</p>
           </div>
         </div>
         <div class="kv card">
           <div class="i"><div class="k">Monthly quota</div><div class="v nums">$25.00</div></div>
           <div class="i"><div class="k">Used</div><div class="v nums">$2.59</div></div>
           <div class="i"><div class="k">Campaigns</div><div class="v nums">4</div></div>
-          <div class="i"><div class="k">Resets</div><div class="v nums" style="font-size:17px">1 Nov</div></div>
+          <div class="i"><div class="k">Resets</div><div class="v nums" style="font-size: var(--t-lg)">1 Nov</div></div>
         </div>
         <div class="card">
           <div class="eyebrow">How spending is capped</div>
-          <p class="muted" style="font-size:13.5px;margin-top:10px;max-width:68ch">
+          <p class="muted" style="font-size: var(--t-md);margin-top:var(--sp-sm);max-width:68ch">
             Every GPU call is priced before it runs and charged against your quota as an integer number
             of micro-dollars. A call that would exceed the quota is refused rather than trimmed, and the
             refusal is written to the ledger. When the quota is gone, campaigns stop; nothing queues up
             and nothing overdraws.
           </p>
-          <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+          <div style="display:flex;gap:10px;margin-top:var(--sp-md);flex-wrap:wrap">
             <button class="btn sm ghost">Request quota increase</button>
             <button class="btn sm ghost">Export all ledger rows</button>
           </div>
@@ -985,6 +1639,7 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
       b.setAttribute('aria-current', String(b.dataset.view === name));
     });
     window.scrollTo(0, 0);
+    makeScrollablesFocusable();
   }
 
   // prototype jump bar
@@ -1005,6 +1660,7 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
       b.setAttribute('aria-current', String(b.dataset.pane === name));
     });
     document.getElementById('work').scrollIntoView({ block: 'start' });
+    makeScrollablesFocusable();
   }
 
   document.addEventListener('click', function (e) {
@@ -1017,16 +1673,18 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
     var paneGo = e.target.closest('[data-pane-go]');
     if (paneGo) { showPane(paneGo.dataset.paneGo); return; }
 
-    var tab = e.target.closest('#runtabs button[data-tab]');
-    if (tab) {
-      Array.prototype.forEach.call(document.querySelectorAll('#runtabs button'), function (b) {
-        b.setAttribute('aria-current', String(b === tab));
-      });
-      Array.prototype.forEach.call(document.querySelectorAll('[data-tab-body]'), function (d) {
-        d.hidden = (d.dataset.tabBody !== tab.dataset.tab);
-      });
+    var step = e.target.closest('#ncsteps .s');
+    if (step) { showStep(step.dataset.step); return; }
+
+    var stepGo = e.target.closest('[data-step-go]');
+    if (stepGo) {
+      showStep(stepGo.dataset.stepGo);
+      document.getElementById('ncsteps').scrollIntoView({ block: 'start' });
       return;
     }
+
+    var tab = e.target.closest('#runtabs button[data-tab]');
+    if (tab) { selectTab(tab); return; }
 
     var excl = e.target.closest('[data-excl]');
     if (excl) {
@@ -1039,6 +1697,156 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
       Array.prototype.forEach.call(cl.querySelectorAll('.res'), function (r) { r.classList.toggle('off', off); });
       return;
     }
+  });
+
+  // ---- residue track: 238 positions, marked by role --------------------
+  (function () {
+    var track = document.getElementById('restrack');
+    if (!track) return;
+    track.textContent = '';
+    var SITE = [65, 66, 67];                       // chromophore triad
+    var POCKET = [64, 68, 145, 203, 205, 206, 221, 223];
+    var BAN = [222];
+    var frag = document.createDocumentFragment();
+    for (var i = 1; i <= 238; i++) {
+      var c = document.createElement('i');
+      if (BAN.indexOf(i) > -1) c.className = 'ban';
+      else if (SITE.indexOf(i) > -1) c.className = 'site';
+      else if (POCKET.indexOf(i) > -1) c.className = 'pocket';
+      c.title = 'Residue ' + i;
+      frag.appendChild(c);
+    }
+    track.appendChild(frag);
+  })();
+
+  // ---- new-campaign steps -------------------------------------------------
+  var STEPS = ['target', 'scope', 'budget'];
+
+  function showStep(name) {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-step-body]'), function (b) {
+      b.hidden = (b.dataset.stepBody !== name);
+    });
+    var at = STEPS.indexOf(name);
+    Array.prototype.forEach.call(document.querySelectorAll('#ncsteps .s'), function (b, i) {
+      b.className = 's' + (i === at ? ' on' : (i < at ? ' done' : ''));
+      b.setAttribute('aria-current', String(i === at));
+    });
+    makeScrollablesFocusable();
+  }
+
+  // Rates are the prototype's own warm-batch figures: round 2 scored 25 variants
+  // for $0.000192, so 650M warm is $0.00000768 a variant. 150M is a third of that.
+  var RATES = { '650': 0.00000768, '150': 0.00000256, '0': 0, '0c': 0,
+                // the cascade screens everything on 150M, then promotes ~20% to 650M
+                'cascade': 0.00000256 + 0.2 * 0.00000768 };
+  var QUOTA_LEFT = 22.41;
+
+  function money(v, dp) {
+    return '$' + v.toFixed(dp === undefined ? 6 : dp);
+  }
+
+  function project() {
+    var model = document.getElementById('nc-model');
+    var batch = document.getElementById('nc-batch');
+    var rounds = document.getElementById('nc-rounds');
+    var budget = document.getElementById('nc-budget');
+    var cap = document.getElementById('nc-cap');
+    if (!model) return;
+
+    var rate = RATES[model.value] || 0;
+    var n = parseInt(batch.value, 10) || 0;
+    var r = parseInt(rounds.value, 10) || 0;
+    var authorised = parseFloat(budget.value) || 0;
+    var ceiling = parseFloat(cap.value) || 0;
+    var perRound = rate * n;
+    var total = perRound * r;
+
+    document.getElementById('pj-rate').textContent = rate ? money(rate, 8) : 'free';
+    document.getElementById('pj-round').textContent = money(perRound);
+    document.getElementById('pj-total').textContent = money(total);
+    document.getElementById('pj-quota').textContent =
+      QUOTA_LEFT > 0 ? (total / QUOTA_LEFT * 100).toFixed(2) + '%' : '—';
+
+    // Say which limit actually bites, because that is the one the user is setting.
+    var msg;
+    if (rate === 0) {
+      msg = 'The mock scorer costs nothing, so no limit binds. Use it to rehearse a ' +
+            'campaign before spending anything.';
+    } else if (perRound > ceiling) {
+      msg = 'A round of ' + n + ' is priced at ' + money(perRound) + ', over the ' +
+            money(ceiling) + ' per-round ceiling. <b>The ledger would refuse the first round</b> ' +
+            'and the planner would re-plan a smaller batch.';
+    } else if (total > authorised) {
+      msg = 'Running all ' + r + ' rounds costs ' + money(total) + ', over the ' +
+            money(authorised, 4) + ' authorisation. <b>The budget binds first</b> — the campaign ' +
+            'stops partway through round ' + (Math.floor(authorised / perRound) + 1) + '.';
+    } else {
+      msg = 'All ' + r + ' rounds cost ' + money(total) + ' against a ' + money(authorised, 4) +
+            ' authorisation. <b>The round cap binds first</b> — the campaign stops at ' + r +
+            ' rounds with budget to spare.';
+    }
+    document.getElementById('pj-binds').innerHTML = msg;
+  }
+
+  var modality = document.getElementById('nc-modality');
+  if (modality) {
+    modality.addEventListener('change', function () {
+      var batch = document.getElementById('nc-batch');
+      if (batch) { batch.value = modality.value; project(); }
+    });
+  }
+
+  ['nc-model', 'nc-batch', 'nc-rounds', 'nc-budget', 'nc-cap'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) { el.addEventListener('input', project); el.addEventListener('change', project); }
+  });
+  project();
+
+  function selectTab(tab) {
+    Array.prototype.forEach.call(document.querySelectorAll('#runtabs button'), function (b) {
+      var on = b === tab;
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tab-body]'), function (d) {
+      d.hidden = (d.dataset.tabBody !== tab.dataset.tab);
+    });
+    makeScrollablesFocusable();
+  }
+
+  // Arrow keys move between tabs; Enter or Space opens a campaign row.
+  document.addEventListener('keydown', function (e) {
+    var tab = e.target.closest && e.target.closest('#runtabs button[data-tab]');
+    if (tab && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+      var all = Array.prototype.slice.call(document.querySelectorAll('#runtabs button'));
+      var next = all[(all.indexOf(tab) + (e.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length];
+      selectTab(next); next.focus(); e.preventDefault();
+      return;
+    }
+    var row = e.target.closest && e.target.closest('.camp-row');
+    if (row && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault(); showPane(row.dataset.paneGo);
+    }
+  });
+
+  // A box that scrolls has to be reachable by keyboard (WCAG 2.1.1), but a tab
+  // stop on a box with nothing to scroll is just a dead stop. Re-check whenever
+  // the layout or the visible pane changes.
+  function makeScrollablesFocusable() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.table-scroll, .logbox'),
+      function (el) {
+        var scrolls = el.scrollWidth > el.clientWidth + 1 ||
+                      el.scrollHeight > el.clientHeight + 1;
+        if (scrolls) { el.tabIndex = 0; } else { el.removeAttribute('tabindex'); }
+      }
+    );
+  }
+
+  var resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(makeScrollablesFocusable, 150);
   });
 
   document.addEventListener('submit', function (e) { e.preventDefault(); });
