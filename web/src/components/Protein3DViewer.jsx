@@ -4,7 +4,7 @@ import { Columns, Square, Orbit, Sparkles, RefreshCw } from 'lucide-react';
 /**
  * Protein3DViewer — Interactive WebGL Molecular Structure Component (3Dmol.js).
  * Renders target proteins, active-site hotspots, de novo dual-chain complexes,
- * and synchronized dual-structure comparison (WT Parent vs Mutated Lead) on a cohesive light canvas.
+ * and synchronized dual-structure comparison (WT Parent vs Mutated Lead) on a cohesive warm alabaster canvas.
  */
 export default function Protein3DViewer({
   pdbContent,
@@ -34,7 +34,7 @@ export default function Protein3DViewer({
 
     try {
       containerRef.current.innerHTML = '';
-      const config = { backgroundColor: '#fdfcfa', antialias: true };
+      const config = { backgroundColor: '#fcfbf8', antialias: true };
       const viewer = window.$3Dmol.createViewer(containerRef.current, config);
       viewerRef.current = viewer;
 
@@ -100,8 +100,8 @@ export default function Protein3DViewer({
       containerWTRef.current.innerHTML = '';
       containerMutRef.current.innerHTML = '';
 
-      const viewerWT = window.$3Dmol.createViewer(containerWTRef.current, { backgroundColor: '#fdfcfa', antialias: true });
-      const viewerMut = window.$3Dmol.createViewer(containerMutRef.current, { backgroundColor: '#fdfcfa', antialias: true });
+      const viewerWT = window.$3Dmol.createViewer(containerWTRef.current, { backgroundColor: '#fcfbf8', antialias: true });
+      const viewerMut = window.$3Dmol.createViewer(containerMutRef.current, { backgroundColor: '#fcfbf8', antialias: true });
 
       viewerWTRef.current = viewerWT;
       viewerMutRef.current = viewerMut;
@@ -193,7 +193,7 @@ export default function Protein3DViewer({
       style={{
         overflow: 'hidden',
         position: 'relative',
-        background: '#ffffff',
+        background: '#fcfbf8',
       }}
     >
       {/* Top Floating Control Bar */}
@@ -241,7 +241,6 @@ export default function Protein3DViewer({
               fontSize: '12px',
               gap: '5px',
               color: showCofactorShell ? '#0284c7' : 'var(--text-dim)',
-              borderColor: showCofactorShell ? '#bae6fd' : 'var(--border-subtle)',
             }}
           >
             <Sparkles size={13} />
@@ -291,9 +290,8 @@ export default function Protein3DViewer({
                 fontSize: '11px',
                 color: '#475569',
                 fontWeight: 600,
-                background: 'rgba(255, 255, 255, 0.92)',
-                border: '1px solid var(--border-subtle)',
-                padding: '3px 9px',
+                background: 'var(--bg-card)',
+                padding: '4px 10px',
                 borderRadius: '6px',
               }}
             >
@@ -313,13 +311,12 @@ export default function Protein3DViewer({
                 fontSize: '11px',
                 color: '#059669',
                 fontWeight: 600,
-                background: 'rgba(255, 255, 255, 0.92)',
-                border: '1px solid var(--border-subtle)',
-                padding: '3px 9px',
+                background: 'var(--bg-card)',
+                padding: '4px 10px',
                 borderRadius: '6px',
               }}
             >
-              ★ Engineered Lead Candidate
+              Engineered Lead Candidate
             </div>
             <div ref={containerMutRef} style={{ width: '100%', height: '100%' }} />
           </div>

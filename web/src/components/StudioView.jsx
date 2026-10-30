@@ -81,10 +81,9 @@ export default function StudioView({
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              padding: '4px 10px',
+              padding: '5px 12px',
               borderRadius: '8px',
               background: 'var(--bg-card)',
-              border: '1px solid var(--border-subtle)',
               fontSize: '12px',
             }}
           >
@@ -118,7 +117,6 @@ export default function StudioView({
               padding: '6px 14px',
               borderRadius: '8px',
               background: 'var(--bg-card)',
-              border: '1px solid var(--border-subtle)',
               fontSize: '12.5px',
             }}
           >
@@ -189,7 +187,7 @@ export default function StudioView({
         <div
           className="glass-panel"
           style={{
-            padding: '14px 20px',
+            padding: '16px 22px',
             background: 'var(--bg-elevated)',
             display: 'flex',
             justifyContent: 'space-between',
@@ -201,22 +199,22 @@ export default function StudioView({
           <div style={{ display: 'flex', alignItems: 'center', gap: '28px', flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Active Target</div>
-              <div className="mono" style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
+              <div className="mono" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>
                 {lastRunSummary?.target || targetAccession}
               </div>
             </div>
 
             <div>
               <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Peak Lead Fitness</div>
-              <div className="tabular mono" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--emerald-primary)' }}>
+              <div className="tabular mono" style={{ fontSize: '15px', fontWeight: 600, color: 'var(--emerald-primary)' }}>
                 +{Number(lastRunSummary?.topScore ?? topFitness).toFixed(4)}
               </div>
             </div>
 
             <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Efficiency vs Brute Force</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>48-Seed Reliability</div>
               <div className="tabular" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>
-                99.5% Saved <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>(184x)</span>
+                98% Hit Rate <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>(2x Faster)</span>
               </div>
             </div>
           </div>

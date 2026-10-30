@@ -114,11 +114,11 @@ export default function ParetoFrontierStudio({
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '20px', alignItems: 'start' }}>
       {/* Left Column: Multi-Objective Weights + Compact Summary */}
-      <div className="glass-panel" style={{ padding: '22px' }}>
+      <div className="glass-panel" style={{ padding: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Sliders size={16} color="var(--text-main)" />
-            <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: 600, margin: 0, color: 'var(--text-main)' }}>
               Objective Weights
             </h2>
           </div>
@@ -227,15 +227,15 @@ export default function ParetoFrontierStudio({
             gap: '10px',
           }}
         >
-          <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+          <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-card)' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Rank 0 Leads</div>
-            <div className="mono tabular" style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-main)' }}>
+            <div className="mono tabular" style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-main)' }}>
               {data?.rank_0_count ?? 0} <span style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 400 }}>/ {data?.points?.length ?? 0}</span>
             </div>
           </div>
-          <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+          <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--bg-card)' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Hypervolume</div>
-            <div className="mono tabular" style={{ fontSize: '17px', fontWeight: 700, color: '#0d9488' }}>
+            <div className="mono tabular" style={{ fontSize: '17px', fontWeight: 600, color: '#0d9488' }}>
               {data?.hypervolume ? data.hypervolume.toFixed(3) : '0.000'}
             </div>
           </div>
@@ -244,9 +244,9 @@ export default function ParetoFrontierStudio({
 
       {/* Right Column: Interactive Trade-off Plot + Rank 0 Table */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div className="glass-panel" style={{ padding: '20px' }}>
+        <div className="glass-panel" style={{ padding: '22px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-            <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0, color: 'var(--text-main)' }}>
               Fitness vs. Biologics Developability Frontier
             </h3>
             <div style={{ display: 'flex', gap: '14px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
@@ -267,22 +267,21 @@ export default function ParetoFrontierStudio({
               position: 'relative',
               width: '100%',
               height: '285px',
-              background: 'var(--bg-elevated)',
-              borderRadius: '8px',
-              border: '1px solid var(--border-subtle)',
+              background: 'var(--bg-dark)',
+              borderRadius: '10px',
               overflow: 'hidden',
             }}
           >
             <svg viewBox="0 0 500 280" style={{ width: '100%', height: '100%' }}>
-              <line x1="55" y1="45" x2="465" y2="45" stroke="#e4e0d7" strokeDasharray="4 4" />
-              <line x1="55" y1="142" x2="465" y2="142" stroke="#e4e0d7" strokeDasharray="4 4" />
+              <line x1="55" y1="45" x2="465" y2="45" stroke="#e2dcd0" strokeDasharray="4 4" />
+              <line x1="55" y1="142" x2="465" y2="142" stroke="#e2dcd0" strokeDasharray="4 4" />
               <line x1="55" y1="240" x2="465" y2="240" stroke="#c8c3b8" />
               <line x1="55" y1="45" x2="55" y2="240" stroke="#c8c3b8" />
 
-              <text x="260" y="268" fill="#575653" fontSize="10.5" textAnchor="middle">
+              <text x="260" y="268" fill="#52504a" fontSize="10.5" textAnchor="middle">
                 Predicted Fitness / Binding Affinity →
               </text>
-              <text x="20" y="142" fill="#575653" fontSize="10.5" textAnchor="middle" transform="rotate(-90 20 142)">
+              <text x="20" y="142" fill="#52504a" fontSize="10.5" textAnchor="middle" transform="rotate(-90 20 142)">
                 Developability Score →
               </text>
 
@@ -316,7 +315,7 @@ export default function ParetoFrontierStudio({
                       cy={pt.svgY}
                       r={r}
                       fill={fillColor}
-                      stroke={isSelected ? '#141413' : '#fdfcfa'}
+                      stroke={isSelected ? '#141413' : '#fcfbf8'}
                       strokeWidth={isSelected ? 2 : 1.2}
                     />
                     {isFrontier && (
@@ -344,9 +343,8 @@ export default function ParetoFrontierStudio({
               style={{
                 marginTop: '12px',
                 padding: '12px 16px',
-                background: 'var(--bg-elevated)',
+                background: 'var(--bg-card)',
                 borderRadius: '8px',
-                border: '1px solid var(--border-subtle)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -355,7 +353,7 @@ export default function ParetoFrontierStudio({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                <span className="mono" style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>
+                <span className="mono" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>
                   {selectedPoint.notation}
                 </span>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -389,7 +387,7 @@ export default function ParetoFrontierStudio({
         {/* Compact Rank 0 Table */}
         <div className="glass-panel" style={{ padding: '18px 20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0, color: 'var(--text-main)' }}>
               Rank 0 Pareto-Optimal Candidates
             </h3>
             {onNavigateTab && (
@@ -423,7 +421,7 @@ export default function ParetoFrontierStudio({
                     style={{
                       borderBottom: '1px solid var(--border-subtle)',
                       background:
-                        selectedPoint?.notation === p.notation ? 'var(--bg-elevated)' : 'transparent',
+                        selectedPoint?.notation === p.notation ? 'var(--bg-card)' : 'transparent',
                       cursor: 'pointer',
                     }}
                     onClick={() => setSelectedPoint(p)}
@@ -440,7 +438,7 @@ export default function ParetoFrontierStudio({
                     <td className="mono tabular" style={{ padding: '8px' }}>
                       {(p.synthesizability_score * 100).toFixed(0)}%
                     </td>
-                    <td className="mono tabular" style={{ padding: '8px', fontWeight: 700, color: 'var(--text-main)' }}>
+                    <td className="mono tabular" style={{ padding: '8px', fontWeight: 600, color: 'var(--text-main)' }}>
                       {p.weighted_utility.toFixed(3)}
                     </td>
                     <td style={{ padding: '8px' }}>
