@@ -1442,6 +1442,47 @@ def sample_policy_gradient_candidates(
     return candidates
 
 
+# The prior below is consumed as a GP prior MEAN over measured fitness, so it has
+# to live on the fitness scale. Raw heuristic penalties sum to roughly -15 while
+# measured fitness spans about -0.16 to 1.00; left unscaled, a single buried-charge
+# substitution asserts a mean an order of magnitude outside anything the assay can
+# report, and no amount of evidence shifts the posterior back in a few rounds.
+#
+# PRIOR_FITNESS_SPREAD is the largest magnitude, in fitness units, the prior may
+# contribute. PRIOR_SOFTENING sets how quickly it saturates: raw scores well inside
+# +/- PRIOR_SOFTENING stay close to linear, so ranking within a depth class is
+# preserved, while the long negative tail compresses instead of dominating.
+#
+# Set PRIOR_FITNESS_SPREAD = 0.0 to ablate the hand-built prior entirely; it is
+# fitted to nothing and that ablation is a live question.
+#
+# Hard exclusions are NOT expressed here. A residue that must not change is removed
+# by generate_candidate_variants, not by an out-of-range prior mean.
+PRIOR_FITNESS_SPREAD: float = 0.25
+PRIOR_SOFTENING: float = 6.0
+
+
+def calibrate_prior_to_fitness_scale(
+    raw_score: float,
+    spread: Optional[float] = None,
+    softening: Optional[float] = None,
+) -> float:
+    """
+    Map a raw heuristic prior onto the observable fitness scale.
+
+    Monotone, so every ranking the heuristic expresses is preserved, and bounded by
+    +/- spread, so the prior can tilt a posterior without asserting a fitness the
+    assay could never produce.
+    """
+    s = PRIOR_FITNESS_SPREAD if spread is None else spread
+    t = PRIOR_SOFTENING if softening is None else softening
+    if s <= 0.0:
+        return 0.0
+    if t <= 0.0:
+        raise ValueError(f"softening must be positive, got {t}")
+    return float(s * math.tanh(raw_score / t))
+
+
 def compute_biological_prior(
     variant: Variant,
     catalytic_invariants: Optional[Set[int]] = None,
@@ -1527,7 +1568,9 @@ def compute_biological_prior(
                 type(exc).__name__, exc,
             )
 
-    return score
+    # Bounded to the observable fitness range before it becomes a GP prior mean.
+    # `score` above remains the raw heuristic, which stays useful as a diagnostic.
+    return calibrate_prior_to_fitness_scale(score)
 
 
 # -----------------------------------------------------------------------------
@@ -1548,6 +1591,7 @@ def select_next_micro_batch(
     speculative_evidence: Optional[Sequence[Dict[str, Any]]] = None,
     fantasy_variance: float = 0.25,
     aromatic_tolerant_positions: Optional[Set[int]] = None,
+    apply_auxiliary_objective_weights: bool = False,
 ) -> SelectedBatch:
     """
     Executes the Gaussian Process active learning selection (Phases 1-4):
@@ -1884,8 +1928,25 @@ def select_next_micro_batch(
     w_dev = pw.get("developability", 0.30)
     w_synth = pw.get("synthesizability", 0.15)
     pareto_weights = 1.0 / (1.0 + 0.3 * candidate_pareto_ranks)
-    synth_weights = 0.6 + 0.4 * (synth_scores ** max(0.2, (w_synth / 0.15)))
-    dev_weights = 0.4 + 0.6 * (dev_scores ** max(0.2, (w_dev / 0.30) * 0.5))
+
+    # The synthesizability and developability proxies are hand-built and fitted to
+    # nothing. Measured against TrpB fitness over 1,500 variants they are
+    # ANTI-correlated - synthesizability rho = -0.104 (p = 5.7e-05), developability
+    # rho = -0.029 (not significant) - and on the five highest-fitness variants the
+    # combined multiplier averages 0.722 against 0.782 for random variants, so they
+    # removed acquisition value from precisely the candidates worth measuring.
+    #
+    # They describe manufacturability, a genuine concern for a therapeutic but a
+    # different objective from catalytic fitness; multiplying acquisition by them
+    # conflates the two. Both are still computed and returned for reporting, and a
+    # caller optimising for manufacturability can opt the weighting back in.
+    if apply_auxiliary_objective_weights:
+        synth_weights = 0.6 + 0.4 * (synth_scores ** max(0.2, (w_synth / 0.15)))
+        dev_weights = 0.4 + 0.6 * (dev_scores ** max(0.2, (w_dev / 0.30) * 0.5))
+    else:
+        synth_weights = np.ones_like(synth_scores)
+        dev_weights = np.ones_like(dev_scores)
+
     quality_scores = acquisition_scores * pareto_weights * synth_weights * dev_weights
 
     # Phase 1 / Pillar 1: Determinantal Point Process (k-DPP) Orthogonal Batch Diversity
