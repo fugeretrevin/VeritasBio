@@ -120,7 +120,10 @@ class TestSlice4AsyncKrigingLedger(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test_async_ledger.db"
             ledger_db.init_db(db_path)
-            ledger_db.create_budget(total_allocation=5.00, db_path=db_path)
+            # Physically measured rounds are priced from construct length: two
+            # variants of a 238-residue protein cost about $198, so a $5 budget
+            # refuses - correctly. Allocate a realistic wet-lab budget.
+            ledger_db.create_budget(total_allocation=5000.00, db_path=db_path)
 
             # Fail-closed spend authorization required first
             job_id = "job-async-kriging-001"
@@ -209,7 +212,10 @@ class TestSlice5CloudLabWebhook(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test_cloudlab.db"
             ledger_db.init_db(db_path)
-            ledger_db.create_budget(total_allocation=5.00, db_path=db_path)
+            # Physically measured rounds are priced from construct length: two
+            # variants of a 238-residue protein cost about $198, so a $5 budget
+            # refuses - correctly. Allocate a realistic wet-lab budget.
+            ledger_db.create_budget(total_allocation=5000.00, db_path=db_path)
 
             # The ledger path is server-side state: routes no longer accept a
             # db_path from the client, so point the server at this temp ledger.

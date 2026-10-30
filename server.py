@@ -86,6 +86,26 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+def _price_wetlab_round(variant_count: int, sequence_length_aa: int) -> float:
+    """
+    Server-side cost for a physically measured round, in USD.
+
+    Routed through the Gatekeeper so there is one pricing definition rather than a
+    per-route constant, and so the figure sealed into the ledger is the real one:
+    DNA synthesis plus robotic assay scales with construct length, which puts a
+    25-variant round of a 397-aa protein in the thousands of dollars. Pricing it as
+    GPU seconds understated an audited round by about five orders of magnitude.
+    """
+    from controller.gatekeeper import Gatekeeper
+
+    cost, _warm = Gatekeeper(db_path=DEFAULT_DB_PATH).calculate_cost(
+        variant_count=max(1, int(variant_count)),
+        target_model="wetlab_assay",
+        sequence_length_aa=int(sequence_length_aa),
+    )
+    return float(cost)
+
+
 DATA_DIR = Path(__file__).resolve().parent / "workers" / "data"
 DEFAULT_DB_PATH = Path(__file__).resolve().parent / "ledger" / "ledger.db"
 
@@ -766,7 +786,7 @@ class RelaxStructureRequest(BaseModel):
 
 
 @app.post("/api/campaign/relax-structure")
-async def relax_structure_endpoint(request: RelaxStructureRequest):
+def relax_structure_endpoint(request: RelaxStructureRequest):
     """
     Track C: Fast CPU L-BFGS sidechain rotamer & local energy relaxation.
     Resolves false-negative steric clashes in candidate mutant protein structures.
@@ -812,7 +832,9 @@ class CloudLabDispatchRequest(BaseModel):
     fantasy_scores: Optional[List[float]] = Field(default=None)
     assay_type: str = Field(default="fluorescence")
     job_id: Optional[str] = Field(default=None)
-    nominal_cost_usd: float = Field(default=0.000500)
+    # nominal_cost_usd removed: the caller does not get to price its own spend.
+    # Cost is computed server-side by the Gatekeeper from the variant count and the
+    # construct length - see _price_wetlab_round below.
     # db_path deliberately removed: the ledger location is server-side state.
     # A client-supplied path let a caller point the audit chain and budget at a
     # fresh database, which combined with on-demand budget creation made the
@@ -820,7 +842,7 @@ class CloudLabDispatchRequest(BaseModel):
 
 
 @app.post("/api/cloudlab/dispatch")
-async def cloudlab_dispatch_endpoint(request: CloudLabDispatchRequest):
+def cloudlab_dispatch_endpoint(request: CloudLabDispatchRequest):
     """
     SPEC-001 Seam 5: Dispatches robotic synthesis & assay protocol to Emerald Cloud Lab (SLL)
     or Strateos (Autoprotocol), stages Kriging-believer fantasy observations, and transitions
@@ -845,20 +867,31 @@ async def cloudlab_dispatch_endpoint(request: CloudLabDispatchRequest):
         )
 
     job_id = request.job_id or f"job-cloudlab-{int(time.time())}-{uuid.uuid4().hex[:6]}"
+
+    # Resolve the target BEFORE authorising: the price depends on the construct
+    # length, so the sequence has to be in hand to compute what this round costs.
+    meta = fetch_protein_metadata(request.target_accession)
+    wt_seq = meta.sequence
+
     existing_job = ledger_db.get_job(job_id, db_path=target_db)
     if existing_job is None:
+        estimated_cost = _price_wetlab_round(len(request.variants), len(wt_seq))
         authorized = ledger_db.authorize_spend(
             job_id=job_id,
             target_model=f"cloudlab_{request.provider.lower()}",
             variant_count=len(request.variants),
-            estimated_cost=request.nominal_cost_usd,
+            estimated_cost=estimated_cost,
             db_path=target_db,
         )
         if not authorized:
-            raise HTTPException(status_code=402, detail="Ledger rejected cloud-lab spend authorization")
-
-    meta = fetch_protein_metadata(request.target_accession)
-    wt_seq = meta.sequence
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    f"Ledger rejected cloud-lab spend authorization: this round prices "
+                    f"at ${estimated_cost:,.2f} for {len(request.variants)} variants of a "
+                    f"{len(wt_seq)}-residue construct."
+                ),
+            )
 
     fantasy_list: List[Tuple[str, float]] = []
     for idx, var_str in enumerate(request.variants):
@@ -985,7 +1018,7 @@ class CurveIngestionRequest(BaseModel):
     curve_type: str = Field(default="dose_response_4pl", description="dose_response_4pl or michaelis_menten")
     target_accession: str = Field(default="P42212")
     series: List[CurveSeriesItem] = Field(..., min_length=1)
-    nominal_cost_usd: float = Field(default=0.000200)
+    # nominal_cost_usd removed: priced server-side, as above.
     # db_path deliberately removed: the ledger location is server-side state.
     # A client-supplied path let a caller point the audit chain and budget at a
     # fresh database, which combined with on-demand budget creation made the
@@ -993,7 +1026,7 @@ class CurveIngestionRequest(BaseModel):
 
 
 @app.post("/api/campaign/ingest-curves")
-async def ingest_curves_endpoint(request: CurveIngestionRequest):
+def ingest_curves_endpoint(request: CurveIngestionRequest):
     """
     SPEC-002 Seam 4: Fits 4PL dose-response (IC50/EC50/Kd) or Michaelis-Menten initial velocity (v0)
     curves across candidate dilution/time series, normalizes potency against WT, and records
@@ -1060,14 +1093,21 @@ async def ingest_curves_endpoint(request: CurveIngestionRequest):
         evidence_tuples.append((seq, float(norm_score)))
 
     job_id = f"job-curves-{int(time.time())}-{uuid.uuid4().hex[:6]}"
+    estimated_cost = _price_wetlab_round(len(evidence_tuples), len(wt_seq))
     if not ledger_db.authorize_spend(
         job_id=job_id,
         target_model=f"wetlab_{request.curve_type.lower()}",
         variant_count=len(evidence_tuples),
-        estimated_cost=request.nominal_cost_usd,
+        estimated_cost=estimated_cost,
         db_path=target_db,
     ):
-        raise HTTPException(status_code=402, detail="Ledger rejected curve ingestion spend")
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                f"Ledger rejected curve ingestion spend: this round prices at "
+                f"${estimated_cost:,.2f} for {len(evidence_tuples)} measured variants."
+            ),
+        )
 
     ledger_db.record_evidence(job_id=job_id, results=evidence_tuples, db_path=target_db)
     ledger_db.mark_job_completed(job_id=job_id, db_path=target_db)

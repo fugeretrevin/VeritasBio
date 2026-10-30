@@ -27,63 +27,91 @@ VeritasBio replaces unpredictable open-ended agents with a **deterministic, fail
 
 ---
 
-## 2. Benchmark Results (Sarkisyan 2016 Nature avGFP DMS)
+## 2. Benchmark Results
 
-Validated against the gold-standard **ProteinGym / Sarkisyan et al. GFP Deep Mutational Scanning (DMS)** benchmark:
+All figures below come from the controlled protocol in `benchmark_panoptes_isolated.py`:
+**48 paired random seeds**, an identical 25-variant random starting sample given to every
+method, then 4 rounds x 25 newly chosen variants - 125 unique measurements including the
+start. Outcomes are revealed to a method only after it commits a batch.
 
-| Metric | VeritasBio Guided Search | Brute-Force Random Screening | Improvement / Value |
-|---|---|---|---|
-| **Spearman Rank Correlation ($\rho$)** | **+0.9718** ($p = 9.72 \times 10^{-13}$) | +0.1200 | **High ranking fidelity** |
-| **Pearson Correlation ($r$)** | **+1.0000** ($p = 2.13 \times 10^{-38}$) | +0.0900 | **Exact calibration** |
-| **Cloud Cost for Discovery** | **$0.0002** | **$0.0184** | **98.9% Cloud Savings** |
-| **Cloud Efficiency Multiple** | **91.8x cheaper** | 1.0x baseline | **Near 2 orders of magnitude** |
-| **Top Discovered Variant** | `T203F:E222G` (+1.2818) | Random variants | **Discovers synergistic double mutants** |
+The authoritative write-up, including the protocol, the limitations and the open questions,
+is [`docs/PIPELINE_FOR_BIO_REVIEW.md`](docs/PIPELINE_FOR_BIO_REVIEW.md). Regenerate these
+numbers rather than trusting this table:
 
-> **Reading the correlations above.** These are measured on the points the Gaussian Process was
-> trained on, so they describe *fit*, not predictive skill, and will sit near 1.0 for almost any
-> model. The TrpB benchmark below reports a held-out figure alongside the in-sample one.
+```bash
+python benchmark_panoptes_isolated.py --seeds 48 --rounds 4 --batch-size 25
+```
 
-### 2b. Second Benchmark: TrpB Active-Site Landscape (Johnston et al. 2024)
+### 2a. TrpB active-site landscape (Johnston et al. 2024)
 
-A harder and stricter test. The avGFP assay is sparse and survivorship-biased; the TrpB library is
-**combinatorially complete** — all 20⁴ = 160,000 combinations at active-site residues 183/184/227/228
-of the engineered parent Tm9D8\* were measured, so the global optimum is *known* to be in the pool
-and nothing is missing.
+The primary benchmark. The library is **combinatorially complete** - all 20^4 = 160,000
+combinations at active-site residues 183/184/227/228 of the engineered parent Tm9D8\* were
+measured - so the global optimum is known to be in the pool and nothing is missing.
 
-| Metric | VeritasBio Guided Search | Random Screening (n=200 draws) | Competitive Industry Baseline (Greedy BO) |
-|---|---|---|---|
-| **Variants screened** | 125 of 159,999 (0.078%) | 125 | 125 |
-| **Top-1% hits found** | **36** (up to 44.96x hit rate) | 1.17 | 15 (mode collapse) |
-| **Enrichment over random** | **30.9x – 44.96x** | 1.0x baseline | 12.7x |
-| **Best fitness found** | **0.8005** (`F184I:V227M:S228G`) | 0.4453 | 0.7143 |
-| **% of Global Optimum Attained** | **80.1% of Peak** (1.0000 ceiling, parent = 0.4081) | 44.5% | 71.4% |
-| **Held-out Spearman ($\rho$)** | **+0.1419** (fast loop) / **+0.6402** (3D pocket hop) | 0.0000 | +0.0178 (stalls on epistasis) |
-| **Held-out Pearson ($r$)** | **+0.2130** (fast loop) / **+0.4702** (3D pocket hop) | 0.0000 | +0.0812 |
-| **In-sample Spearman ($\rho$)** | +0.9292 – +0.9944 | — | +0.8921 |
-| **Cloud cost for discovery** | **$0.00175** | $0.9852 brute force | $0.00175 |
-| **Cloud Capital Preserved** | **99.8% saved (184x – 563x cheaper)** | 0% | 99.8% |
+Mean +/- SD across 48 seeds. "top-1%" counts variants found at or above the 99th percentile
+of the eligible set, including those present in the shared starting sample.
 
-#### Competitive Industry Leaderboard (TrpB Active-Site Landscape)
-Evaluating against standard industry methodologies across 159,999 empirical measurements (`scripts/run_trpb_benchmark.py --compare`):
+| method | best fitness | SD | top-1% found | SD |
+|---|---|---|---|---|
+| random | 0.4443 | 0.146 | 1.1 | 0.9 |
+| one-hot ridge | 0.6959 | 0.232 | 31.3 | 15.7 |
+| random forest | 0.6989 | 0.236 | 31.6 | 19.0 |
+| ALDE (Nat Commun 2025, authors' implementation) | 0.7134 | 0.182 | 32.8 | 15.3 |
+| **VeritasBio** | **0.7457** | **0.035** | **45.2** | **4.8** |
 
-| Method | Screened | Top-1% Hits | Fold-Enrichment | Best Fitness | Held-Out $\rho$ | Spend ($) | Mechanism |
-|---|---|---|---|---|---|---|---|
-| **VeritasBio (3D DKL + k-DPP)** | **125** | **36** | **30.9x – 44.96x** | **0.8005** | **+0.1419 / +0.6402** | **$0.00175** | **3D $C_\alpha$ Contact DKL + k-DPP Diversity + Regret Stopping** |
-| Greedy BO (BoTorch-style) | 125 | 15 | 12.66x | 0.7143 | +0.0178 | $0.00175$ | Sequence GP + Greedy Argmax EI (Suffers Mode Collapse) |
-| One-Hot Ridge (Standard ML) | 125 | 10 | 8.44x | 0.5665 | +0.1541 | $0.00175$ | Standard 80D Sequence Binary Linear Ridge ($\alpha=1.0$) |
-| Zero-Shot Prior (ESM-2 / FoldX) | 125 | 12 | 10.13x | 0.7143 | +0.1268 | $0.00175$ | Static Foundation Prior (No Closed-Loop Learning) |
-| Random Wet-Lab Screening (epPCR) | 125 | 1.17 | 1.00x | 0.4453 | 0.0000 | $0.00175$ | Uniform Random Sampling (200 bootstrap draws) |
+Paired t-tests, n=48, critical |t| = 2.01:
 
-**Understanding the catalytic benchmark.** The TrpB active site is notoriously epistatic and measures catalytic turnover ($k_{\text{cat}}/K_M$) on an **unnatural synthetic substrate** (indole + non-cognate electrophiles). Static foundation protein language models (PLMs) score zero-shot based on evolutionary conservation, missing unnatural transition-state stabilization. 
+| comparison | metric | mean diff | t | verdict |
+|---|---|---|---|---|
+| vs ALDE | top-1% | +12.4 | 5.07 | **significant** |
+| vs ridge | top-1% | +13.9 | 5.93 | **significant** |
+| vs ALDE | best fitness | +0.032 | 1.22 | not separable |
+| vs ridge | best fitness | +0.050 | 1.48 | not separable |
 
-By integrating **3D $C_\alpha$ contact coupling**, **calibrated biological priors**, and **hierarchical pocket-hopping** (optimizing entrance loop residues 183/184, locking the anchor, and hopping across the catalytic channel to residues 227/228), VeritasBio's active-learning loop achieves **+0.6402 held-out Spearman correlation** across the landscape, finding **0.8005 fitness** (80.1% of the theoretical global optimum) while slashing cloud compute spend by **184x (99.8% capital saved)**.
+**What this does and does not support.** The engine finds about 40% more top-1% variants
+than any comparator, with 5-7x lower variance, and reaches a fitness of 0.70 in 88% of
+campaigns by measurement 50 against 4-6% for every competitor. It does **not** find better
+single variants than the comparators - that difference is not statistically separable - and
+it reaches 0.90 in **0 of 48** campaigns where ridge, random forest and ALDE each reach it in
+15-19%. The cause is a candidate-generation limit documented in
+[`docs/PIPELINE_FOR_BIO_REVIEW.md`](docs/PIPELINE_FOR_BIO_REVIEW.md) section 7A.
+
+### 2b. avGFP (Sarkisyan et al. 2016) - not a predictive-skill measurement
+
+This repository also carries the avGFP DMS landscape, but the avGFP harness
+(`scripts/run_real_data_benchmark.py`) evaluates the Gaussian Process on its **own training
+inputs** - it sets `all_eval_feats = np.array(train_x)` and correlates the result against
+the training targets. The resulting rho of +0.9996 and r of +1.0000 therefore describe fit,
+not predictive skill, and will sit near 1.0 for almost any model. The same run discovers
+**0 top-1% variants**.
+
+Earlier revisions of this README reported those correlations as "high ranking fidelity" and
+"exact calibration". They support neither claim and are retained here only to document the
+correction. Treat the TrpB protocol above as the benchmark.
+
+### 2c. Scope
+
+One target and one four-site library. Nothing here is claimed to generalise beyond it. The
+repository also holds avGFP, GB1 and trastuzumab datasets, but the controlled protocol has
+not been run on them. Up to 871 of the 159,999 TrpB values (0.54%) may be KNN-imputed rather
+than measured; `scripts/check_trpb_imputation.py` establishes that the five highest-fitness
+variants are not among them.
 
 ```bash
 # Fast active learning simulation on 160k TrpB library
 python scripts/run_trpb_benchmark.py --rounds 5 --pool-size 3000
 
-# Run 5-way competitive industry benchmark
-python scripts/run_trpb_benchmark.py --compare
+# Controlled comparison against random, ridge, random forest and the published ALDE
+# implementation, under one shared hidden-results protocol. This is the benchmark the
+# figures in section 2 come from; run_trpb_benchmark.py --compare scores simulated
+# baselines instead and is kept only for the single-method active-learning loop.
+python benchmark_panoptes_isolated.py --seeds 48 --rounds 4 --batch-size 25
+
+# Attribute the advantage: disable one selector component at a time
+python benchmark_panoptes_isolated.py --seeds 48 --ablate-components dpp
+
+# Compare two runs with paired t-tests on identical seeds
+python scripts/compare_ablation_runs.py --list
 ```
 
 The full 159,999-variant run takes ~10s. `--pool-size N` subsamples the candidate pool for a faster

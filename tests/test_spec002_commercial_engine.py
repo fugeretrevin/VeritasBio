@@ -228,6 +228,19 @@ class TestSlice4DoseResponseKineticsAndSynthesisCost(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test_curves.db"
+
+            # The ledger location is server-side state - routes no longer accept a
+            # db_path from the client - so point the server at this temp ledger and
+            # fund it at wet-lab prices (two measured variants of a 238-residue
+            # construct cost about $198, not GPU cents).
+            import ledger.database as ledger_db
+            import server as server_mod
+            ledger_db.init_db(db_path)
+            ledger_db.create_budget(total_allocation=5000.00, db_path=db_path)
+            saved_db = server_mod.DEFAULT_DB_PATH
+            server_mod.DEFAULT_DB_PATH = db_path
+            self.addCleanup(setattr, server_mod, "DEFAULT_DB_PATH", saved_db)
+
             client = TestClient(app)
             wt_responses = [5.0 + (95.0 - 5.0) / (1.0 + (c / 50.0) ** 1.1) for c in concs]
             lead_responses = [5.0 + (95.0 - 5.0) / (1.0 + (c / 10.0) ** 1.2) for c in concs]
@@ -236,7 +249,6 @@ class TestSlice4DoseResponseKineticsAndSynthesisCost(unittest.TestCase):
                 json={
                     "curve_type": "dose_response_4pl",
                     "target_accession": "P42212",
-                    "db_path": str(db_path),
                     "series": [
                         {"mutations": "WT", "x_values": concs, "y_values": wt_responses},
                         {"mutations": "S65T:T203Y", "x_values": concs, "y_values": lead_responses},
