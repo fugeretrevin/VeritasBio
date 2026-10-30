@@ -1,4 +1,4 @@
-"""
+﻿"""
 benchmark_panoptes_isolated.py - Standalone comparison benchmark on the TrpB landscape.
 
 Purpose:
@@ -1232,9 +1232,17 @@ class PanoptesSelector(Selector):
         use_live_muse: bool,
         pdb_path: Optional[Path],
         call_budget: Optional[int] = None,
+        qualify_threshold: Optional[float] = None,
     ) -> None:
         super().__init__(seed)
-        self.name = "panoptes_muse" if use_live_muse else "panoptes_default"
+        if qualify_threshold is not None:
+            self.name = "panoptes_qualify_then_optimize"
+        else:
+            self.name = "panoptes_muse" if use_live_muse else "panoptes_default"
+        # When set, the selector switches to frontier search once a measured variant
+        # reaches this fitness. None keeps the single-policy baseline.
+        self.qualify_threshold = qualify_threshold
+        self.qualified_at_round: Optional[int] = None
         self.wt_sequence = wt_sequence
         self.metadata = metadata
         self.use_live_muse = use_live_muse
@@ -1360,8 +1368,76 @@ class PanoptesSelector(Selector):
             self.model_calls += 1
 
     # -- selection ----------------------------------------------------------------------------
+    def _frontier_batch(self, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
+        """
+        Greedy local search around the best measured variant, for use AFTER the
+        campaign has already secured a qualifying lead.
+
+        Enumerates untested Hamming-1 neighbours of the current best and ranks them
+        with a ridge surrogate fitted on the revealed data. No diversity term, no
+        Pareto weighting, no prior: deliberately the opposite of the baseline policy.
+
+        The point is not that greedy search is better. It is that the two objectives -
+        secure an acceptable lead, then improve it - are lexicographic, and a single
+        acquisition function tuned for the first cannot serve the second. Our measured
+        failure is specifically at the frontier: the baseline reaches >=0.70 in 47 of 48
+        campaigns and >=0.90 in none, while a plain ridge regression reaches >=0.90 in
+        about 17% by concentrating its sampling.
+        """
+        from sklearn.linear_model import Ridge
+
+        best_id = max(revealed.measured, key=lambda v: revealed.measured[v])
+        best_combo = view.combos.get(best_id)
+        if not best_combo:
+            return []
+
+        # Untested Hamming-1 neighbours of the incumbent: 4 positions x 19 residues.
+        neighbours = []
+        for slot in range(len(ACTIVE_SITE_POSITIONS)):
+            for aa in AA_ALPHABET:
+                if aa == best_combo[slot]:
+                    continue
+                combo = best_combo[:slot] + aa + best_combo[slot + 1:]
+                vid = _canonical_variant_id(combo)
+                if vid in view.index_of and vid not in revealed.measured:
+                    neighbours.append((vid, combo))
+        if not neighbours:
+            return []
+
+        # Rank them by a ridge surrogate fitted on everything measured so far.
+        rows, ys = [], []
+        for vid, score in revealed.measured.items():
+            combo = view.combos.get(vid)
+            if combo:
+                rows.append(_one_hot_matrix([combo])[0])
+                ys.append(score)
+        if len(rows) >= 10:
+            model = Ridge(alpha=1.0).fit(np.asarray(rows), np.asarray(ys))
+            X = _one_hot_matrix([c for _, c in neighbours])
+            order = np.argsort(-model.predict(X))
+        else:
+            order = np.arange(len(neighbours))
+        return [neighbours[int(i)][0] for i in order[:n]]
+
     def propose(self, round_index: int, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
         from workers.math_worker import select_next_micro_batch
+
+        # Qualify-then-optimise: run the baseline policy unchanged until a measured
+        # variant clears the qualifying threshold, then spend the remaining budget on
+        # frontier search. Under this benchmark's deterministic reveal, every trajectory
+        # is identical to the baseline up to and including the round that qualifies, so
+        # P(reach threshold) and time-to-threshold are preserved pathwise - the switch
+        # can only affect what happens after the protected event. It does NOT preserve
+        # top-1% yield or final best fitness, which is exactly what is being tested.
+        if self.qualify_threshold is not None and revealed.measured:
+            if max(revealed.measured.values()) >= self.qualify_threshold:
+                frontier = self._frontier_batch(n, view, revealed)
+                if frontier:
+                    if not self.qualified_at_round:
+                        self.qualified_at_round = round_index
+                        self.notes.append(f"qualified before round {round_index}; frontier mode")
+                    self.last_batch_predictions = {}
+                    return frontier
 
         strategy = self._strategy(round_index, revealed)
         evidence = [
@@ -1959,7 +2035,8 @@ def repository_state(ignore_prefixes: Sequence[str] = ()) -> Dict[str, Any]:
 # ==============================================================================================
 # Orchestration
 # ==============================================================================================
-ALL_METHODS = ("random", "ridge", "random_forest", "alde", "panoptes_default", "panoptes_muse")
+ALL_METHODS = ("random", "ridge", "random_forest", "alde", "panoptes_default", "panoptes_muse",
+               "panoptes_qualify_then_optimize")
 DEFAULT_METHODS = ("random", "ridge", "random_forest", "panoptes_default")
 
 
@@ -2042,8 +2119,9 @@ def build_selector_factories(
             else:
                 status[method] = {"status": "UNAVAILABLE", "detail": probe["reason"]}
             status[method]["probe"] = json.dumps(probe)
-        elif method in ("panoptes_default", "panoptes_muse"):
+        elif method in ("panoptes_default", "panoptes_muse", "panoptes_qualify_then_optimize"):
             live = method == "panoptes_muse"
+            qualify = args.qualify_threshold if method == "panoptes_qualify_then_optimize" else None
             if live and not args.enable_live_muse:
                 status[method] = {
                     "status": "SKIPPED",
@@ -2065,8 +2143,9 @@ def build_selector_factories(
                 status[method] = {"status": "UNSUPPORTED", "detail": f"{type(exc).__name__}: {exc}"}
                 continue
             factories[method] = (
-                lambda seed, m=metadata, s=sequence, p=pdb_path, l=live:
-                PanoptesSelector(seed, s, m, l, p, call_budget=args.max_model_calls)
+                lambda seed, m=metadata, s=sequence, p=pdb_path, l=live, q=qualify:
+                PanoptesSelector(seed, s, m, l, p, call_budget=args.max_model_calls,
+                                 qualify_threshold=q)
             )
             detail = (
                 "production path: fetch_protein_metadata -> "
@@ -2390,6 +2469,12 @@ examples:
                              "live comparison is reported as SKIPPED rather than silently mocked.")
     parser.add_argument("--max-model-calls", type=int, default=50,
                         help="Hard cap on live model calls across the whole run (default: %(default)s).")
+    parser.add_argument("--qualify-threshold", type=float, default=0.70,
+                        help="Fitness at which panoptes_qualify_then_optimize switches from the "
+                             "baseline policy to frontier search (default: %(default)s). Under "
+                             "deterministic reveal, P(reach threshold) and time-to-threshold are "
+                             "preserved pathwise, because every trajectory is identical to the "
+                             "baseline until the protected event has already occurred.")
     parser.add_argument("--verbose", action="store_true", help="Debug-level console logging.")
     return parser
 
@@ -2455,3 +2540,4 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
