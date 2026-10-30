@@ -1,14 +1,35 @@
 # requirements.txt — Python dependencies for VeritasBio.
-# Core engine, quant active learning, cloud muscle, UI, and benchmark analytics.
-modal
-gradio
-pydantic
-torch
-scikit-learn
-scipy
-numpy
-requests
-matplotlib
-plotly
-python-dotenv
-firebase-admin
+#
+# Version ranges pin the major version to protect against breaking releases while
+# still allowing patch/minor updates. Once a clean install succeeds, generate an
+# exact lockfile with `pip freeze > requirements.lock.txt` for reproducible builds.
+
+# --- Core engine: quant active learning, ledger, biophysics ---
+pydantic>=2.7,<3
+numpy>=2.0,<3
+scipy>=1.11,<2
+scikit-learn>=1.4,<2
+requests>=2.31,<3
+python-dotenv>=1.0,<2
+
+# --- FastAPI backend bridge (server.py): REST + SSE streaming ---
+fastapi>=0.110,<1
+uvicorn>=0.27,<1
+python-multipart>=0.0.9      # required by `await request.form()` in server.py
+httpx>=0.27,<1               # required by fastapi.testclient.TestClient (tests/test_server_api.py)
+
+# --- Gradio dashboard (main.py, ui/dashboard.py) ---
+gradio>=4.44,<6
+
+# --- Benchmark analytics & visualization ---
+matplotlib>=3.8,<4
+plotly>=5.20,<7
+
+# --- Auth (controller/auth.py, controller/firebase_config.py) ---
+firebase-admin>=6.5,<8
+
+# --- Optional cloud extras -------------------------------------------------
+# `modal` and `torch` are imported lazily (inside workers/esm_worker.py functions)
+# and are only needed to run real GPU inference on Modal. The full test suite and
+# the local mock pipeline run without them. Install with:
+#     pip install -r requirements-cloud.txt

@@ -50,7 +50,10 @@ class TestFirebaseAuth(unittest.TestCase):
         self.assertEqual(user1.email, "john@panoptesbio.com")
         self.assertEqual(user1.role, "lab_director")
         self.assertEqual(user1.organization_id, "panoptesbio")
-        self.assertTrue(user1.is_part11_certified)
+        # Mock identities are deliberately NOT Part 11 certified: their role is
+        # parsed from the caller-supplied token string, so they must never be able
+        # to mint an electronic signature.
+        self.assertFalse(user1.is_part11_certified)
 
         user2 = verify_firebase_id_token("mock_token_compliance_alice")
         self.assertEqual(user2.uid, "usr_alice")
@@ -60,6 +63,61 @@ class TestFirebaseAuth(unittest.TestCase):
         user_default = verify_firebase_id_token("panoptes_demo_token")
         self.assertEqual(user_default.uid, "usr_panoptes_001")
         self.assertEqual(user_default.role, "lead_biologist")
+
+    def test_mock_tokens_rejected_when_not_explicitly_enabled(self) -> None:
+        """Mock identities must be opt-in; the shipped default rejects them."""
+        import os
+        from controller.auth import mock_auth_enabled
+
+        saved = os.environ.pop("VERITAS_ALLOW_MOCK_AUTH", None)
+        try:
+            self.assertFalse(mock_auth_enabled())
+            # Role is parsed out of the token string, so accepting these by default
+            # let anyone self-assign lab_director from a browser.
+            for forged in ("panoptes_demo_token", "mock_token_director_attacker",
+                           "mock_token_compliance_attacker"):
+                with self.assertRaises(AuthenticationError):
+                    verify_firebase_id_token(forged)
+        finally:
+            if saved is not None:
+                os.environ["VERITAS_ALLOW_MOCK_AUTH"] = saved
+
+    def test_unsigned_jwt_claims_are_not_trusted(self) -> None:
+        """A JWT whose signature cannot be verified must be rejected, not decoded."""
+        import base64, json
+
+        payload = base64.urlsafe_b64encode(
+            json.dumps({"sub": "usr_attacker", "email": "attacker@evil.test",
+                        "role": "compliance_officer"}).encode()
+        ).decode().rstrip("=")
+        forged = f"eyJhbGciOiJub25lIn0.{payload}.signature_not_checked"
+
+        # Previously this token's claims were base64-decoded and trusted verbatim,
+        # including `role`, whenever live verification raised.
+        with self.assertRaises(AuthenticationError):
+            verify_firebase_id_token(forged, allow_mock=True)
+
+    def test_signing_refuses_without_secret_or_certification(self) -> None:
+        """Electronic signatures require a configured secret AND a certified identity."""
+        import os
+        import controller.auth as auth_mod
+
+        user = verify_firebase_id_token("mock_token_director_john", allow_mock=True)
+        self.assertFalse(user.is_part11_certified)
+        # Mock identity -> refused even though a secret is configured in tests.
+        with self.assertRaises(AuthenticationError):
+            create_part11_electronic_signature(user, action="APPROVE", meaning="test")
+
+        # Certified identity but no secret -> also refused, because a signature keyed
+        # on an empty or committed secret is forgeable offline from the source.
+        certified = user.model_copy(update={"is_part11_certified": True})
+        saved = auth_mod.PART11_SIGNATURE_SECRET
+        auth_mod.PART11_SIGNATURE_SECRET = ""
+        try:
+            with self.assertRaises(AuthenticationError):
+                create_part11_electronic_signature(certified, action="APPROVE", meaning="test")
+        finally:
+            auth_mod.PART11_SIGNATURE_SECRET = saved
 
     def test_fail_closed_invalid_tokens(self) -> None:
         """Verifies fail-closed rejection on missing, empty, or forged tokens."""

@@ -1,0 +1,6 @@
+# requirements-cloud.txt — optional extras for real Modal GPU inference.
+# Only needed to run ESM-2 on Modal A10G; the local pipeline and test suite do not
+# require these. Install on top of requirements.txt:
+#     pip install -r requirements.txt -r requirements-cloud.txt
+modal>=0.64,<2
+torch>=2.2,<3

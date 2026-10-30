@@ -44,7 +44,9 @@ class TestDiffusionWorker(unittest.TestCase):
 
         request = DeNovoBinderRequest(
             job_id="diff-job-overbudget",
-            target_model="rfdiffusion_proteinmpnn_a10g",  # Costs ~$0.03
+            # Use an implemented engine so this test exercises budget gating only.
+            # mock_diffusion costs $0.0005, still well over the $0.0001 budget.
+            target_model="mock_diffusion",
             num_designs=5,
             binder_length=65,
             budget_id=1,
@@ -68,6 +70,31 @@ class TestDiffusionWorker(unittest.TestCase):
         job = ledger_db.get_job("diff-job-overbudget", db_path=self.db_path)
         self.assertIsNotNone(job)
         self.assertEqual(job["status"], "REJECTED")
+
+    def test_unimplemented_engine_refused_before_any_spend(self):
+        """An engine with no code path must be refused before funds are authorized."""
+        ledger_db.create_budget(total_allocation=5.00, budget_id=1, db_path=self.db_path)
+
+        request = DeNovoBinderRequest(
+            job_id="diff-job-no-engine",
+            target_model="rfdiffusion_proteinmpnn_a10g",
+            num_designs=2,
+            binder_length=65,
+            budget_id=1,
+        )
+        result = generate_budgeted_de_novo_binders(request=request, db_path=self.db_path)
+
+        self.assertFalse(result.approved)
+        self.assertEqual(result.status, "REJECTED")
+        self.assertEqual(len(result.designs), 0)
+        self.assertEqual(result.cost_usd, 0.0)
+        self.assertIn("not implemented", str(result.rejection_reason))
+
+        # Critically: the budget is untouched and no job row was ever created,
+        # because the refusal happens before authorization rather than after.
+        budget = ledger_db.get_budget(budget_id=1, db_path=self.db_path)
+        self.assertEqual(budget["cumulative_spent"], 0.0)
+        self.assertIsNone(ledger_db.get_job("diff-job-no-engine", db_path=self.db_path))
 
     def test_successful_budgeted_generation_mock(self):
         """Verifies approved de novo binder generation under the fail-closed ledger."""
@@ -96,11 +123,33 @@ class TestDiffusionWorker(unittest.TestCase):
         for design in result.designs:
             self.assertEqual(len(design.sequence), 65)
             self.assertEqual(design.length, 65)
-            self.assertGreaterEqual(design.predicted_plddt, 75.0)
+            # Interface geometry is measured, not predicted: with no target
+            # structure supplied these are zero rather than invented.
+            self.assertGreaterEqual(design.interface_contact_pairs, 0)
+            self.assertGreaterEqual(design.interface_binder_residues, 0)
+            self.assertGreater(design.developability_score, 0.0)
+            self.assertLessEqual(design.developability_score, 1.0)
             self.assertGreater(design.radius_of_gyration, 8.0)
             self.assertLess(design.radius_of_gyration, 25.0)
             self.assertIn("ATOM", design.pdb_content)
-            self.assertIn("GLY B", design.pdb_content)
+            # The designed sequence must be threaded into the coordinates: the
+            # sampler emits placeholder GLY names, and leaving them in place would
+            # misreport the structure to any downstream tool. Verify the first
+            # residue's name matches the first residue of the designed sequence.
+            from workers.diffusion_worker import AA_1_TO_3
+
+            expected_first = AA_1_TO_3[design.sequence[0].upper()]
+            self.assertIn(f"{expected_first} B   1", design.pdb_content)
+            threaded = {
+                line[17:20].strip()
+                for line in design.pdb_content.splitlines()
+                if line.startswith("ATOM  ")
+            }
+            expected = {AA_1_TO_3[c.upper()] for c in design.sequence}
+            self.assertTrue(
+                threaded.issubset(expected),
+                f"PDB contains residue names absent from the design: {threaded - expected}",
+            )
             self.assertIn("END", design.pdb_content)
             self.assertGreater(design.synthesis_cost_usd, 0.0)
 
