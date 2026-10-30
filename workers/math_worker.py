@@ -300,18 +300,20 @@ def greedy_dpp_sample(
     return [int(top_indices[i]) for i in selected[:batch_size]]
 
 
-class DeepKernelLearner:
+class TwoStageDeepFeatureGP:
     """
-    Deep Kernel Learning (DKL) Surrogate Engine (Pillar 2).
-    Maps high-dimensional physicochemical and epistatic interaction vectors
-    into a learned latent manifold phi(x; w) before evaluating Gaussian Process covariance.
+    Two-stage surrogate: an MLP feature map, then a Matern GP on its output.
 
-    Formulation (Wilson et al., 2016):
-      k_DKL(x, x') = k_Matern(phi(x; w), phi(x'; w)) + sigma_n^2 * delta_xx'
-      where phi(x) = [MLP(x), 0.05 * x] with residual metric preservation.
+    Stage 1 fits an MLP to regress y from x. Stage 2 fits a Gaussian Process on
+    phi(x) = [MLP_hidden(x), 0.05 * x], so the GP sees learned non-linear features
+    alongside a scaled copy of the raw input. Supports heteroscedastic noise when
+    per-observation sample variances are supplied.
 
-    Combines deep non-linear epistatic feature representation with exact calibrated
-    Bayesian epistemic uncertainty sigma(x).
+    This is NOT Deep Kernel Learning in the sense of Wilson et al. (2016). True DKL
+    trains the feature-map weights and the GP hyperparameters *jointly* against the
+    GP marginal likelihood. Here the two stages are fitted independently and in
+    sequence; the MLP never sees the GP objective. The approach is legitimate and
+    often effective, but it is a different estimator with different behaviour.
     """
 
     def __init__(
@@ -358,11 +360,14 @@ class DeepKernelLearner:
         sample_variance: Optional[np.ndarray] = None,
         epochs: int = 400,
         lr: float = 0.02,
-    ) -> DeepKernelLearner:
+    ) -> TwoStageDeepFeatureGP:
         """
-        Jointly trains the neural projection weights phi(x; w) and fits
-        the Gaussian Process covariance on the projected manifold.
-        Supports heteroscedastic noise modeling when sample_variance is provided.
+        Fit the MLP feature map, then fit the GP on the projected features.
+
+        The two fits are sequential and independent - the MLP is trained against y
+        directly, not against the GP marginal likelihood - so this is not joint
+        deep-kernel training. Supports heteroscedastic noise when sample_variance
+        is provided.
         """
         N = len(X)
         if N >= 3:
@@ -375,8 +380,16 @@ class DeepKernelLearner:
             )
             try:
                 self.mlp.fit(X, y)
-            except Exception:
-                pass
+            except Exception as exc:
+                # Previously swallowed silently: project() then returned zeros for
+                # the learned half and the surrogate quietly degraded to a plain GP
+                # on 0.05 * X while still reporting is_fitted = True.
+                self.mlp = None
+                logger.warning(
+                    "MLP feature stage failed (%s); falling back to a plain GP on scaled "
+                    "raw inputs. Predictions remain valid but carry no learned features.",
+                    exc,
+                )
 
         Z = self.project(X)
         if sample_variance is not None and len(sample_variance) == len(Z):
@@ -1115,7 +1128,10 @@ def generate_candidate_variants(
                 pos_target_aas = [aa for aa in target_aas if aa in ("Y", "H", "W")]
             else:
                 continue
-        elif pos == 67:
+        elif pos == 67 and wt_sequence[pos - 1] == "G":
+            # avGFP's chromophore Gly67 tolerates no substitution. Guarded on the
+            # wild-type residue: unguarded, this silently removed position 67 from
+            # the search space of every target, where it is an ordinary residue.
             continue
         elif pos == 66 and wt_sequence[pos - 1] == "Y":
             pos_target_aas = [aa for aa in target_aas if aa in ("Y", "H", "W")]
@@ -1260,7 +1276,7 @@ def generate_candidate_variants(
     return candidates
 
 
-def sample_gflownet_candidates(
+def sample_policy_gradient_candidates(
     allowed_positions: Sequence[int],
     target_aas: Sequence[str],
     wt_sequence: str,
@@ -1274,15 +1290,19 @@ def sample_gflownet_candidates(
     random_state: int = 42,
 ) -> List[Variant]:
     """
-    GFlowNet Multi-Mode Autoregressive Candidate Generator (Pillar 3).
-    Formulation (Bengio et al., 2021; Jain et al., 2022):
-      Samples discrete mutational edit trajectories proportional to biological reward:
-        P(x) \\propto R(x) = exp(reward_fn(x) / temperature)
+    Sample multi-mutant candidates from a learned per-position substitution policy.
 
-    Trained via fast Trajectory Balance / policy gradient loss:
-      Overcomes greedy argmax collapse by sampling across all diverse, distinct fitness peaks
-      simultaneously, discovering non-obvious synergistic combinations that naive combinatorial
-      enumeration misses.
+    Optimizes independent per-position categorical logits by REINFORCE with a
+    moving-average reward baseline, then samples mutational trajectories from the
+    resulting policy. `temperature` scales the sampling softmax.
+
+    This is a policy-gradient sampler, NOT a GFlowNet. A GFlowNet is trained with a
+    flow-matching or trajectory-balance objective and a log-partition estimator so
+    that P(x) is proportional to R(x), which makes it mode-*covering*. Plain reward
+    maximization by policy gradient is mode-*seeking*: it concentrates on the
+    highest-reward region, which is the behaviour GFlowNets exist to avoid. Batch
+    diversity in this pipeline comes from `greedy_dpp_sample`, not from this
+    function, so do not rely on it to spread candidates across distinct peaks.
     """
     rng = np.random.RandomState(random_state)
     invariants = set(catalytic_invariants or [])
@@ -1304,6 +1324,7 @@ def sample_gflownet_candidates(
     logits = np.zeros((P, A), dtype=np.float64)
     baseline = 0.0
     lr = 0.2
+    reward_cache: Dict[str, float] = {}
 
     # Trajectory policy optimization
     for _ in range(n_iterations):
@@ -1333,8 +1354,13 @@ def sample_gflownet_candidates(
 
             notation = ":".join(f"{wt}{p}{mut}" for p, wt, mut in sorted(mut_tuples, key=lambda x: x[0]))
             try:
-                v = Variant(notation=notation)
-                r = float(reward_fn(v))
+                if notation in reward_cache:
+                    r = reward_cache[notation]
+                else:
+                    v = Variant(notation=notation)
+                    r = float(reward_fn(v))
+                    reward_cache[notation] = r
+                pass
             except Exception:
                 r = -5.0
 
@@ -1397,33 +1423,35 @@ def compute_biological_prior(
     variant: Variant,
     catalytic_invariants: Optional[Set[int]] = None,
     pdb_path: Optional[Any] = None,
+    aromatic_tolerant_positions: Optional[Set[int]] = None,
 ) -> float:
     """
-    Multi-fidelity zero-shot biological stability prior m(x) (Phase 3 & Gap C):
-    Encodes evolutionary, thermodynamic, and fast zero-cost structural packing constraints:
-      - Positive prior bonus for known permissive stabilizing framework sites (38, 65, 105, 163, 175, 203).
-      - Negative penalty for mutating catalytic invariants across any target protein.
-      - Negative penalty for severe radical volume/charge disruption.
-      - Fast zero-cost structural surrogate term S_struct(x) using 3D C-alpha coordinates.
+    Target-agnostic zero-shot prior mean m(x) for the Bayesian optimizer.
+
+    Contains only constraints that generalize across proteins:
+      - Pairwise electrostatics: salt-bridge bonus / like-charge repulsion penalty
+        for mutations within 10 residues of each other.
+      - Penalty for mutating a caller-declared catalytic invariant.
+      - Optional structural surrogate term from 3D C-alpha coordinates.
+
+    Deliberately contains NO target-specific mutation table. Earlier revisions
+    awarded fixed bonuses to a hardcoded list of avGFP mutations (S65T, T203Y,
+    F64L, V163A, A206K, E222G, M153T, V68L) and to six avGFP synergy pairs. That
+    was the same answer key encoded in `workers/mock_workers.py`
+    (`_BENEFICIAL_EFFECTS` / `_EPISTATIC_SYNERGIES`), so in mock mode the optimizer
+    received the oracle's answers before fitting anything and any "discovered in N
+    rounds" claim measured nothing. The same revisions also applied avGFP framework
+    position bonuses to every other target, where those positions are arbitrary.
+
+    Per-target knowledge belongs to the caller: pass `catalytic_invariants` for
+    residues that must not change, and `aromatic_tolerant_positions` for sites
+    where an aromatic substitution is tolerated (e.g. the avGFP fluorophore ring
+    at position 66, which accepts Y/H/W as a spectral shift).
     """
     if not variant.mutations:
         return 0.0
 
     score = 0.0
-    mut_set = {m.to_string() for m in variant.mutations}
-
-    # 1. Epistatic synergy bonus for verified functional combinations (Pillar 2 & 4)
-    known_synergies = [
-        ({"S65T", "T203Y"}, 1.2),
-        ({"F64L", "S65T"}, 0.9),
-        ({"S65T", "V163A"}, 0.8),
-        ({"S65T", "A206K"}, 0.7),
-        ({"T203Y", "V163A"}, 0.6),
-        ({"F64L", "T203Y"}, 0.7),
-    ]
-    for pair, bonus in known_synergies:
-        if pair.issubset(mut_set):
-            score += bonus
 
     # Universal biophysical pair physics: salt bridges & electrostatic repulsion
     if len(variant.mutations) >= 2:
@@ -1441,24 +1469,17 @@ def compute_biological_prior(
                 elif (m1.mut_aa in basic_aas and m2.mut_aa in basic_aas) or (m1.mut_aa in acidic_aas and m2.mut_aa in acidic_aas):
                     score -= 0.30
 
-    # 2. Add single-mutation biological effects and catalytic penalties
+    # Catalytic invariant penalties. Which positions are invariant comes from the
+    # caller, so this stays target-agnostic. Positions 66 and 67 previously carried
+    # unconditional avGFP chromophore penalties of -4.5 and -4.8 that fired on every
+    # protein; for TrpB, GB1 or trastuzumab those residues are arbitrary.
+    invariants = set(catalytic_invariants or ())
+    aromatic_ok = set(aromatic_tolerant_positions or ())
     for m in variant.mutations:
-        notation = m.to_string()
-        if notation in ("S65T", "T203Y", "F64L", "V163A", "A206K", "E222G", "M153T", "V68L"):
-            score += 0.40
-        elif m.position in (30, 38, 105, 145, 147, 163, 175, 203, 206, 222):
-            score += 0.15
-
-        # Catalytic core invariant penalties (Pillar 1 & 4) across ANY target
-        if catalytic_invariants and m.position in catalytic_invariants:
-            if m.position == 66 and m.mut_aa in ("Y", "H", "W"):
-                pass  # Aromatic fluorophore spectral shift permitted
-            else:
-                score -= 4.5  # Severe penalty for destroying catalytic invariants
-        elif m.position == 66 and m.mut_aa not in ("Y", "H", "W"):
-            score -= 4.5  # Non-aromatic fluorophore destruction
-        elif m.position == 67:
-            score -= 4.8  # Backbone hinge disruption
+        if m.position in invariants:
+            if m.position in aromatic_ok and m.mut_aa in ("Y", "H", "W"):
+                continue  # aromatic substitution tolerated at this site
+            score -= 4.5
 
     # 3. Gap C: Fast Zero-Cost Structural Surrogate Term (3D coordination & packing density)
     if pdb_path:
@@ -1491,6 +1512,9 @@ def select_next_micro_batch(
     pdb_path: Optional[Any] = None,
     random_seed: Optional[int] = None,
     pareto_weights_config: Optional[Dict[str, float]] = None,
+    speculative_evidence: Optional[Sequence[Dict[str, Any]]] = None,
+    fantasy_variance: float = 0.25,
+    aromatic_tolerant_positions: Optional[Set[int]] = None,
 ) -> SelectedBatch:
     """
     Executes the Gaussian Process active learning selection (Phases 1-4):
@@ -1586,6 +1610,30 @@ def select_next_micro_batch(
                 except Exception as exc:
                     logger.debug("Skipping unparseable evidence sequence: %s", exc)
 
+    # Kriging-Believer Asynchronous Conditioning on in-flight SpeculativeEvidence (SPEC-002 Seam 3)
+    if speculative_evidence:
+        for spec_ev in speculative_evidence:
+            if spec_ev.get("is_provisional", 1) == 0:
+                continue
+            var_seq = spec_ev.get("variant_sequence")
+            f_score = spec_ev.get("fantasy_score", spec_ev.get("computed_score"))
+            if var_seq and f_score is not None:
+                try:
+                    muts = extract_mutations_from_sequence(var_seq, wt_sequence)
+                    var_obj = Variant(
+                        notation=":".join(m.to_string() for m in muts) if muts else "WT",
+                        mutations=muts,
+                    )
+                    feat = featurize_variant_on_positions(var_obj, active_positions, wt_sequence, spatial_map=spatial_map)
+                    X_train_list.append(feat)
+                    prior_val = prior_mean_fn(var_obj) if prior_mean_fn else 0.0
+                    y_train_list.append(float(f_score) - prior_val)
+                    y_train_direct_list.append(float(f_score))
+                    train_priors_list.append(float(prior_val))
+                    sample_variances_list.append(max(float(fantasy_variance), 1e-3))
+                except Exception as spec_exc:
+                    logger.debug("Skipping unparseable speculative sequence: %s", spec_exc)
+
     X_train = np.array(X_train_list, dtype=np.float64)
     y_train = np.array(y_train_list, dtype=np.float64)
     sample_variances_arr = np.array(sample_variances_list, dtype=np.float64) if len(sample_variances_list) == len(X_train) else None
@@ -1602,7 +1650,7 @@ def select_next_micro_batch(
         except Exception as ad_err:
             logger.debug("AssayAdaptedHead fit error: %s", ad_err)
 
-    # Step 2: Fit Deep Kernel Learning (DKL) surrogate on residuals (Pillar 2)
+    # Step 2: Fit the two-stage deep-feature GP surrogate on residuals (Pillar 2)
     # Incorporates heteroscedastic noise modeling from experimental replicates
     surrogate = DeepKernelLearner(input_dim=X_train.shape[1], random_state=42)
     try:
@@ -1620,12 +1668,17 @@ def select_next_micro_batch(
         catalytic_invariants=invariants_set,
     )
 
-    # Phase 3 / Pillar 3: GFlowNet Multi-Mode Autoregressive Candidate Generator
+    # Phase 3 / Pillar 3: policy-gradient multi-mutant candidate sampler
     # Enriches candidate pool by sampling discrete trajectories proportional to DKL posterior reward R(x)
     try:
         def gfn_reward(v: Variant) -> float:
             base_prior = (
-                prior_mean_fn(v, catalytic_invariants=invariants_set, pdb_path=pdb_path)
+                prior_mean_fn(
+                    v,
+                    catalytic_invariants=invariants_set,
+                    pdb_path=pdb_path,
+                    aromatic_tolerant_positions=aromatic_tolerant_positions,
+                )
                 if hasattr(prior_mean_fn, "__code__") and "pdb_path" in prior_mean_fn.__code__.co_varnames
                 else (
                     prior_mean_fn(v, catalytic_invariants=invariants_set)
@@ -1649,12 +1702,16 @@ def select_next_micro_batch(
         max_gfn_depth = max(strategy.max_mutation_depth, 3)
         n_ev = len(evidence) if evidence else 0
         annealed_temp = max(0.65, float(1.60 * np.exp(-n_ev / 60.0)))
-        logger.info("GFlowNet sampling with annealed temperature: %.3f (evidence N=%d)", annealed_temp, n_ev)
+        logger.info(
+            "Policy-gradient sampling with annealed temperature: %.3f (evidence N=%d)",
+            annealed_temp,
+            n_ev,
+        )
 
         # Dynamic round seed ensures stochastic trajectory exploration across active learning rounds
         gfn_seed = (random_seed if random_seed is not None else 42) + (n_ev * 137)
 
-        gfn_candidates = sample_gflownet_candidates(
+        gfn_candidates = sample_policy_gradient_candidates(
             allowed_positions=active_positions,
             target_aas=["T", "Y", "L", "K", "A", "R", "D", "E", "G", "V", "F", "S", "H", "N", "Q"],
             wt_sequence=wt_sequence,
@@ -1667,7 +1724,7 @@ def select_next_micro_batch(
         )
         candidates.extend(gfn_candidates)
     except Exception as gfn_err:
-        logger.debug("GFlowNet candidate sampling fallback: %s", gfn_err)
+        logger.debug("Policy-gradient candidate sampling fallback: %s", gfn_err)
 
     # Filter out any candidates already evaluated in evidence
     evaluated_notations = set()
@@ -1676,6 +1733,12 @@ def select_next_micro_batch(
             seq = ev.get("variant_sequence")
             if seq:
                 evaluated_notations.add(seq)
+    if speculative_evidence:
+        for spec_ev in speculative_evidence:
+            if spec_ev.get("is_provisional", 1) != 0:
+                seq = spec_ev.get("variant_sequence")
+                if seq:
+                    evaluated_notations.add(seq)
 
     novel_candidates = [
         c for c in candidates if c.apply_to(wt_sequence) not in evaluated_notations
@@ -1711,7 +1774,12 @@ def select_next_micro_batch(
     cand_priors = np.array(
         [
             (
-                prior_mean_fn(c, catalytic_invariants=invariants_set, pdb_path=pdb_path)
+                prior_mean_fn(
+                    c,
+                    catalytic_invariants=invariants_set,
+                    pdb_path=pdb_path,
+                    aromatic_tolerant_positions=aromatic_tolerant_positions,
+                )
                 if hasattr(prior_mean_fn, "__code__") and "pdb_path" in prior_mean_fn.__code__.co_varnames
                 else (
                     prior_mean_fn(c, catalytic_invariants=invariants_set)
@@ -1824,3 +1892,204 @@ def select_next_micro_batch(
         pareto_ranks=selected_pareto_ranks,
         max_pool_ei=max_pool_ei,
     )
+
+
+# -----------------------------------------------------------------------------
+# 1280-Dim ESM-2 Embedding Readout Adapter (SPEC-002 Seam 2)
+# -----------------------------------------------------------------------------
+# Each mutated position writes a 10-slot block (5 property deltas + 5 absolute
+# properties) into a feature bank; the tail slots hold pairwise epistatic
+# products. More banks means fewer distinct positions aliasing onto the same slots.
+_READOUT_SLOTS_PER_POSITION = 10
+_READOUT_EPISTASIS_SLOTS = 8
+
+
+class SequenceReadoutAdapter:
+    """
+    Low-rank Ridge / SVD readout head over per-variant sequence embeddings.
+
+    Calibrates against wet-lab observations to overcome the evolutionary
+    conservation bias of zero-shot predictors on non-natural catalytic substrates
+    and synthetic biologics, once at least `min_calibration_samples` measurements
+    are available.
+
+    By default the embedding is a deterministic physicochemical delta encoding
+    computed locally (`embedding_source="physicochemical_delta"`). It is NOT an
+    ESM representation. To use real ESM-2 layer-33 vectors, either pass
+    `embedding_fn=workers.esm_worker.embed_sequences`, or supply precomputed
+    vectors via the `embeddings=` argument of fit/predict/project_latent, and set
+    `embedding_source` so the provenance is recorded.
+    """
+
+    def __init__(
+        self,
+        feature_dim: int = 128,
+        latent_dim: int = 16,
+        ridge_alpha: float = 0.05,
+        min_calibration_samples: int = 8,
+        random_state: int = 42,
+        embedding_fn: Optional[Any] = None,
+        embedding_source: str = "physicochemical_delta",
+    ) -> None:
+        min_dim = _READOUT_SLOTS_PER_POSITION + _READOUT_EPISTASIS_SLOTS
+        if feature_dim < min_dim:
+            raise ValueError(f"feature_dim must be at least {min_dim}, got {feature_dim}")
+        self.feature_dim = int(feature_dim)
+        self.latent_dim = latent_dim
+        self.ridge_alpha = ridge_alpha
+        self.min_calibration_samples = min_calibration_samples
+        self.random_state = random_state
+        self.embedding_fn = embedding_fn
+        self.embedding_source = embedding_source
+        self.is_fitted: bool = False
+        self.n_observed: int = 0
+        self._mean_h: Optional[np.ndarray] = None
+        self._mean_y: float = 0.0
+        self._weights: Optional[np.ndarray] = None
+        self._svd_basis: Optional[np.ndarray] = None
+
+    @property
+    def embedding_dim(self) -> int:
+        """Dimensionality of the embedding this adapter consumes."""
+        return self.feature_dim
+
+    @property
+    def n_position_banks(self) -> int:
+        """Number of distinct position banks the feature space provides."""
+        usable = self.feature_dim - _READOUT_EPISTASIS_SLOTS
+        return max(1, usable // _READOUT_SLOTS_PER_POSITION)
+
+    def embed_sequences(
+        self,
+        sequences: Sequence[str],
+        wt_sequence: str,
+    ) -> np.ndarray:
+        """
+        Deterministic physicochemical delta encoding of each variant vs wt_sequence.
+
+        Per mutated position, encodes the change in the 5 normalized amino-acid
+        property scales plus the absolute properties of the substituted residue,
+        then pairwise products across mutated sites as epistasis terms.
+
+        If `embedding_fn` was supplied it is used instead, so real ESM-2
+        representations can be substituted without changing any caller.
+        """
+        if self.embedding_fn is not None:
+            vecs = np.asarray(self.embedding_fn(list(sequences)), dtype=np.float64)
+            if vecs.ndim != 2 or vecs.shape[0] != len(sequences):
+                raise ValueError(
+                    f"embedding_fn must return one vector per sequence; got shape {vecs.shape}"
+                )
+            return vecs
+
+        n_seq = len(sequences)
+        out = np.zeros((n_seq, self.feature_dim), dtype=np.float64)
+        L = len(wt_sequence)
+        n_banks = self.n_position_banks
+        epistasis_base = self.feature_dim - _READOUT_EPISTASIS_SLOTS
+
+        for i, seq in enumerate(sequences):
+            vec = out[i]
+            mut_sites: List[Tuple[int, str, str]] = []
+            limit = min(len(seq), L)
+            for pos_0 in range(limit):
+                if seq[pos_0] != wt_sequence[pos_0]:
+                    mut_sites.append((pos_0 + 1, wt_sequence[pos_0], seq[pos_0]))
+
+            for pos, wt_aa, mut_aa in mut_sites:
+                wt_p = AA_PROPERTIES_NORMALIZED.get(wt_aa, np.zeros(5, dtype=np.float64))
+                mut_p = AA_PROPERTIES_NORMALIZED.get(mut_aa, np.zeros(5, dtype=np.float64))
+                # Spread positions across every available bank. 7 is coprime with
+                # the bank counts used here, so consecutive positions land in
+                # different banks rather than aliasing onto a handful of slots.
+                bank = ((pos * 7) % n_banks) * _READOUT_SLOTS_PER_POSITION
+                for k in range(5):
+                    vec[bank + k] += float(mut_p[k] - wt_p[k])
+                    vec[bank + 5 + k] += float(mut_p[k])
+
+            # Continuous pairwise epistatic interaction terms
+            for idx_a in range(len(mut_sites)):
+                for idx_b in range(idx_a + 1, len(mut_sites)):
+                    _p1, _, m1 = mut_sites[idx_a]
+                    _p2, _, m2 = mut_sites[idx_b]
+                    mp1 = AA_PROPERTIES_NORMALIZED.get(m1, np.zeros(5, dtype=np.float64))
+                    mp2 = AA_PROPERTIES_NORMALIZED.get(m2, np.zeros(5, dtype=np.float64))
+                    for k in range(4):
+                        vec[epistasis_base + k] += float(mp1[k] * mp2[k]) * 0.5
+
+        return out
+
+    def fit(
+        self,
+        sequences: Sequence[str],
+        scores: Sequence[float],
+        wt_sequence: str,
+        embeddings: Optional[np.ndarray] = None,
+    ) -> "ESMReadoutAdapter":
+        H = embeddings if embeddings is not None else self.embed_sequences(sequences, wt_sequence)
+        y = np.asarray(scores, dtype=np.float64)
+        n = len(y)
+        self.n_observed = n
+        if n < self.min_calibration_samples:
+            self.is_fitted = False
+            return self
+
+        self._mean_h = np.mean(H, axis=0)
+        self._mean_y = float(np.mean(y))
+        H_c = H - self._mean_h
+        y_c = y - self._mean_y
+
+        # Dual kernel Ridge solution: w = H_c^T (H_c H_c^T + alpha * I)^-1 y_c
+        K = H_c @ H_c.T + self.ridge_alpha * np.eye(n, dtype=np.float64)
+        dual_alpha = np.linalg.solve(K, y_c)
+        self._weights = H_c.T @ dual_alpha
+
+        # Low-rank SVD projection basis for Deep Kernel GP conditioning
+        _u, _s, vt = np.linalg.svd(H_c, full_matrices=False)
+        k_dim = min(self.latent_dim, vt.shape[0])
+        self._svd_basis = vt[:k_dim].T
+        self.is_fitted = True
+        return self
+
+    def predict(
+        self,
+        sequences: Sequence[str],
+        wt_sequence: str,
+        zero_shot_priors: Optional[Sequence[float]] = None,
+        embeddings: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        H = embeddings if embeddings is not None else self.embed_sequences(sequences, wt_sequence)
+        priors = (
+            np.asarray(zero_shot_priors, dtype=np.float64)
+            if zero_shot_priors is not None
+            else np.zeros(len(sequences), dtype=np.float64)
+        )
+        if not self.is_fitted or self._weights is None or self._mean_h is None:
+            return priors
+
+        readout_pred = (H - self._mean_h) @ self._weights + self._mean_y
+        blend = min(1.0, float(self.n_observed) / 12.0)
+        return blend * readout_pred + (1.0 - blend) * priors
+
+    def project_latent(
+        self,
+        sequences: Sequence[str],
+        wt_sequence: str,
+        embeddings: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
+        H = embeddings if embeddings is not None else self.embed_sequences(sequences, wt_sequence)
+        if self._svd_basis is None or self._mean_h is None:
+            return H[:, : self.latent_dim]
+        return (H - self._mean_h) @ self._svd_basis
+
+
+select_top_variants = select_next_micro_batch
+
+# Retained so existing callers keep working. See each docstring: the sampler is a
+# REINFORCE policy gradient, not a GFlowNet; the surrogate is two-stage, not joint DKL.
+sample_gflownet_candidates = sample_policy_gradient_candidates
+DeepKernelLearner = TwoStageDeepFeatureGP
+
+# Retained so existing callers keep working. The default embedding is a local
+# physicochemical encoding, not an ESM representation - see the class docstring.
+ESMReadoutAdapter = SequenceReadoutAdapter

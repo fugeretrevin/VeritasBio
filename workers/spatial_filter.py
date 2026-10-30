@@ -17,7 +17,8 @@ from __future__ import annotations
 import logging
 import math
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -463,7 +464,13 @@ class SpatialContactMap:
         mutation_tuples: List[Tuple[int, str, str]],
     ) -> float:
         """
-        Estimates thermodynamic folding stability change Delta-Delta-G (kcal/mol).
+        Heuristic folding-destabilization penalty score (unitless, higher = worse).
+
+        NOT a kcal/mol free energy. The value is a sum of hand-chosen penalties for
+        volume change, charge burial and proline introduction; there is no force
+        field, no solvation model, no torsional term, and no parameterization
+        against any experimental ddG dataset. Use it to rank candidates against
+        each other, never as a physical energy.
         Positive = destabilizing (deleterious to fold).
         Negative = stabilizing.
         """
@@ -514,6 +521,113 @@ class SpatialContactMap:
 
 # Global cache of parsed SpatialContactMap instances for high-throughput zero-cost reuse
 _contact_map_cache: Dict[Tuple[str, Optional[str], Optional[str]], "SpatialContactMap"] = {}
+_anm_hinge_cache: Dict[Tuple[str, float, int, Tuple[int, ...]], List[int]] = {}
+
+
+def compute_gnm_hinge_residues(
+    pdb_path: Optional[Path] = None,
+    cutoff_distance: float = 12.0,
+    top_k: int = 8,
+    catalytic_invariants: Optional[Set[int]] = None,
+) -> List[int]:
+    """
+    Identify allosteric hinge residues from Gaussian Network Model (GNM) normal modes.
+
+    Builds the N x N Kirchhoff contact Laplacian over C-alpha coordinates, takes the
+    lowest-frequency non-trivial modes, and flags hinges by the standard GNM
+    criterion: a residue where the slow-mode amplitude changes sign is a pivot
+    between two counter-moving dynamic subdomains. Catalytic invariants and
+    residues inside the 4.5 A cofactor sphere are excluded (SPEC-001 Seam 1).
+
+    This is a GNM, not an ANM. An ANM requires the 3N x 3N Hessian of directional
+    second derivatives and yields vector rather than scalar mode amplitudes; that
+    is a different model and is not implemented here.
+    """
+    resolved_path = str(pdb_path) if pdb_path is not None else str(DEFAULT_PDB_PATH)
+    inv_tuple = tuple(sorted(catalytic_invariants)) if catalytic_invariants else ()
+    cache_key = (resolved_path, float(cutoff_distance), int(top_k), inv_tuple)
+    if cache_key in _anm_hinge_cache:
+        return list(_anm_hinge_cache[cache_key])
+
+    cmap = get_spatial_contact_map(pdb_path)
+    if not cmap.ca_coordinates:
+        return []
+
+    res_ids = sorted(cmap.ca_coordinates.keys())
+    n = len(res_ids)
+    if n < 5:
+        return res_ids[:top_k]
+
+    coords = np.array(
+        [[cmap.ca_coordinates[r][1], cmap.ca_coordinates[r][2], cmap.ca_coordinates[r][3]] for r in res_ids],
+        dtype=np.float64,
+    )
+
+    diff = coords[:, np.newaxis, :] - coords[np.newaxis, :, :]
+    dist_mat = np.sqrt(np.sum(diff * diff, axis=-1))
+
+    within_cutoff = (dist_mat <= cutoff_distance) & (dist_mat > 1e-3)
+    gamma = np.zeros((n, n), dtype=np.float64)
+    gamma[within_cutoff] = -1.0 / np.maximum(dist_mat[within_cutoff] ** 2, 1.0)
+    np.fill_diagonal(gamma, -np.sum(gamma, axis=1))
+
+    eigenvalues, eigenvectors = np.linalg.eigh(gamma)
+
+    non_zero_indices = [idx for idx, val in enumerate(eigenvalues) if val > 1e-5]
+    if not non_zero_indices:
+        return res_ids[:top_k]
+
+    selected_modes = non_zero_indices[:3]
+
+    # GNM hinge criterion: in a slow mode a hinge sits where the mode amplitude
+    # crosses zero, because the residues either side move in opposite directions.
+    # Each crossing is scored by how sharply the amplitude passes through zero,
+    # with slower (lower-eigenvalue) modes weighted more heavily since they carry
+    # the large-scale collective motion. Chain termini are included: the previous
+    # implementation looped over range(1, n-1) only, so the first and last residue
+    # could never be identified as hinges regardless of their dynamics.
+    hinge_scores = np.zeros(n, dtype=np.float64)
+    for m_idx in selected_modes:
+        lam = max(float(eigenvalues[m_idx]), 1e-5)
+        u = np.asarray(eigenvectors[:, m_idx], dtype=np.float64)
+        weight = 1.0 / lam
+        # Amplitude is near zero at a pivot, so invert magnitude to score crossings high.
+        scale = float(np.max(np.abs(u))) or 1.0
+        proximity_to_zero = 1.0 - (np.abs(u) / scale)
+        # A sign change against the next residue marks the crossing on both sides.
+        sign_change = np.zeros(n, dtype=np.float64)
+        crossing = (u[:-1] * u[1:]) < 0.0
+        sign_change[:-1][crossing] = 1.0
+        sign_change[1:][crossing] = 1.0
+        # Local gradient measures how sharply the mode passes through zero.
+        grad = np.zeros(n, dtype=np.float64)
+        grad[1:-1] = np.abs(u[2:] - u[:-2]) / 2.0
+        grad[0] = abs(u[1] - u[0])
+        grad[-1] = abs(u[-1] - u[-2])
+        hinge_scores += weight * sign_change * grad * proximity_to_zero
+
+    forbidden: Set[int] = set(catalytic_invariants) if catalytic_invariants else set()
+    if 65 in cmap.ca_coordinates and 66 in cmap.ca_coordinates and 67 in cmap.ca_coordinates:
+        if cmap.ca_coordinates[66][0] in ("TYR", "CRO") and cmap.ca_coordinates[67][0] in ("GLY", "CRO"):
+            forbidden.update({65, 66, 67})
+
+    candidate_pairs: List[Tuple[float, int]] = []
+    for i, res_id in enumerate(res_ids):
+        if res_id in forbidden:
+            continue
+        d_cof = cmap.get_cofactor_distance(res_id)
+        if d_cof is not None and d_cof < 4.5:
+            continue
+        candidate_pairs.append((float(hinge_scores[i]), res_id))
+
+    candidate_pairs.sort(key=lambda item: (-item[0], item[1]))
+    result = [res_id for _, res_id in candidate_pairs[:top_k]]
+    _anm_hinge_cache[cache_key] = result
+    return list(result)
+
+
+# Retained so existing callers keep working; the model is a GNM, see the docstring.
+compute_anm_hinge_residues = compute_gnm_hinge_residues
 
 
 def get_spatial_contact_map(
@@ -522,7 +636,7 @@ def get_spatial_contact_map(
     reference_sequence: Optional[str] = None,
 ) -> SpatialContactMap:
     """Returns a cached SpatialContactMap instance for the target structure."""
-    resolved_path = str(Path(pdb_path).resolve()) if pdb_path is not None else str(DEFAULT_PDB_PATH.resolve())
+    resolved_path = str(pdb_path) if pdb_path is not None else str(DEFAULT_PDB_PATH)
     key = (resolved_path, chain_id, reference_sequence)
     if key not in _contact_map_cache:
         _contact_map_cache[key] = SpatialContactMap(pdb_path, chain_id=chain_id, reference_sequence=reference_sequence)
@@ -721,6 +835,213 @@ def compute_structural_surrogate_score(
                     elif wt_aa in ("S", "T", "A") and mut_aa == "G":
                         score += 0.25  # Channel flexibility bonus
 
+    # 5. Allosteric Hinge Cooperativity Bonus (SPEC-001 Seam 1)
+    anm_hinges = set(
+        compute_anm_hinge_residues(
+            pdb_path=pdb_path,
+            cutoff_distance=12.0,
+            top_k=10,
+            catalytic_invariants=catalytic_invariants,
+        )
+    )
+    for pos, _wt_aa, _mut_aa in parsed_tuples:
+        if pos in anm_hinges:
+            score += 0.30
+
     return round(score, 4)
+
+
+# -----------------------------------------------------------------------------
+# Multi-Chain Quaternary Complex & Epitope-Paratope Interface (SPEC-002 Seam 1)
+# -----------------------------------------------------------------------------
+_multichain_ca_cache: Dict[str, Dict[Tuple[str, int], Tuple[str, float, float, float]]] = {}
+
+
+def _load_multichain_ca(
+    pdb_path: Optional[Path] = None,
+) -> Dict[Tuple[str, int], Tuple[str, float, float, float]]:
+    """Parses and caches C-alpha coordinates across ALL chains in a multi-chain PDB complex."""
+    path_obj = Path(pdb_path) if pdb_path is not None else DEFAULT_PDB_PATH
+    key = str(path_obj)
+    if key in _multichain_ca_cache:
+        return _multichain_ca_cache[key]
+
+    coords: Dict[Tuple[str, int], Tuple[str, float, float, float]] = {}
+    if not path_obj.is_file():
+        return coords
+
+    with open(path_obj, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if line.startswith("ATOM") and len(line) >= 54:
+                atom_name = line[12:16].strip()
+                if atom_name != "CA":
+                    continue
+                alt_loc = line[16:17].strip()
+                if alt_loc not in ("", "A"):
+                    continue
+                try:
+                    res_name = line[17:20].strip()
+                    chain_id = line[21:22].strip() or "A"
+                    res_seq = int(line[22:26].strip())
+                    x = float(line[30:38].strip())
+                    y = float(line[38:46].strip())
+                    z = float(line[46:54].strip())
+                    coords[(chain_id, res_seq)] = (res_name, x, y, z)
+                except (ValueError, IndexError):
+                    continue
+
+    _multichain_ca_cache[key] = coords
+    return coords
+
+
+def compute_interface_contact_residues(
+    pdb_path: Optional[Path] = None,
+    binder_chains: Sequence[str] = ("A", "B"),
+    target_chains: Sequence[str] = ("C",),
+    cutoff_angstroms: float = 10.0,
+) -> Dict[str, Any]:
+    """
+    Identifies intermolecular paratope-epitope contact residues and pairs across
+    quaternary chain boundaries (e.g., antibody chains H/L or A/B against antigen chain C).
+    """
+    coords = _load_multichain_ca(pdb_path)
+    b_set = {c.strip() for c in binder_chains}
+    t_set = {c.strip() for c in target_chains}
+
+    binder_items = [(ch, r_id, info) for (ch, r_id), info in coords.items() if ch in b_set]
+    target_items = [(ch, r_id, info) for (ch, r_id), info in coords.items() if ch in t_set]
+
+    binder_min_dist: Dict[Tuple[str, int], Tuple[str, float]] = {}
+    target_min_dist: Dict[Tuple[str, int], Tuple[str, float]] = {}
+    contact_pairs: List[Dict[str, Any]] = []
+
+    for b_ch, b_res, (b_name3, bx, by, bz) in binder_items:
+        b_aa1 = THREE_TO_ONE.get(b_name3, "X")
+        for t_ch, t_res, (t_name3, tx, ty, tz) in target_items:
+            d = math.sqrt((bx - tx) ** 2 + (by - ty) ** 2 + (bz - tz) ** 2)
+            if d <= cutoff_angstroms:
+                t_aa1 = THREE_TO_ONE.get(t_name3, "X")
+                contact_pairs.append({
+                    "binder_chain": b_ch,
+                    "binder_res_seq": b_res,
+                    "binder_wt_aa": b_aa1,
+                    "target_chain": t_ch,
+                    "target_res_seq": t_res,
+                    "target_wt_aa": t_aa1,
+                    "distance_angstrom": round(d, 3),
+                })
+                if (b_ch, b_res) not in binder_min_dist or d < binder_min_dist[(b_ch, b_res)][1]:
+                    binder_min_dist[(b_ch, b_res)] = (b_aa1, d)
+                if (t_ch, t_res) not in target_min_dist or d < target_min_dist[(t_ch, t_res)][1]:
+                    target_min_dist[(t_ch, t_res)] = (t_aa1, d)
+
+    contact_pairs.sort(key=lambda x: x["distance_angstrom"])
+    binder_residues = [
+        {
+            "chain_id": ch,
+            "res_seq": r_id,
+            "wt_aa": aa1,
+            "min_distance_angstrom": round(dist, 3),
+        }
+        for (ch, r_id), (aa1, dist) in sorted(binder_min_dist.items(), key=lambda item: item[1][1])
+    ]
+    target_residues = [
+        {
+            "chain_id": ch,
+            "res_seq": r_id,
+            "wt_aa": aa1,
+            "min_distance_angstrom": round(dist, 3),
+        }
+        for (ch, r_id), (aa1, dist) in sorted(target_min_dist.items(), key=lambda item: item[1][1])
+    ]
+
+    return {
+        "binder_chains": list(binder_chains),
+        "target_chains": list(target_chains),
+        "cutoff_angstroms": cutoff_angstroms,
+        "binder_residues": binder_residues,
+        "target_residues": target_residues,
+        "contact_pairs": contact_pairs,
+    }
+
+
+def compute_interface_binding_ddg(
+    pdb_path: Optional[Path] = None,
+    mutation_tuples: Sequence[Tuple[int, str, str]] = (),
+    binder_chains: Sequence[str] = ("A", "B"),
+    target_chains: Sequence[str] = ("C",),
+) -> float:
+    """
+    Heuristic interface-disruption penalty score (unitless, higher = more disruptive).
+
+    NOT a kcal/mol binding free energy - the same caveat as compute_stability_ddg
+    applies: hand-chosen constants, no force field, no parameterization against
+    measured affinities. Computed across a
+    multi-chain protein-protein interface (SPEC-002 Seam 1).
+    Negative ddG_bind = tighter binding affinity (favorable).
+    Positive ddG_bind = weakened binding or interfacial clash (unfavorable).
+    """
+    if not mutation_tuples:
+        return 0.0
+
+    coords = _load_multichain_ca(pdb_path)
+    b_set = {c.strip() for c in binder_chains}
+    t_set = {c.strip() for c in target_chains}
+    target_items = [(ch, r_id, info) for (ch, r_id), info in coords.items() if ch in t_set]
+
+    ddg_bind = 0.0
+    for pos, wt_aa, mut_aa in mutation_tuples:
+        # Locate mutated position in binder_chains
+        b_coord = None
+        for ch in binder_chains:
+            if (ch.strip(), pos) in coords:
+                b_coord = coords[(ch.strip(), pos)]
+                break
+        if b_coord is None:
+            for (ch, r_id), info in coords.items():
+                if ch in b_set and r_id == pos:
+                    b_coord = info
+                    break
+        if b_coord is None or not target_items:
+            continue
+
+        _, bx, by, bz = b_coord
+        contacts: List[Tuple[float, str]] = []
+        for _t_ch, _t_res, (t_name3, tx, ty, tz) in target_items:
+            d = math.sqrt((bx - tx) ** 2 + (by - ty) ** 2 + (bz - tz) ** 2)
+            if d <= 12.0:
+                contacts.append((d, THREE_TO_ONE.get(t_name3, "A")))
+
+        if not contacts:
+            continue
+
+        contacts.sort(key=lambda x: x[0])
+        min_d, nearest_t_aa = contacts[0]
+        vol_delta = AA_VOLUMES.get(mut_aa, 120.0) - AA_VOLUMES.get(wt_aa, 120.0)
+
+        # 1. Interfacial proline loop kinking penalty
+        if mut_aa == "P" and wt_aa != "P":
+            ddg_bind += 2.20
+
+        # 2. Loss of interfacial van der Waals packing (cavity creation at interface)
+        if min_d <= 9.5 and vol_delta < -45.0:
+            ddg_bind += 0.025 * abs(vol_delta)
+
+        # 3. Direct interfacial steric collision (< 6.2 A)
+        if min_d < 6.2 and vol_delta > 45.0:
+            ddg_bind += 1.80
+        # 4. Favorable paratope aromatic pi-stacking / H-bonding (Tyr/Trp/Phe at 6.2 - 11.0 A)
+        elif 6.2 <= min_d <= 11.0 and mut_aa in ("Y", "W", "F"):
+            ddg_bind -= 0.55
+
+        # 5. Intermolecular electrostatic salt-bridge vs repulsion across interface
+        for d_contact, t_aa in contacts[:3]:
+            if d_contact <= 10.5:
+                if (mut_aa in "KR" and t_aa in "DE") or (mut_aa in "DE" and t_aa in "KR"):
+                    ddg_bind -= 0.45  # Intermolecular salt bridge
+                elif (mut_aa in "KR" and t_aa in "KR") or (mut_aa in "DE" and t_aa in "DE"):
+                    ddg_bind += 0.90  # Intermolecular charge repulsion
+
+    return round(ddg_bind, 4)
 
 

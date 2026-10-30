@@ -672,3 +672,43 @@ class Gatekeeper:
             is_warm=is_warm,
             roi_ei_per_dollar=roi,
         )
+
+
+def estimate_wetlab_synthesis_cost(
+    variant_count: int,
+    sequence_length_aa: int,
+    synthesis_format: str = "linear_fragment",
+    replicates: int = 3,
+    linear_bp_rate_usd: float = 0.07,
+    clonal_bp_rate_usd: float = 0.09,
+    clonal_vector_fee_usd: float = 25.00,
+    robotic_well_assay_usd: float = 15.00,
+) -> Dict[str, Any]:
+    """
+    Deterministic Wet-Lab DNA Synthesis & Robotic Assay Cost Estimator (SPEC-002 Seam 4).
+    Separates physical synthesis/CRO expenditure from cloud GPU micro-USD compute costs.
+    """
+    if variant_count <= 0 or sequence_length_aa <= 0:
+        raise ValueError("variant_count and sequence_length_aa must be positive integers")
+
+    bp_per_variant = int(sequence_length_aa) * 3 + 60  # Includes 30bp 5' and 3' Gibson/Golden-Gate overhangs
+    fmt = synthesis_format.strip().lower()
+    if fmt in ("twist_clonal_gene", "clonal", "clonal_gene"):
+        dna_per_variant = bp_per_variant * clonal_bp_rate_usd + clonal_vector_fee_usd
+    else:
+        dna_per_variant = bp_per_variant * linear_bp_rate_usd
+
+    dna_total = round(dna_per_variant * variant_count, 2)
+    assay_total = round(variant_count * max(1, int(replicates)) * robotic_well_assay_usd, 2)
+    total_usd = round(dna_total + assay_total, 2)
+
+    return {
+        "variant_count": variant_count,
+        "sequence_length_aa": sequence_length_aa,
+        "basepairs_per_variant": bp_per_variant,
+        "synthesis_format": synthesis_format,
+        "replicates": replicates,
+        "dna_synthesis_cost_usd": dna_total,
+        "robotic_assay_cost_usd": assay_total,
+        "total_wetlab_cost_usd": total_usd,
+    }

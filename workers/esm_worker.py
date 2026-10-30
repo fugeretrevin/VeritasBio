@@ -3,7 +3,7 @@ workers/esm_worker.py — DOMAIN: Science & Math Tools (Pillar 5: Cloud Muscle).
 
 Purpose:
     Modal serverless GPU worker running ESM-2 (650M / 150M) via batched PyTorch tensors.
-    Computes zero-shot masked-marginal log-likelihood fitness scores for protein variants.
+    Computes zero-shot wild-type-marginal log-likelihood fitness scores for protein variants.
 
 Constraints & Invariants (ARCHITECTURE.md §3.5, §7.2; INNOVATION_ROADMAP Phase 4):
     1. Paid Compute Behind Spend Gate: Must only be invoked after `authorize_spend()`
@@ -20,12 +20,12 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence
 
 try:
     import modal
     app = modal.App("veritasbio-esm")
-except ImportError:
+except (ImportError, Exception):
     modal = None
     app = None
 
@@ -120,10 +120,11 @@ def _score_variants_core(
         b_scores = [0.0] * len(b_seqs)
         if b_indices:
             eval_seqs = [b_seqs[i] for i in b_indices]
+            # Tokenize only to recover each mutant residue's token id. Under the
+            # wt-marginals protocol both log-probabilities are read from the single
+            # wild-type forward pass already computed above, so no forward pass over
+            # the variant sequences is needed (B+1 passes collapse to 1).
             b_tokens = tokenizer(eval_seqs, padding=True, return_tensors="pt").to(device)
-            with torch.no_grad():
-                b_logits = model(**b_tokens).logits  # [B, L, Vocab]
-                b_log_probs = torch.log_softmax(b_logits, dim=-1)
 
             for slot_idx, orig_i in enumerate(b_indices):
                 mut_idx = b_mut_indices[slot_idx]
@@ -132,8 +133,12 @@ def _score_variants_core(
                     token_idx = idx + 1
                     wt_tok_id = wt_tokens.input_ids[0, token_idx]
                     mut_tok_id = b_tokens.input_ids[slot_idx, token_idx]
+                    # Both terms conditioned on the SAME wild-type context. Mixing
+                    # a variant-conditioned numerator with a WT-conditioned
+                    # denominator is neither wt-marginals nor mutant-marginals and
+                    # yields scores that are not comparable to published values.
                     wt_logp = wt_log_probs[token_idx, wt_tok_id].item()
-                    mut_logp = b_log_probs[slot_idx, token_idx, mut_tok_id].item()
+                    mut_logp = wt_log_probs[token_idx, mut_tok_id].item()
                     delta_logp += (mut_logp - wt_logp)
                 b_scores[orig_i] = round(delta_logp, 4)
 
@@ -155,7 +160,7 @@ def score_variants_remote(
     batch_size: int = 32,
 ) -> List[float]:
     """
-    Remote Modal GPU function: executes batched masked-marginal log-likelihood scoring.
+    Remote Modal GPU function: executes batched wild-type-marginal log-likelihood scoring.
     Batches sequences into tensor mini-batches for maximum A10G throughput.
 
     For each variant, computes:
@@ -254,39 +259,59 @@ def is_modal_configured() -> bool:
     )
 
 
-def score_variants(
+class ScoringOutcome(NamedTuple):
+    """
+    Scores plus the provenance of whatever engine actually produced them.
+
+    `engine` is the label recorded in the ledger's Evidence.compute_engine column.
+    It names what *ran*, not what was requested, so a silent fall back to the mock
+    oracle is visible downstream instead of being indistinguishable from real
+    GPU inference.
+    """
+
+    scores: List[float]
+    engine: str
+    is_mock: bool
+
+
+def score_variants_with_provenance(
     wt_sequence: str,
     variant_sequences: Sequence[str],
     target_model: str = "esm2_650m",
-    use_mock_fallback: bool = True,
-) -> List[float]:
+    use_mock_fallback: bool = False,
+) -> ScoringOutcome:
     """
-    Client entrypoint for scoring a batch of sequences.
+    Score a batch and report which engine produced the result.
 
-    Delegates to:
-      - `MockESMWorker` if `target_model == 'mock_esm'` or Modal is unconfigured.
-      - Remote Modal A10G function if running live cloud execution.
+    Prefer this over `score_variants` anywhere the scores are persisted, so the
+    ledger can record provenance. `use_mock_fallback` defaults to False: falling
+    back to synthetic scores is a decision the caller must make explicitly.
     """
     from workers.mock_workers import MockESMWorker
 
     clean_model = target_model.strip().lower()
 
+    def _mock(engine: str) -> ScoringOutcome:
+        return ScoringOutcome(
+            scores=MockESMWorker(wt_sequence).score_variants(wt_sequence, variant_sequences),
+            engine=engine,
+            is_mock=True,
+        )
+
     if clean_model == "mock_esm":
         logger.info("Scoring %d variants using local MockESMWorker...", len(variant_sequences))
-        return MockESMWorker(wt_sequence).score_variants(wt_sequence, variant_sequences)
+        return _mock("mock_esm")
 
-    # Attempt remote Modal execution
     if is_modal_configured():
         hf_id = MODEL_MAP.get(clean_model, "facebook/esm2_t33_650M_UR50D")
         logger.info("Submitting %d variants to Modal A10G (%s)...", len(variant_sequences), hf_id)
         try:
-            # Attempt lookup on deployed Modal app for instant zero-overhead invocation
             try:
                 fn_getter = getattr(modal.Function, "from_name", getattr(modal.Function, "lookup", None))
                 if fn_getter is None:
                     raise AttributeError("Neither from_name nor lookup found on modal.Function")
                 fn = fn_getter("veritasbio-esm", "score_variants_remote")
-                return fn.remote(
+                remote_scores = fn.remote(
                     wt_sequence=wt_sequence,
                     variant_sequences=list(variant_sequences),
                     hf_model_id=hf_id,
@@ -297,30 +322,53 @@ def score_variants(
                     lookup_err,
                 )
                 with app.run():
-                    return score_variants_remote.remote(
+                    remote_scores = score_variants_remote.remote(
                         wt_sequence=wt_sequence,
                         variant_sequences=list(variant_sequences),
                         hf_model_id=hf_id,
                     )
+            return ScoringOutcome(scores=list(remote_scores), engine=clean_model, is_mock=False)
         except Exception as exc:
             logger.error("Modal remote execution failed: %s", exc)
             if not use_mock_fallback:
                 raise RuntimeError(f"Modal execution failed: {exc}") from exc
-            logger.warning("Falling back to MockESMWorker due to Modal execution failure.")
-            return MockESMWorker(wt_sequence).score_variants(wt_sequence, variant_sequences)
+            logger.warning(
+                "Falling back to MockESMWorker due to Modal execution failure. "
+                "Scores will be recorded as mock_esm_fallback_failure."
+            )
+            return _mock("mock_esm_fallback_failure")
 
-    # Modal not configured: check fallback
     if use_mock_fallback:
         logger.warning(
-            "Modal credentials not detected in environment. "
-            "Falling back to high-fidelity local MockESMWorker."
+            "Modal credentials not detected in environment. Falling back to local "
+            "MockESMWorker; scores will be recorded as mock_esm_fallback_unconfigured."
         )
-        return MockESMWorker(wt_sequence).score_variants(wt_sequence, variant_sequences)
-    else:
-        raise RuntimeError(
-            "Modal is not configured (MODAL_TOKEN_ID not set and ~/.modal.toml missing) "
-            "and use_mock_fallback is False."
-        )
+        return _mock("mock_esm_fallback_unconfigured")
+
+    raise RuntimeError(
+        "Modal is not configured (MODAL_TOKEN_ID not set and ~/.modal.toml missing) "
+        "and use_mock_fallback is False."
+    )
+
+
+def score_variants(
+    wt_sequence: str,
+    variant_sequences: Sequence[str],
+    target_model: str = "esm2_650m",
+    use_mock_fallback: bool = False,
+) -> List[float]:
+    """
+    Client entrypoint for scoring a batch of sequences.
+
+    Thin wrapper over `score_variants_with_provenance` that discards the engine
+    label. Use the provenance variant when the scores will be persisted.
+    """
+    return score_variants_with_provenance(
+        wt_sequence=wt_sequence,
+        variant_sequences=variant_sequences,
+        target_model=target_model,
+        use_mock_fallback=use_mock_fallback,
+    ).scores
 
 
 def score_variants_cascade(
