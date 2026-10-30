@@ -1239,12 +1239,22 @@ class PanoptesSelector(Selector):
         call_budget: Optional[int] = None,
         qualify_threshold: Optional[float] = None,
         ablation: str = "none",
+        prior_spread: Optional[float] = None,
+        ablate_components: Optional[Set[str]] = None,
     ) -> None:
         super().__init__(seed)
         # Ablation arm. 'none' is the shipped configuration; the others restore one
         # or both pre-fix behaviours so their effect can be measured on identical
         # seeds. Recorded in the arm name so a report cannot confuse two arms.
         self.ablation = ablation
+        # Component-level ablation, for attributing the engine's advantage. Recorded
+        # in the arm's notes so a run folder states what it measured - without this,
+        # five ablation folders are distinguishable only by their timestamps.
+        self.ablate_components = set(ablate_components or ())
+        if self.ablate_components:
+            self.notes.append(
+                f"ABLATED_COMPONENTS={','.join(sorted(self.ablate_components))}"
+            )
         if qualify_threshold is not None:
             self.name = "panoptes_qualify_then_optimize"
         else:
@@ -1257,6 +1267,13 @@ class PanoptesSelector(Selector):
         # in separate processes under --parallel-seeds, so this does not race.
         import workers.math_worker as _mw
         _mw.PRIOR_CALIBRATION_ENABLED = ablation not in ("raw-prior", "legacy")
+        if prior_spread is not None:
+            # An explicit spread means calibrate at that weight, overriding the
+            # ablation default: this is the sweep that settles the prior's weight by
+            # measurement instead of by argument.
+            _mw.PRIOR_CALIBRATION_ENABLED = True
+            _mw.PRIOR_FITNESS_SPREAD = float(prior_spread)
+            self.notes.append(f"PRIOR_FITNESS_SPREAD={float(prior_spread)}")
         if ablation and ablation != "none":
             self.notes.append(
                 f"ABLATION={ablation}: "
@@ -1481,6 +1498,7 @@ class PanoptesSelector(Selector):
             pdb_path=self.pdb_path,
             random_seed=(self.seed or 0) * 1000 + round_index,
             apply_auxiliary_objective_weights=self.ablation in ("aux-weighted", "legacy"),
+            ablate=self.ablate_components or None,
         )
         self.last_batch_predictions = {}
         proposals: List[str] = []
@@ -1836,10 +1854,26 @@ def summarise(outcomes: Sequence[RunOutcome], method_status: Dict[str, Dict[str,
         def _stdev(values: Sequence[float]) -> str:
             return f"{statistics.stdev(values):.6g}" if len(values) > 1 else ("0" if values else "")
 
+        # An arm that attempted seeds and completed none did not 'run and find
+        # nothing' - it failed to run. Reporting it as available with blank metrics
+        # is indistinguishable from a real null result, so say so in the status.
+        arm_status = status.get("status", "unknown")
+        arm_detail = status.get("detail", "")
+        if runs and not completed:
+            arm_status = "FAILED"
+            arm_detail = (
+                f"0 of {len(runs)} seeds completed - the arm did not run. "
+                f"See benchmark.log for the per-seed reason. "
+            ) + arm_detail
+            logger.error(
+                "%s: 0 of %d seeds completed; reporting status=FAILED rather than a "
+                "null result.", method, len(runs),
+            )
+
         rows.append({
             "method": method,
-            "status": status.get("status", "unknown"),
-            "status_detail": status.get("detail", ""),
+            "status": arm_status,
+            "status_detail": arm_detail,
             "seeds_attempted": len(runs),
             "seeds_completed": len(completed),
             "completion_rate": f"{len(completed) / len(runs):.3f}" if runs else "0.000",

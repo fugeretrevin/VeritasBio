@@ -34,10 +34,19 @@ def final_per_seed(run_dir: pathlib.Path) -> dict:
     if not path.is_file():
         raise FileNotFoundError(f"no round_metrics.csv in {run_dir}")
     latest: dict = {}
+    unknown_statuses: set = set()
     with path.open(encoding="utf-8", newline="") as fh:
         for row in csv.DictReader(fh):
-            if row.get("status") and row["status"].lower() not in ("ok", "completed", ""):
+            # Only skip rounds that actually failed. 'short_batch' is a COMPLETED
+            # round in which some proposals were rejected as duplicate or already
+            # measured; treating it as a failure made the script pick an early round
+            # as final and understate an arm by more than half. Unknown statuses are
+            # kept and counted, not silently dropped.
+            status_val = (row.get("status") or "").strip().lower()
+            if status_val in ("failed", "error", "aborted"):
                 continue
+            if status_val not in ("ok", "completed", "short_batch", ""):
+                unknown_statuses.add(status_val)
             try:
                 key = (row["method"], int(row["seed"]))
                 rnd = int(row["round"])
@@ -53,6 +62,9 @@ def final_per_seed(run_dir: pathlib.Path) -> dict:
                     )
                 except (KeyError, ValueError):
                     continue
+    if unknown_statuses:
+        print(f"  note: kept rounds with unrecognised status {sorted(unknown_statuses)} "
+              f"from {run_dir.name}; verify they are not failures")
     return {k: (v[1], v[2]) for k, v in latest.items()}
 
 

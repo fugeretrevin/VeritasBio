@@ -2016,8 +2016,25 @@ def select_next_micro_batch(
     if "dpp" in ablated:
         # Top-n by quality score, with no diversity term. The engine's low variance
         # is widely attributed to this stage, so removing it is the direct test.
+        #
+        # Deduplicated by variant identity first. Several distinct candidate
+        # notations can collapse to the same set of substitutions, and a harness that
+        # rejects duplicates without backfilling would hand this arm a SMALLER
+        # measurement budget than every other arm - confounding 'diversity removed'
+        # with 'fewer measurements'. k-DPP never hit this because it selects for
+        # dissimilarity in the first place.
         order = np.argsort(quality_scores)[::-1]
-        selected_indices = [int(i) for i in order[:batch_size]]
+        selected_indices = []
+        seen_identities = set()
+        for idx in order:
+            cand = novel_candidates[int(idx)]
+            identity = frozenset((m.position, m.mut_aa) for m in cand.mutations)
+            if identity in seen_identities:
+                continue
+            seen_identities.add(identity)
+            selected_indices.append(int(idx))
+            if len(selected_indices) >= batch_size:
+                break
     else:
         selected_indices = greedy_dpp_sample(
             quality_scores=quality_scores,
