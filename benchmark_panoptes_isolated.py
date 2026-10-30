@@ -97,6 +97,115 @@ logger = logging.getLogger("panoptes_isolated_benchmark")
 
 
 # ==============================================================================================
+# Library registry — the protocol is not TrpB-specific
+# ==============================================================================================
+@dataclass(frozen=True)
+class LibrarySpec:
+    """
+    A combinatorially-saturated library this protocol can run on.
+
+    Everything above was TrpB constants at module scope, read directly by the encoders
+    (`_canonical_variant_id`, `_combo_from_notation`, `_one_hot_matrix`). That made
+    every result single-target, which is the binding limitation on every claim in
+    docs/NEXT_STEPS.md: a method tuned and measured on one landscape demonstrates
+    nothing about generalisation.
+
+    `configure_library()` reassigns those globals rather than threading a spec through
+    ten functions. A module-level active library is a compromise, but the encoders read
+    the globals at call time so reassignment is sufficient, and it keeps this change
+    small enough to be reviewable.
+    """
+
+    key: str
+    label: str
+    dataset: Path
+    accession: str
+    positions: Tuple[int, ...]
+    parent_residues: str
+    structure_pdb: Optional[Path]
+    published_optimum: Optional[str]
+    published_measured_count: Optional[int]
+    published_imputed_count: Optional[int]
+    provenance_note: str
+
+
+LIBRARIES: Dict[str, LibrarySpec] = {
+    "trpb": LibrarySpec(
+        key="trpb",
+        label="TrpB Tm9D8* four-site active site (Johnston et al. 2024)",
+        dataset=REPO_ROOT / "scripts" / "data" / "TRPB_THEMA_Johnston_2024.csv",
+        accession="TRPB_TM9D8",
+        positions=(183, 184, 227, 228),
+        parent_residues="VFVS",
+        structure_pdb=REPO_ROOT / "workers" / "data" / "8EH0.pdb",
+        published_optimum="V183A:F184I:V227K:S228G",
+        published_measured_count=159_129,
+        published_imputed_count=871,
+        provenance_note=(
+            "Johnston et al. report 159,129 of 160,000 variants quantified and 871 "
+            "fitness values imputed with the scikit-learn KNN imputer; the prepared CSV "
+            "carries no flag separating them."
+        ),
+    ),
+    "gb1": LibrarySpec(
+        key="gb1",
+        label="GB1 domain four-site library (Wu et al. 2016)",
+        dataset=REPO_ROOT / "scripts" / "data" / "GB1_STRSG_Wu_2016.csv",
+        accession="SPG1_STRSG",
+        positions=(39, 40, 41, 54),
+        parent_residues="VDGV",
+        structure_pdb=REPO_ROOT / "workers" / "data" / "2QMT.pdb",
+        # Not stated in our prepared CSV. Left None rather than guessed: the dataset
+        # holds 149,360 of the 160,000 possible combinations, so roughly 6.6% of the
+        # library is simply absent rather than imputed, and absent is not the same
+        # problem as silently model-filled.
+        published_optimum=None,
+        published_measured_count=None,
+        published_imputed_count=None,
+        provenance_note=(
+            "This prepared CSV carries 149,360 of 160,000 combinations and no "
+            "provenance column. Missing combinations are absent from the eligible "
+            "universe rather than imputed into it, but the measured/imputed split of "
+            "what IS present is unverified."
+        ),
+    ),
+}
+
+ACTIVE_LIBRARY: LibrarySpec = LIBRARIES["trpb"]
+
+
+def configure_library(key: str) -> LibrarySpec:
+    """
+    Points the module's encoders and defaults at one library. Call before load_universe.
+
+    Reassigns the module globals the encoders read, so a single process runs one library
+    at a time. Returns the spec so callers can report which one is active.
+    """
+    global ACTIVE_LIBRARY, DEFAULT_DATASET, PARENT_ACCESSION, PARENT_METADATA_JSON
+    global STRUCTURE_PDB, ACTIVE_SITE_POSITIONS, PARENT_RESIDUES
+    global PUBLISHED_MEASURED_COUNT, PUBLISHED_IMPUTED_COUNT, PUBLISHED_GLOBAL_OPTIMUM
+
+    if key not in LIBRARIES:
+        raise BenchmarkError(
+            f"unknown library {key!r}; choose from {', '.join(sorted(LIBRARIES))}"
+        )
+    spec = LIBRARIES[key]
+    ACTIVE_LIBRARY = spec
+    DEFAULT_DATASET = spec.dataset
+    PARENT_ACCESSION = spec.accession
+    PARENT_METADATA_JSON = REPO_ROOT / "workers" / "data" / f"{spec.accession}.json"
+    STRUCTURE_PDB = spec.structure_pdb
+    ACTIVE_SITE_POSITIONS = spec.positions
+    PARENT_RESIDUES = spec.parent_residues
+    PUBLISHED_MEASURED_COUNT = spec.published_measured_count
+    PUBLISHED_IMPUTED_COUNT = spec.published_imputed_count
+    PUBLISHED_GLOBAL_OPTIMUM = spec.published_optimum
+    logger.info("Library: %s (%s), positions %s, parent %s",
+                spec.key, spec.label, list(spec.positions), spec.parent_residues)
+    return spec
+
+
+# ==============================================================================================
 # Errors
 # ==============================================================================================
 class BenchmarkError(RuntimeError):
@@ -351,9 +460,14 @@ def load_universe(
             provenance_detail = f"{len(imputed_lookup)} imputed ids from {source}"
         elif provenance_mode == "acknowledge-unflagged":
             provenance_status = "UNVERIFIED_INCLUDES_IMPUTED"
+            # The imputed count is library-specific and may be unknown, so fall back to
+            # the library's own provenance note rather than printing "None".
+            if PUBLISHED_IMPUTED_COUNT is not None:
+                caveat = f"up to {PUBLISHED_IMPUTED_COUNT} published KNN-imputed values are included"
+            else:
+                caveat = f"measured/imputed split unverified ({ACTIVE_LIBRARY.provenance_note})"
             provenance_detail = (
-                f"{source}; up to {PUBLISHED_IMPUTED_COUNT} published KNN-imputed values "
-                "are included because --provenance-mode acknowledge-unflagged was passed"
+                f"{source}; {caveat} because --provenance-mode acknowledge-unflagged was passed"
             )
         else:
             raise ProvenanceError(PROVENANCE_HELP.strip())
@@ -435,7 +549,13 @@ def load_universe(
     )
 
     best_id = max(universe.fitness, key=lambda v: universe.fitness[v])
-    if best_id != PUBLISHED_GLOBAL_OPTIMUM:
+    if PUBLISHED_GLOBAL_OPTIMUM is None:
+        # No published optimum recorded for this library, so there is nothing to check
+        # against. Log the observed best so a fitness-direction error is still visible.
+        logger.info("Global optimum in the eligible set: %s (%.4f); no published value "
+                    "on record for library %r to cross-check against.",
+                    best_id, universe.fitness[best_id], ACTIVE_LIBRARY.key)
+    elif best_id != PUBLISHED_GLOBAL_OPTIMUM:
         logger.warning(
             "Global optimum in the eligible set is %s, not the published %s. Check the dataset and "
             "the fitness direction before interpreting results.",
@@ -2556,8 +2676,13 @@ def execute(args: argparse.Namespace) -> int:
         limitations.insert(0, "SYNTHETIC RUN: values are generated, not measured. These results say "
                               "nothing about biological performance.")
     if universe.provenance_status == "UNVERIFIED_INCLUDES_IMPUTED":
-        limitations.insert(0, f"Measurement provenance is UNVERIFIED: up to {PUBLISHED_IMPUTED_COUNT} "
-                              "published KNN-imputed values may be included in the eligible set.")
+        limitations.insert(0, (
+            f"Measurement provenance is UNVERIFIED: up to {PUBLISHED_IMPUTED_COUNT} published "
+            "KNN-imputed values may be included in the eligible set."
+            if PUBLISHED_IMPUTED_COUNT is not None else
+            f"Measurement provenance is UNVERIFIED for library "
+            f"{ACTIVE_LIBRARY.key!r}: {ACTIVE_LIBRARY.provenance_note}"
+        ))
     if not unchanged:
         limitations.insert(0, "WARNING: the repository source hash changed during this run - see manifest.")
 
@@ -2750,6 +2875,11 @@ examples:
                              "live comparison is reported as SKIPPED rather than silently mocked.")
     parser.add_argument("--max-model-calls", type=int, default=50,
                         help="Hard cap on live model calls across the whole run (default: %(default)s).")
+    parser.add_argument("--library", choices=tuple(sorted(LIBRARIES)), default="trpb",
+                        help="Which saturated library to run. 'trpb' is the development "
+                             "landscape and has been extensively analysed, so results on it "
+                             "are development evidence; 'gb1' is independent and is where a "
+                             "generalisation claim has to be earned (default: %(default)s).")
     parser.add_argument("--synthetic-seed", type=int, default=7,
                         help="RNG seed for the synthetic landscape. Varying it gives "
                              "independent landscapes, which is how a policy is tested "
@@ -2809,13 +2939,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     _load_repo_dotenv()
 
-    logging.basicConfig(
+    logging.basicConfig(  # configured before configure_library so its log line is visible
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
     )
     logging.getLogger("workers").setLevel(logging.WARNING)
     logging.getLogger("controller").setLevel(logging.WARNING)
+
+    # Before anything reads a dataset, a position or a parent residue. The encoders and
+    # defaults are module globals, so this has to happen first.
+    spec = configure_library(args.library)
+    if args.dataset == str(LIBRARIES["trpb"].dataset) and args.library != "trpb":
+        # --dataset still carries the argparse default, so the user selected a library
+        # without naming a file. Point it at that library's dataset instead of silently
+        # scoring one library's variants against another's table.
+        args.dataset = str(spec.dataset)
 
     if args.smoke_test:
         # A bounded CPU run: small landscape, few seeds, short rounds, no paid calls.
