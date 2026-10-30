@@ -1,4 +1,4 @@
-﻿"""
+"""
 benchmark_panoptes_isolated.py - Standalone comparison benchmark on the TrpB landscape.
 
 Purpose:
@@ -150,6 +150,11 @@ class Universe:
     excluded_imputed: int
     duplicates_dropped: int
     synthetic: bool = False
+    # Ground truth for a planted synthetic interaction, for the TEST HARNESS only.
+    # Never read by a selector: a policy that could see this would be scored on a
+    # landscape whose answer it had been handed, which is the failure mode the
+    # synthetic landscapes exist to avoid.
+    planted_interaction: Optional[Dict[str, Any]] = None
 
     def __len__(self) -> int:
         return len(self.variant_ids)
@@ -439,7 +444,13 @@ def load_universe(
     return universe
 
 
-def build_synthetic_universe(n_variants: int = 0, seed: int = 7) -> Universe:
+def build_synthetic_universe(
+    n_variants: int = 0,
+    seed: int = 7,
+    plant_sign_epistasis: bool = False,
+    solo_penalty: float = 0.60,
+    pair_bonus: float = 1.40,
+) -> Universe:
     """
     Builds a clearly-labelled SYNTHETIC four-site landscape for mechanism validation.
 
@@ -466,6 +477,34 @@ def build_synthetic_universe(n_variants: int = 0, seed: int = 7) -> Universe:
     else:
         combos = complete
 
+    # Optionally plant a SIGN-EPISTATIC pair with a known, hidden structure.
+    #
+    # Why this exists. The engine's measured weakness is conditional interactions: on
+    # TrpB, K227 has mean marginal effect -0.021 and is better than parent in only 39%
+    # of backgrounds, yet 100% of variants above 0.90 fitness carry it, because its
+    # benefit is conditional on G228. Any model fitted on marginals correctly learns
+    # "K227 is bad" and stops sampling it.
+    #
+    # Developing a fix on TrpB is unfalsifiable: we already know the answer, so a method
+    # tuned until it recovers that pair proves nothing about a landscape we have not
+    # seen. This plants an equivalent structure at a position/residue pair chosen by the
+    # generator's own RNG, so a policy can be tested on landscapes whose interaction it
+    # has never been told about. `planted` records the ground truth for the test
+    # harness; it is never placed in the Universe handed to a selector.
+    planted: Optional[Dict[str, Any]] = None
+    if plant_sign_epistasis:
+        slot_a, slot_b = rng.choice(len(ACTIVE_SITE_POSITIONS), size=2, replace=False)
+        res_a = AA_ALPHABET[int(rng.integers(len(AA_ALPHABET)))]
+        res_b = AA_ALPHABET[int(rng.integers(len(AA_ALPHABET)))]
+        planted = {
+            "slot_a": int(slot_a), "residue_a": res_a,
+            "slot_b": int(slot_b), "residue_b": res_b,
+            "position_a": ACTIVE_SITE_POSITIONS[int(slot_a)],
+            "position_b": ACTIVE_SITE_POSITIONS[int(slot_b)],
+            "solo_penalty": float(solo_penalty),
+            "pair_bonus": float(pair_bonus),
+        }
+
     ids: List[str] = []
     combo_list: List[str] = []
     scores: List[float] = []
@@ -476,6 +515,16 @@ def build_synthetic_universe(n_variants: int = 0, seed: int = 7) -> Universe:
             for j, residue_j in enumerate(combo):
                 if j > i:
                     value += pair[i, AA_INDEX[residue_i], j, AA_INDEX[residue_j]]
+        if planted is not None:
+            has_a = combo[planted["slot_a"]] == planted["residue_a"]
+            has_b = combo[planted["slot_b"]] == planted["residue_b"]
+            # Each residue alone is deleterious; together they are strongly beneficial.
+            # This is the shape of the TrpB K227/G228 effect, which makes the marginal
+            # effect of each one negative while the combination carries the optimum.
+            if has_a and has_b:
+                value += pair_bonus
+            elif has_a or has_b:
+                value -= solo_penalty
         ids.append(_canonical_variant_id(combo))
         combo_list.append(combo)
         scores.append(float(value))
@@ -499,7 +548,17 @@ def build_synthetic_universe(n_variants: int = 0, seed: int = 7) -> Universe:
             unique_variants=len(ids),
         ),
         provenance_status="SYNTHETIC_NOT_BIOLOGICAL",
-        provenance_detail="generated additive + pairwise values for mechanism validation only",
+        provenance_detail=(
+            "generated additive + pairwise values for mechanism validation only"
+            + (
+                f"; PLANTED sign epistasis at "
+                f"{planted['residue_a']}{planted['position_a']} x "
+                f"{planted['residue_b']}{planted['position_b']} "
+                f"(each alone -{solo_penalty}, together +{pair_bonus})"
+                if planted else ""
+            )
+        ),
+        planted_interaction=planted,
         excluded_imputed=0,
         duplicates_dropped=0,
         synthetic=True,
@@ -1238,6 +1297,7 @@ class PanoptesSelector(Selector):
         pdb_path: Optional[Path],
         call_budget: Optional[int] = None,
         qualify_threshold: Optional[float] = None,
+        probe_after_qualify: bool = False,
         ablation: str = "none",
         prior_spread: Optional[float] = None,
         ablate_components: Optional[Set[str]] = None,
@@ -1255,10 +1315,15 @@ class PanoptesSelector(Selector):
             self.notes.append(
                 f"ABLATED_COMPONENTS={','.join(sorted(self.ablate_components))}"
             )
-        if qualify_threshold is not None:
+        if qualify_threshold is not None and probe_after_qualify:
+            self.name = "panoptes_conditional_probe"
+        elif qualify_threshold is not None:
             self.name = "panoptes_qualify_then_optimize"
         else:
             self.name = "panoptes_muse" if use_live_muse else "panoptes_default"
+        # Which policy runs after qualification: deterministic conditional enumeration
+        # (True) or greedy local frontier search (False).
+        self.probe_after_qualify = bool(probe_after_qualify)
         # The ablation is NOT folded into self.name: the method registry and the
         # --methods filter both key on that name, so renaming the arm matched nothing
         # and silently ran zero seeds. It goes in the description instead.
@@ -1425,6 +1490,91 @@ class PanoptesSelector(Selector):
             self.model_calls += 1
 
     # -- selection ----------------------------------------------------------------------------
+    def _conditional_probe_batch(
+        self, n: int, view: CandidateView, revealed: RevealedState,
+    ) -> List[str]:
+        """
+        Deterministic conditional enumeration: fix the best marginal identity, then
+        ENUMERATE a second position exhaustively.
+
+        What this tests. A substitution whose benefit is conditional on another has a
+        poor MARGINAL effect, so any surrogate fitted on marginals down-weights it, so
+        it is never measured and the condition stays undiscoverable. Measured on TrpB:
+        K227 mean marginal -0.021, better than parent in 38.9% of backgrounds, present
+        in 100% of variants above 0.90 fitness.
+
+        Why enumeration and not ranking. A previous version of this reserved batch slots
+        for carriers of the best identity and then filled them BY ACQUISITION VALUE,
+        which inherited the exact preference it was meant to bypass: fixing the good
+        identity and ranking its carriers returns carriers without the conditional
+        partner. Measured: K227 sampling unchanged at 1.00%, no tail hits, t=1.21. The
+        acquisition function must be excluded from this block, not consulted by it.
+
+        Mechanism, using only this campaign's own measurements:
+          1. anchor   - the (position, residue) with the best mean observed fitness.
+          2. scan     - a second position, the one with the fewest distinct residues
+                        measured so far in the anchor's presence, so the block buys
+                        coverage where the conditional structure is least constrained.
+          3. enumerate- every residue at the scan position, holding the anchor fixed and
+                        the remaining positions at the best observed background.
+
+        This asserts no biology and names no residue: the anchor comes from measurements
+        and the scan position from a coverage count. On a 4-site library a full scan is
+        at most 20 variants, so it fits inside one batch.
+        """
+        positions = list(ACTIVE_SITE_POSITIONS)
+
+        # The whole background is the best MEASURED variant, not a per-identity mean.
+        #
+        # An earlier version picked the anchor as the (position, residue) with the best
+        # mean observed fitness. With 25 starting measurements spread over 4 x 20 = 80
+        # identities, each identity has one to three observations, so that mean is
+        # noise: on a planted-epistasis landscape the probe anchored on an arbitrary
+        # residue every round and never found the planted pair. Conditioning on an
+        # actually-measured high-fitness variant needs no per-identity estimate at all.
+        if not revealed.measured:
+            return []
+        best_id = max(revealed.measured, key=lambda v: revealed.measured[v])
+        background = view.combos.get(best_id)
+        if not background:
+            return []
+
+        # Enumerate the position with the fewest residues already measured in this
+        # background's company — the one where the conditional structure is least
+        # constrained by what we have seen.
+        seen_at: Dict[int, Set[str]] = {s: set() for s in range(len(positions))}
+        for vid in revealed.measured:
+            combo = view.combos.get(vid)
+            if not combo:
+                continue
+            # Count only variants that share most of this background, so coverage is
+            # measured in the relevant neighbourhood rather than library-wide.
+            shared = sum(1 for a, b in zip(combo, background) if a == b)
+            if shared >= len(positions) - 2:
+                for slot, residue in enumerate(combo):
+                    seen_at[slot].add(residue)
+        scan_slot = min(range(len(positions)), key=lambda s: len(seen_at[s]))
+
+        proposals: List[str] = []
+        for residue in AA_ALPHABET:
+            if residue == background[scan_slot]:
+                continue
+            combo = list(background)
+            combo[scan_slot] = residue
+            vid = _canonical_variant_id("".join(combo))
+            if vid and vid in view.index_of and vid not in revealed.measured:
+                if vid not in proposals:
+                    proposals.append(vid)
+            if len(proposals) >= n:
+                break
+        if proposals:
+            self.notes.append(
+                f"conditional probe: background {best_id or 'WT'} "
+                f"(fitness {revealed.measured[best_id]:.4f}), enumerated position "
+                f"{positions[scan_slot]} ({len(proposals)} variants)"
+            )
+        return proposals
+
     def _frontier_batch(self, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
         """
         Greedy local search around the best measured variant, for use AFTER the
@@ -1488,13 +1638,22 @@ class PanoptesSelector(Selector):
         # top-1% yield or final best fitness, which is exactly what is being tested.
         if self.qualify_threshold is not None and revealed.measured:
             if max(revealed.measured.values()) >= self.qualify_threshold:
-                frontier = self._frontier_batch(n, view, revealed)
-                if frontier:
+                # After qualification, spend the remaining budget on whichever
+                # post-qualification policy this arm is configured for.
+                second_phase = (
+                    self._conditional_probe_batch(n, view, revealed)
+                    if self.probe_after_qualify
+                    else self._frontier_batch(n, view, revealed)
+                )
+                if second_phase:
                     if not self.qualified_at_round:
                         self.qualified_at_round = round_index
-                        self.notes.append(f"qualified before round {round_index}; frontier mode")
+                        mode = "conditional-probe" if self.probe_after_qualify else "frontier"
+                        self.notes.append(
+                            f"qualified before round {round_index}; {mode} mode"
+                        )
                     self.last_batch_predictions = {}
-                    return frontier
+                    return second_phase
 
         strategy = self._strategy(round_index, revealed)
         evidence = [
@@ -2111,7 +2270,7 @@ def repository_state(ignore_prefixes: Sequence[str] = ()) -> Dict[str, Any]:
 # Orchestration
 # ==============================================================================================
 ALL_METHODS = ("random", "ridge", "random_forest", "alde", "panoptes_default", "panoptes_muse",
-               "panoptes_qualify_then_optimize")
+               "panoptes_qualify_then_optimize", "panoptes_conditional_probe")
 DEFAULT_METHODS = ("random", "ridge", "random_forest", "panoptes_default")
 
 
@@ -2194,9 +2353,15 @@ def build_selector_factories(
             else:
                 status[method] = {"status": "UNAVAILABLE", "detail": probe["reason"]}
             status[method]["probe"] = json.dumps(probe)
-        elif method in ("panoptes_default", "panoptes_muse", "panoptes_qualify_then_optimize"):
+        elif method in ("panoptes_default", "panoptes_muse",
+                        "panoptes_qualify_then_optimize", "panoptes_conditional_probe"):
             live = method == "panoptes_muse"
-            qualify = args.qualify_threshold if method == "panoptes_qualify_then_optimize" else None
+            qualify = (
+                args.qualify_threshold
+                if method in ("panoptes_qualify_then_optimize", "panoptes_conditional_probe")
+                else None
+            )
+            probe = method == "panoptes_conditional_probe"
             if live and not args.enable_live_muse:
                 status[method] = {
                     "status": "SKIPPED",
@@ -2218,12 +2383,12 @@ def build_selector_factories(
                 status[method] = {"status": "UNSUPPORTED", "detail": f"{type(exc).__name__}: {exc}"}
                 continue
             factories[method] = (
-                lambda seed, m=metadata, s=sequence, p=pdb_path, l=live, q=qualify:
+                lambda seed, m=metadata, s=sequence, p=pdb_path, l=live, q=qualify, pr=probe:
                 PanoptesSelector(seed, s, m, l, p, call_budget=args.max_model_calls,
                                  ablation=args.ablation,
                                  prior_spread=args.prior_spread,
                                  ablate_components=_parse_components(args.ablate_components),
-                                 qualify_threshold=q)
+                                 qualify_threshold=q, probe_after_qualify=pr)
             )
             detail = (
                 "production path: fetch_protein_metadata -> "
@@ -2262,7 +2427,13 @@ def execute(args: argparse.Namespace) -> int:
 
     # ---- Dataset ---------------------------------------------------------------------------
     self_checks: List[Tuple[str, bool, str]] = []
-    if args.smoke_test:
+    # A planted-epistasis run is a synthetic-landscape run by definition: there is no
+    # real dataset with an interaction we chose. Treating the flag as implying synthetic
+    # avoids the alternative, which is loading the real dataset and silently ignoring
+    # the plant.
+    use_synthetic = args.smoke_test or args.plant_sign_epistasis
+
+    if use_synthetic:
         self_checks = run_self_checks()
         failed = [name for name, passed, _ in self_checks if not passed]
         print("\nSelf-checks")
@@ -2271,7 +2442,11 @@ def execute(args: argparse.Namespace) -> int:
             print(f"  [{'PASS' if passed else 'FAIL'}] {name}" + (f"  ({detail})" if detail else ""))
         if failed:
             raise BenchmarkError(f"self-checks failed: {failed}")
-        universe = build_synthetic_universe(n_variants=args.synthetic_size, seed=7)
+        universe = build_synthetic_universe(
+            n_variants=args.synthetic_size,
+            seed=args.synthetic_seed,
+            plant_sign_epistasis=args.plant_sign_epistasis,
+        )
         logger.warning("SMOKE TEST: using a SYNTHETIC landscape. These numbers are not biology.")
     else:
         universe = load_universe(
@@ -2575,6 +2750,17 @@ examples:
                              "live comparison is reported as SKIPPED rather than silently mocked.")
     parser.add_argument("--max-model-calls", type=int, default=50,
                         help="Hard cap on live model calls across the whole run (default: %(default)s).")
+    parser.add_argument("--synthetic-seed", type=int, default=7,
+                        help="RNG seed for the synthetic landscape. Varying it gives "
+                             "independent landscapes, which is how a policy is tested "
+                             "without being tuned to one interaction (default: %(default)s).")
+    parser.add_argument("--plant-sign-epistasis", action="store_true",
+                        help="Plant a sign-epistatic residue pair in the synthetic "
+                             "landscape: each residue alone is deleterious, together "
+                             "strongly beneficial. Reproduces the structure that defeats "
+                             "marginal-fitted surrogates on TrpB, at a pair chosen by the "
+                             "generator's RNG rather than one we already know. Requires "
+                             "--synthetic-size.")
     parser.add_argument("--qualify-threshold", type=float, default=0.70,
                         help="Fitness at which panoptes_qualify_then_optimize switches from the "
                              "baseline policy to frontier search (default: %(default)s). Under "
@@ -2656,4 +2842,5 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 

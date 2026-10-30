@@ -1,4 +1,4 @@
-﻿# requirements.txt â€” Python dependencies for VeritasBio.
+# requirements.txt â€” Python dependencies for VeritasBio.
 #
 # Version ranges pin the major version to protect against breaking releases while
 # still allowing patch/minor updates. Once a clean install succeeds, generate an

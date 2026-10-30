@@ -1,4 +1,4 @@
-﻿"""
+"""
 workers/spatial_filter.py â€” 3D Spatial Distance & Steric Clash Biomechanical Filter.
 
 Purpose:

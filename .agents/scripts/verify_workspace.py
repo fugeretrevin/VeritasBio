@@ -72,7 +72,7 @@ def run_unit_tests(fast: bool = False) -> bool:
         cmd.extend(["tests.test_gatekeeper", "tests.test_diffusion_worker", "tests.test_phase5"])
         print("[INFO] Running fast test subset...")
     else:
-        cmd.extend(["discover", "tests"])
+        cmd.extend(["discover", "-s", "tests", "-t", "."])
         print("[INFO] Running full test discovery across repository...")
 
     t0 = time.time()
