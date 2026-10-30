@@ -3,7 +3,7 @@
 [![Meta AI Hackathon](https://img.shields.io/badge/Meta_Global_AI_Hackathon-2026-blue.svg)](https://lablab.ai)
 [![Llama 3.1 Powered](https://img.shields.io/badge/Llama_3.1-Strict_JSON_Priors-purple.svg)](https://llama.meta.com/)
 [![Modal GPU](https://img.shields.io/badge/Modal-NVIDIA_A10G-green.svg)](https://modal.com)
-[![Tests Passing](https://img.shields.io/badge/Tests-180%2F180_Passing-brightgreen.svg)]()
+[![Tests Passing](https://img.shields.io/badge/Tests-197%2F197_Passing-brightgreen.svg)]()
 [![Compliance](https://img.shields.io/badge/FDA_21_CFR_Part_11-Cryptographically_Verified-darkgreen.svg)]()
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)]()
 
@@ -279,9 +279,9 @@ npm --prefix web run dev
 
 ### C. Running the Complete Test Suite
 
-VeritasBio includes 180 automated unit tests across 26 test suites covering all 7 layers:
+VeritasBio includes 197 automated unit tests across 33 test suites covering all 7 layers:
 ```bash
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -t . -v
 ```
 
 ---
@@ -329,7 +329,7 @@ VeritasBio/
 ├── presentation.html       # Interactive partner deck with live economics simulator
 ├── main.py                 # Application entry point (CLI and Web Dashboard)
 ├── requirements.txt        # Production dependencies (PyTorch, Modal, Gradio, Plotly, etc.)
-└── tests/                  # 180 unit tests across 26 test suites
+└── tests/                  # 197 unit tests across 33 test suites
 ```
 
 ---

@@ -322,6 +322,23 @@ def build_strategy_user_prompt(
             directives.append(
                 f"- 3D SPATIAL GROUNDING: Proposed cluster residue pairs must be cohesive in structure PDB {pdb_id} (distance <= 13 Angstroms)."
             )
+            try:
+                from pathlib import Path
+                from workers.spatial_filter import compute_anm_hinge_residues
+                pdb_candidate = Path(__file__).resolve().parent.parent / "workers" / "data" / f"{pdb_id}.pdb"
+                if pdb_candidate.is_file():
+                    hinges = compute_anm_hinge_residues(
+                        pdb_path=pdb_candidate,
+                        cutoff_distance=12.0,
+                        top_k=8,
+                        catalytic_invariants=set(cat_pos) if cat_pos else None,
+                    )
+                    if hinges:
+                        directives.append(
+                            f"- ALLOSTERIC HINGE POSITIONS (GNM/ANM Normal Modes): Distal mechanical pivot residues {hinges} modulate global loop opening/closing dynamics."
+                        )
+            except Exception:
+                pass
 
         if directives:
             lines.append("## Target-Specific Invariant & Structural Constraints:")

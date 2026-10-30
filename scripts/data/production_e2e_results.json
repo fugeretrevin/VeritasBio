@@ -4,15 +4,15 @@
     "name": "avGFP (Green Fluorescent Protein)",
     "category": "Fluorescent Biosensor / Folding Stability",
     "benchmark_source": "Sarkisyan et al. 2016 (51,714 variants)",
-    "duration_seconds": 149.11,
+    "duration_seconds": 199.22,
     "iterations_completed": 3,
     "variants_evaluated": 40,
     "total_budget_usd": 0.5,
     "total_spent_usd": 0.012484,
     "remaining_budget_usd": 0.487516,
-    "highest_fitness_score": 1.3027,
-    "top_variant_sequence": "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTLSYGLQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLAFVTAAGITHGMDELYK",
-    "stop_reason": "Run complete (max_iterations). Total spent: $0.0125. Best fitness: 1.3027.",
+    "highest_fitness_score": 1.0293,
+    "top_variant_sequence": "MSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTLSYGLQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLTFVTAAGITHGMDELYK",
+    "stop_reason": "Run complete (max_iterations). Total spent: $0.0125. Best fitness: 1.0293.",
     "jobs_count": 3,
     "evidence_count": 40,
     "audit_blocks_count": 11,
@@ -47,7 +47,7 @@
       {
         "iteration": 1,
         "step": "strategy_complete",
-        "message": "Round 1: Strategy defined: Targeting binding pocket shell residues [64,65,68,203,206,222] while strictly preserving catalytic machinery at [66, 67] to engineer chromophore environment via combinatorial epistasis.",
+        "message": "Round 1: Strategy defined: Targeting binding pocket shell residues while strictly preserving catalytic machinery at [66, 67].",
         "remaining_budget_usd": 0.5,
         "cumulative_spent_usd": 0.0
       },
@@ -68,7 +68,7 @@
       {
         "iteration": 1,
         "step": "authorization",
-        "message": "Round 1 APPROVED: Charged $0.006242 (warm=False, ROI=6342.69)",
+        "message": "Round 1 APPROVED: Charged $0.006242 (warm=False, ROI=6722.20)",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
@@ -82,14 +82,14 @@
       {
         "iteration": 1,
         "step": "update",
-        "message": "Round 1 COMPLETED: Recorded 20 scores. Top fitness to date: 0.8801",
+        "message": "Round 1 COMPLETED: Recorded 20 scores. Top fitness to date: 0.7852",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
       {
         "iteration": 1,
         "step": "reflection_complete",
-        "message": "Round 1 Llama 3.1 Reflection: Positive outliers all share F64L on the central helix in PDB 1EMA which relieves steric congestion of the bulky F64 phenyl edge packed again...",
+        "message": "Round 1 Llama 3.1 Reflection: Positive outliers win by cooperative remodeling of the S65-Y66-G67 chromophore pocket in PDB 1EMA: F64L relieves bulky phenyl steric congest...",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
@@ -103,7 +103,7 @@
       {
         "iteration": 2,
         "step": "strategy_complete",
-        "message": "Round 2: Strategy defined: Targeting chromophore-proximal first-shell and second-shell pocket residues while strictly preserving invariant catalytic chromophore core at [66, 67]; building on validated F64L/S65T/E222A and F64L/V68L/T203A synergies to optimize steric volume, H-bond network and phenolate electrostatics for brightness.",
+        "message": "Round 2: Strategy defined: Combinatorial epistasis of chromophore-proximal shell [64,65,68] and second-shell H-bond network [203,206,222] while strictly preserving invariant chromophore residues [66,67], building on validated Round-1 beneficial substitutions F64L, S65T, T203S and E222S.",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
@@ -124,7 +124,7 @@
       {
         "iteration": 2,
         "step": "authorization",
-        "message": "Round 2 APPROVED: Charged $0.006181 (warm=False, ROI=431.73)",
+        "message": "Round 2 APPROVED: Charged $0.006181 (warm=False, ROI=103.22)",
         "remaining_budget_usd": 0.487577,
         "cumulative_spent_usd": 0.012423000000000017
       },
@@ -138,14 +138,14 @@
       {
         "iteration": 2,
         "step": "update",
-        "message": "Round 2 COMPLETED: Recorded 10 scores. Top fitness to date: 1.3027",
+        "message": "Round 2 COMPLETED: Recorded 10 scores. Top fitness to date: 0.9147",
         "remaining_budget_usd": 0.487577,
         "cumulative_spent_usd": 0.012423000000000017
       },
       {
         "iteration": 2,
         "step": "reflection_complete",
-        "message": "Round 2 Llama 3.1 Reflection: Positive outliers all share F64L on the central helix adjacent to the S65-Y66-G67 chromophore triad in PDB 1EMA. WT F64 presents a bulky aro...",
+        "message": "Round 2 Llama 3.1 Reflection: All three positive outliers share F64V which relieves steric congestion at the active-site entrance on the central helix directly packing ag...",
         "remaining_budget_usd": 0.487577,
         "cumulative_spent_usd": 0.012423000000000017
       },
@@ -159,7 +159,7 @@
       {
         "iteration": 3,
         "step": "strategy_complete",
-        "message": "Round 3: Strategy defined: Targeting binding pocket shell residues [64,65,68] and secondary pi-stacking/proton-wire shell [203,206,222] while strictly preserving invariant chromophore catalytic machinery at [66, 67] to exploit validated F64L/T203A/E222A synergy and unlock surface-allosteric folding cooperativity.",
+        "message": "Round 3: Strategy defined: Targeting binding pocket shell residues [64,65,68] while strictly preserving catalytic machinery at [66, 67], plus secondary surface stability shell [153,163,171] to unlock allosteric folding cooperativity after core convergence.",
         "remaining_budget_usd": 0.487577,
         "cumulative_spent_usd": 0.012423000000000017
       },
@@ -180,7 +180,7 @@
       {
         "iteration": 3,
         "step": "authorization",
-        "message": "Round 3 APPROVED: Charged $0.000061 (warm=True, ROI=57.13)",
+        "message": "Round 3 APPROVED: Charged $0.000061 (warm=True, ROI=263.16)",
         "remaining_budget_usd": 0.487516,
         "cumulative_spent_usd": 0.012483999999999995
       },
@@ -194,21 +194,21 @@
       {
         "iteration": 3,
         "step": "update",
-        "message": "Round 3 COMPLETED: Recorded 10 scores. Top fitness to date: 1.3027",
+        "message": "Round 3 COMPLETED: Recorded 10 scores. Top fitness to date: 1.0293",
         "remaining_budget_usd": 0.487516,
         "cumulative_spent_usd": 0.012483999999999995
       },
       {
         "iteration": 3,
         "step": "reflection_complete",
-        "message": "Round 3 Llama 3.1 Reflection: Positive outliers T203V/A206G/E222A and F64H/T203V/E222S/L outperform GP because they cooperatively remodel the chromophore cavity around S6...",
+        "message": "Round 3 Llama 3.1 Reflection: Positive outliers are driven by F64L relieving steric congestion on the central helix directly N-terminal to chromophore triad S65-Y66-G67: ...",
         "remaining_budget_usd": 0.487516,
         "cumulative_spent_usd": 0.012483999999999995
       },
       {
         "iteration": 3,
         "step": "complete",
-        "message": "Run complete (max_iterations). Total spent: $0.0125. Best fitness: 1.3027.",
+        "message": "Run complete (max_iterations). Total spent: $0.0125. Best fitness: 1.0293.",
         "remaining_budget_usd": 0.487516,
         "cumulative_spent_usd": 0.012484
       }
@@ -220,15 +220,15 @@
     "name": "TrpB Tryptophan Synthase Beta Subunit",
     "category": "Industrial Biocatalysis / Catalytic Active Site",
     "benchmark_source": "Johnston et al. 2024 (159,999 variants)",
-    "duration_seconds": 89.23,
+    "duration_seconds": 113.33,
     "iterations_completed": 3,
     "variants_evaluated": 40,
     "total_budget_usd": 0.5,
-    "total_spent_usd": 0.006364,
-    "remaining_budget_usd": 0.493636,
-    "highest_fitness_score": 7.0939,
-    "top_variant_sequence": "MKGYFGPYGGQYVPEILMGALEELEAAYEGIMKDESFWKEFNDLLRDYAGRPTPLYFARRLSEKYGARVYLKREDLLHTGAHKINNAIGQVLLAKLMGKTRIIAETGAGQHGVATATAAALFGMECVIYMGEEDTIRQKLNVERMKLLGAKVVPVKSGSRTLKDAIDEALRDWITNLQTTYYIVGSVVGPHPYPIIVRNFQKVIGEETKKQIPEKEGRLPDYIVACVGGGSNAAGIFYPFIDSGVKLIGVEAGGEGLETGKHAASLLKGKIGYLHGSKTFVLQDDWGQVQVSHSVSAGLDYSGVGPEHAYWRETGKVLYDAVTDEEALDAFIELSRLEGIIPALESSHALAYLKKINIKGKVVVVNLSGRGDKDLESVLNHPYVRERIRLEHHHHHH",
-    "stop_reason": "Run complete (max_iterations). Total spent: $0.0064. Best fitness: 7.0939.",
+    "total_spent_usd": 0.012484,
+    "remaining_budget_usd": 0.487516,
+    "highest_fitness_score": 7.1597,
+    "top_variant_sequence": "MKGYFGPYGGQYVPEILMGALEELEAAYEGIMKDESFWKEFNDLLRDYAGRPTPLYFARRLSEKYGARVYLKREDLLHTGAHKINNAIGQVLLAKLMGKTRIIAETGAGQHGVATATAAALFGMECVIYMGEEDTIRQKLNVERMKLLGAKVVPVKSGSRTLKDAIDEALRDWITNLQTTYYIIGSVVGPHPYPIIVRNFQKVIGEETKKQIPEKEGRLPDYIVACVGGGSNAAGIFYPFIDSGVKLIGVEAGGEGLETGKHAASLLKGKIGYLHGSKTFVLQDDWGQVQVSHSVSAGLDYSGVGPEHAYWRETGKVLYDAVTDEEALDAFIELSRLEGIIPALESSHALAYLKKINIKGKVVVVNLSGRGDKDLESVLNHPYVRERIRLEHHHHHH",
+    "stop_reason": "Run complete (max_iterations). Total spent: $0.0125. Best fitness: 7.1597.",
     "jobs_count": 3,
     "evidence_count": 40,
     "audit_blocks_count": 11,
@@ -284,7 +284,7 @@
       {
         "iteration": 1,
         "step": "authorization",
-        "message": "Round 1 APPROVED: Charged $0.006242 (warm=False, ROI=2398.29)",
+        "message": "Round 1 APPROVED: Charged $0.006242 (warm=False, ROI=2541.43)",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
@@ -305,7 +305,7 @@
       {
         "iteration": 1,
         "step": "reflection_complete",
-        "message": "Round 1 Llama 3.1 Reflection: Positive outliers F184L/V relieve steric congestion from the bulky WT phenyl ring gating the hydrophobic substrate entrance tunnel adjacent ...",
+        "message": "Round 1 Llama 3.1 Reflection: Positive outliers F184L/I replace bulky phenylalanine aromatic lid at the substrate entrance with branched aliphatic sidechains, relieving s...",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
@@ -319,7 +319,7 @@
       {
         "iteration": 2,
         "step": "strategy_complete",
-        "message": "Round 2: Strategy defined: Targeting substrate entrance loop residues (183, 184, 227, 228) to modulate catalytic turnover while preserving invariant PLP-binding lysine 83, building on validated synergistic F184L/S228A and branched-hydrophobic Loop-1 variants.",
+        "message": "Round 2: Strategy defined: Targeting substrate entrance loop residues (183, 184, 227, 228) to modulate catalytic turnover while preserving invariant PLP-binding lysine 83, building on validated beneficial F184L/I and S228A/G substitutions for steric decongestion and loop closure stabilization.",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
@@ -340,7 +340,7 @@
       {
         "iteration": 2,
         "step": "authorization",
-        "message": "Round 2 APPROVED: Charged $0.000061 (warm=True, ROI=74669.44)",
+        "message": "Round 2 APPROVED: Charged $0.000061 (warm=True, ROI=126728.56)",
         "remaining_budget_usd": 0.493697,
         "cumulative_spent_usd": 0.006303000000000003
       },
@@ -354,14 +354,14 @@
       {
         "iteration": 2,
         "step": "update",
-        "message": "Round 2 COMPLETED: Recorded 10 scores. Top fitness to date: 7.0939",
+        "message": "Round 2 COMPLETED: Recorded 10 scores. Top fitness to date: 7.1597",
         "remaining_budget_usd": 0.493697,
         "cumulative_spent_usd": 0.006303000000000003
       },
       {
         "iteration": 2,
         "step": "reflection_complete",
-        "message": "Round 2 Llama 3.1 Reflection: All three positive outliers share a F184V/L + S228G epistatic core that the Gaussian Process scored as neutral. Structurally, F184 is a bulk...",
+        "message": "Round 2 Llama 3.1 Reflection: All three positive outliers share a conserved epistatic core: F184I/V + S228G that the GP scored as 0.0. In PDB 8EH0, F184 projects a bulky ...",
         "remaining_budget_usd": 0.493697,
         "cumulative_spent_usd": 0.006303000000000003
       },
@@ -375,7 +375,7 @@
       {
         "iteration": 3,
         "step": "strategy_complete",
-        "message": "Round 3: Strategy defined: Refine converged substrate entrance loops 183-184 and 227-228 for steric decongestion to accommodate bulky indoles while preserving invariant PLP-binding Lys83, plus a distal surface shell to provide folding cooperativity and rescue stability of multi-mutant designs.",
+        "message": "Round 3: Strategy defined: Targeting substrate entrance loops 183-184 and 227-228 for steric decongestion and loop-closure synergy around PLP-Lys83, building on validated beneficial I183/I184/G228, plus a distal solvent-exposed surface turn to rescue folding cooperativity and stability.",
         "remaining_budget_usd": 0.493697,
         "cumulative_spent_usd": 0.006303000000000003
       },
@@ -396,37 +396,37 @@
       {
         "iteration": 3,
         "step": "authorization",
-        "message": "Round 3 APPROVED: Charged $0.000061 (warm=True, ROI=0.00)",
-        "remaining_budget_usd": 0.493636,
-        "cumulative_spent_usd": 0.006363999999999981
+        "message": "Round 3 APPROVED: Charged $0.006181 (warm=False, ROI=4274.62)",
+        "remaining_budget_usd": 0.487516,
+        "cumulative_spent_usd": 0.012483999999999995
       },
       {
         "iteration": 3,
         "step": "execution",
         "message": "Round 3: Executing ESM tensor scoring on 10 variants...",
-        "remaining_budget_usd": 0.493636,
-        "cumulative_spent_usd": 0.006363999999999981
+        "remaining_budget_usd": 0.487516,
+        "cumulative_spent_usd": 0.012483999999999995
       },
       {
         "iteration": 3,
         "step": "update",
-        "message": "Round 3 COMPLETED: Recorded 10 scores. Top fitness to date: 7.0939",
-        "remaining_budget_usd": 0.493636,
-        "cumulative_spent_usd": 0.006363999999999981
+        "message": "Round 3 COMPLETED: Recorded 10 scores. Top fitness to date: 7.1597",
+        "remaining_budget_usd": 0.487516,
+        "cumulative_spent_usd": 0.012483999999999995
       },
       {
         "iteration": 3,
         "step": "reflection_complete",
-        "message": "Round 3 Llama 3.1 Reflection: Positive outlier V183I/F184L/S228G is a synergistic hydrophobic repacking and loop-relaxation solution in the substrate entrance pocket arou...",
-        "remaining_budget_usd": 0.493636,
-        "cumulative_spent_usd": 0.006363999999999981
+        "message": "Round 3 Llama 3.1 Reflection: Positive outliers all combine F184I/L with S228G and E307A/V, revealing unpredicted epistatic remodeling of the active-site entrance cleft i...",
+        "remaining_budget_usd": 0.487516,
+        "cumulative_spent_usd": 0.012483999999999995
       },
       {
         "iteration": 3,
         "step": "complete",
-        "message": "Run complete (max_iterations). Total spent: $0.0064. Best fitness: 7.0939.",
-        "remaining_budget_usd": 0.493636,
-        "cumulative_spent_usd": 0.006364
+        "message": "Run complete (max_iterations). Total spent: $0.0125. Best fitness: 7.1597.",
+        "remaining_budget_usd": 0.487516,
+        "cumulative_spent_usd": 0.012484
       }
     ],
     "last_hypothesis": "N/A"
@@ -436,15 +436,15 @@
     "name": "Protein G (GB1 Binding Domain)",
     "category": "Binding Affinity / Epistatic Fitness Peak",
     "benchmark_source": "Wu et al. 2016 (149,361 variants)",
-    "duration_seconds": 118.5,
+    "duration_seconds": 116.45,
     "iterations_completed": 3,
     "variants_evaluated": 40,
     "total_budget_usd": 0.5,
-    "total_spent_usd": 0.012484,
-    "remaining_budget_usd": 0.487516,
-    "highest_fitness_score": 0.809,
-    "top_variant_sequence": "MTYKLILNGKTLKGETTAEGVDAATAEKVFKQYANDNGVDGEWTYDAATKTFTVTE",
-    "stop_reason": "Run complete (max_iterations). Total spent: $0.0125. Best fitness: 0.8090.",
+    "total_spent_usd": 0.006364,
+    "remaining_budget_usd": 0.493636,
+    "highest_fitness_score": 0.0442,
+    "top_variant_sequence": "MTYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGFAGEWTYDDATKTFTVTE",
+    "stop_reason": "Run complete (max_iterations). Total spent: $0.0064. Best fitness: 0.0442.",
     "jobs_count": 3,
     "evidence_count": 40,
     "audit_blocks_count": 11,
@@ -479,7 +479,7 @@
       {
         "iteration": 1,
         "step": "strategy_complete",
-        "message": "Round 1: Strategy defined: Targeting Fc-binding pocket shell residues [39,40,41,54] and distal surface helix-cap stability shell [18,19,20] while strictly preserving invariant terminal anchors [1,56].",
+        "message": "Round 1: Strategy defined: Targeting IgG Fc binding pocket shell residues [39, 40, 41, 54] while strictly preserving invariant framework anchors at [1, 56] to engineer synergistic binding via loop-strand epistasis.",
         "remaining_budget_usd": 0.5,
         "cumulative_spent_usd": 0.0
       },
@@ -500,7 +500,7 @@
       {
         "iteration": 1,
         "step": "authorization",
-        "message": "Round 1 APPROVED: Charged $0.006242 (warm=False, ROI=3425.91)",
+        "message": "Round 1 APPROVED: Charged $0.006242 (warm=False, ROI=4149.41)",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
@@ -514,14 +514,14 @@
       {
         "iteration": 1,
         "step": "update",
-        "message": "Round 1 COMPLETED: Recorded 20 scores. Top fitness to date: 0.6184",
+        "message": "Round 1 COMPLETED: Recorded 20 scores. Top fitness to date: -0.0199",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
       {
         "iteration": 1,
         "step": "reflection_complete",
-        "message": "Round 1 Llama 3.1 Reflection: Positive outlier T18A/A20G is an epistatic win in the beta2-to-alpha1 hinge of PDB 2QMT. T18 sits at the C-terminus of strand beta2 packed a...",
+        "message": "Round 1 Llama 3.1 Reflection: No positive outliers this round; surrogate predictions aligned with observations indicating no unpredicted synergistic win to exploit. All t...",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
@@ -535,7 +535,7 @@
       {
         "iteration": 2,
         "step": "strategy_complete",
-        "message": "Round 2: Strategy defined: Targeting Fc binding pocket shell [39,40,41,54] for steric and electrostatic tuning while strictly preserving invariant termini [1,56], plus helix N-cap permissive shell [18,19,20] building on validated T18A/A20G benefit (0.6184) for folding cooperativity rescue.",
+        "message": "Round 2: Strategy defined: Targeting IgG Fc binding pocket shell residues 39-41 and coupled C-terminal strand 54 while strictly preserving invariant framework anchors at [1, 56].",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
@@ -556,93 +556,93 @@
       {
         "iteration": 2,
         "step": "authorization",
-        "message": "Round 2 APPROVED: Charged $0.006181 (warm=False, ROI=213.73)",
-        "remaining_budget_usd": 0.487577,
-        "cumulative_spent_usd": 0.012423000000000017
+        "message": "Round 2 APPROVED: Charged $0.000061 (warm=True, ROI=64031.95)",
+        "remaining_budget_usd": 0.493697,
+        "cumulative_spent_usd": 0.006303000000000003
       },
       {
         "iteration": 2,
         "step": "execution",
         "message": "Round 2: Executing ESM tensor scoring on 10 variants...",
-        "remaining_budget_usd": 0.487577,
-        "cumulative_spent_usd": 0.012423000000000017
+        "remaining_budget_usd": 0.493697,
+        "cumulative_spent_usd": 0.006303000000000003
       },
       {
         "iteration": 2,
         "step": "update",
-        "message": "Round 2 COMPLETED: Recorded 10 scores. Top fitness to date: 0.6184",
-        "remaining_budget_usd": 0.487577,
-        "cumulative_spent_usd": 0.012423000000000017
+        "message": "Round 2 COMPLETED: Recorded 10 scores. Top fitness to date: 0.0442",
+        "remaining_budget_usd": 0.493697,
+        "cumulative_spent_usd": 0.006303000000000003
       },
       {
         "iteration": 2,
         "step": "reflection_complete",
-        "message": "Round 2 Llama 3.1 Reflection: In PDB 2QMT residues 18-20 form the tight beta-turn / helix N-cap loop preceding the central alpha-helix (22-37). Positive outliers T18A com...",
-        "remaining_budget_usd": 0.487577,
-        "cumulative_spent_usd": 0.012423000000000017
+        "message": "Round 2 Llama 3.1 Reflection: No positive residuals this round indicates surrogate is well-calibrated with no unpredicted synergistic wins to exploit. All three negative ...",
+        "remaining_budget_usd": 0.493697,
+        "cumulative_spent_usd": 0.006303000000000003
       },
       {
         "iteration": 3,
         "step": "strategy",
         "message": "Round 3: Formulating combinatorial search strategy...",
-        "remaining_budget_usd": 0.487577,
-        "cumulative_spent_usd": 0.012423000000000017
+        "remaining_budget_usd": 0.493697,
+        "cumulative_spent_usd": 0.006303000000000003
       },
       {
         "iteration": 3,
         "step": "strategy_complete",
-        "message": "Round 3: Strategy defined: Targeting IgG Fc binding pocket shell residues [39,40,41,54] while strictly preserving catalytic machinery at [1,56], plus a distal surface turn shell to unlock allosteric folding cooperativity building on validated T18A/A20G background.",
-        "remaining_budget_usd": 0.487577,
-        "cumulative_spent_usd": 0.012423000000000017
+        "message": "Round 3: Strategy defined: Targeting binding pocket shell residues [39,40,41,54] while strictly preserving catalytic machinery at [1, 56], plus secondary surface turn shell to unlock allosteric folding cooperativity building on validated V39F/I and D40A signals.",
+        "remaining_budget_usd": 0.493697,
+        "cumulative_spent_usd": 0.006303000000000003
       },
       {
         "iteration": 3,
         "step": "selection",
         "message": "Round 3: Sizing batch to 10 variants. Fitting GP model & evaluating Expected Improvement...",
-        "remaining_budget_usd": 0.487577,
-        "cumulative_spent_usd": 0.012423000000000017
+        "remaining_budget_usd": 0.493697,
+        "cumulative_spent_usd": 0.006303000000000003
       },
       {
         "iteration": 3,
         "step": "authorization",
         "message": "Round 3: Gatekeeper validating 10 variants & pricing batch...",
-        "remaining_budget_usd": 0.487577,
-        "cumulative_spent_usd": 0.012423000000000017
+        "remaining_budget_usd": 0.493697,
+        "cumulative_spent_usd": 0.006303000000000003
       },
       {
         "iteration": 3,
         "step": "authorization",
-        "message": "Round 3 APPROVED: Charged $0.000061 (warm=True, ROI=21125.75)",
-        "remaining_budget_usd": 0.487516,
-        "cumulative_spent_usd": 0.012483999999999995
+        "message": "Round 3 APPROVED: Charged $0.000061 (warm=True, ROI=49096.75)",
+        "remaining_budget_usd": 0.493636,
+        "cumulative_spent_usd": 0.006363999999999981
       },
       {
         "iteration": 3,
         "step": "execution",
         "message": "Round 3: Executing ESM tensor scoring on 10 variants...",
-        "remaining_budget_usd": 0.487516,
-        "cumulative_spent_usd": 0.012483999999999995
+        "remaining_budget_usd": 0.493636,
+        "cumulative_spent_usd": 0.006363999999999981
       },
       {
         "iteration": 3,
         "step": "update",
-        "message": "Round 3 COMPLETED: Recorded 10 scores. Top fitness to date: 0.8090",
-        "remaining_budget_usd": 0.487516,
-        "cumulative_spent_usd": 0.012483999999999995
+        "message": "Round 3 COMPLETED: Recorded 10 scores. Top fitness to date: 0.0442",
+        "remaining_budget_usd": 0.493636,
+        "cumulative_spent_usd": 0.006363999999999981
       },
       {
         "iteration": 3,
         "step": "reflection_complete",
-        "message": "Round 3 Llama 3.1 Reflection: Positive outliers T18A/A20G/D47A and T18A/E19D/D47A outperform because they cooperatively relieve strain at two distant hinges. T18 sits at ...",
-        "remaining_budget_usd": 0.487516,
-        "cumulative_spent_usd": 0.012483999999999995
+        "message": "Round 3 Llama 3.1 Reflection: No positive residuals this round; surrogate correctly captured additive landscape with no synergistic wins to exploit. All three negative ou...",
+        "remaining_budget_usd": 0.493636,
+        "cumulative_spent_usd": 0.006363999999999981
       },
       {
         "iteration": 3,
         "step": "complete",
-        "message": "Run complete (max_iterations). Total spent: $0.0125. Best fitness: 0.8090.",
-        "remaining_budget_usd": 0.487516,
-        "cumulative_spent_usd": 0.012484
+        "message": "Run complete (max_iterations). Total spent: $0.0064. Best fitness: 0.0442.",
+        "remaining_budget_usd": 0.493636,
+        "cumulative_spent_usd": 0.006364
       }
     ],
     "last_hypothesis": "N/A"
@@ -652,15 +652,15 @@
     "name": "Trastuzumab (Herceptin) CDR-H3 Fab",
     "category": "Therapeutic Biologics / Clinical Developability",
     "benchmark_source": "Mason et al. 2021 (36,391 variants)",
-    "duration_seconds": 111.21,
+    "duration_seconds": 116.82,
     "iterations_completed": 3,
     "variants_evaluated": 40,
     "total_budget_usd": 0.5,
     "total_spent_usd": 0.006364,
     "remaining_budget_usd": 0.493636,
-    "highest_fitness_score": 1.7101,
-    "top_variant_sequence": "EVQLVESGGGLVQPGGSLRLSCAASGFNIKDTYIHWVRQAPGKGLEWVARIYPTNGYTRYADSVKGRFTISADTSKNTAYLQMNSLRAEDTAVYYCSRWGGGGYYGMDYWGQGTLVTVSS",
-    "stop_reason": "Run complete (max_iterations). Total spent: $0.0064. Best fitness: 1.7101.",
+    "highest_fitness_score": 1.4498,
+    "top_variant_sequence": "EVQLVESGGGLVQPGGSLRLSCAASGFNIKDTYIHWVRQAPGKGLEWVARIYPTNGYTRYADSVKGRFTISADTSKNTAYLQMNSLRAEDTAVYYCSRWGGGGFYGADYWGQGTLVTVSS",
+    "stop_reason": "Run complete (max_iterations). Total spent: $0.0064. Best fitness: 1.4498.",
     "jobs_count": 3,
     "evidence_count": 40,
     "audit_blocks_count": 11,
@@ -695,7 +695,7 @@
       {
         "iteration": 1,
         "step": "strategy_complete",
-        "message": "Round 1: Strategy defined: Targeting CDR-H3 binding pocket shell residues 99-105 while strictly preserving catalytic machinery at [1, 2, 22, 92, 119, 120].",
+        "message": "Round 1: Strategy defined: Targeting binding pocket shell residues while strictly preserving catalytic machinery at [1, 2, 22, 92, 119, 120].",
         "remaining_budget_usd": 0.5,
         "cumulative_spent_usd": 0.0
       },
@@ -716,7 +716,7 @@
       {
         "iteration": 1,
         "step": "authorization",
-        "message": "Round 1 APPROVED: Charged $0.006242 (warm=False, ROI=4191.06)",
+        "message": "Round 1 APPROVED: Charged $0.006242 (warm=False, ROI=3619.72)",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
@@ -730,14 +730,14 @@
       {
         "iteration": 1,
         "step": "update",
-        "message": "Round 1 COMPLETED: Recorded 20 scores. Top fitness to date: 0.6301",
+        "message": "Round 1 COMPLETED: Recorded 20 scores. Top fitness to date: 0.8595",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
       {
         "iteration": 1,
         "step": "reflection_complete",
-        "message": "Round 1 Llama 3.1 Reflection: Positive outliers W99R + D102E relieve steric congestion at the CDR-H3 N-terminal stem in PDB 1N8Z: removal of the bulky W99 indole that cro...",
+        "message": "Round 1 Llama 3.1 Reflection: Positive outliers all share A106T+M107V in CDR-H3 C-terminus (PDB 1N8Z residues 99-WGGDGFYAMDY-108). A106T introduces a beta-branched hydrox...",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
@@ -751,7 +751,7 @@
       {
         "iteration": 2,
         "step": "strategy_complete",
-        "message": "Round 2: Strategy defined: Targeting CDR-H3 antigen-binding loop residues 99-105 while strictly preserving invariants [1, 2, 22, 92, 119, 120]. Building on validated beneficial W99R, G100Y, G101A, D102E to optimize electrostatic complementarity, aromatic packing and loop pre-organization for HER2 affinity.",
+        "message": "Round 2: Strategy defined: Targeting CDR-H3 binding pocket shell residues 99-108 while strictly preserving catalytic machinery at [1, 2, 22, 92, 119, 120], building on validated F104L/A106T/M107V synergy (0.8595).",
         "remaining_budget_usd": 0.493758,
         "cumulative_spent_usd": 0.006242000000000025
       },
@@ -772,7 +772,7 @@
       {
         "iteration": 2,
         "step": "authorization",
-        "message": "Round 2 APPROVED: Charged $0.000061 (warm=True, ROI=64698.70)",
+        "message": "Round 2 APPROVED: Charged $0.000061 (warm=True, ROI=3536.48)",
         "remaining_budget_usd": 0.493697,
         "cumulative_spent_usd": 0.006303000000000003
       },
@@ -786,14 +786,14 @@
       {
         "iteration": 2,
         "step": "update",
-        "message": "Round 2 COMPLETED: Recorded 10 scores. Top fitness to date: 1.4084",
+        "message": "Round 2 COMPLETED: Recorded 10 scores. Top fitness to date: 1.0479",
         "remaining_budget_usd": 0.493697,
         "cumulative_spent_usd": 0.006303000000000003
       },
       {
         "iteration": 2,
         "step": "reflection_complete",
-        "message": "Round 2 Llama 3.1 Reflection: Positive outliers all share F104Y plus neutralization of D102. F104Y is isosteric to WT Phe but adds para-hydroxyl that establishes a new hy...",
+        "message": "Round 2 Llama 3.1 Reflection: Positive outliers all share A106S + hydrophobic repacking at 104/107 and charge-neutralization at 102. In PDB 1N8Z CDR-H3 (99-WGGDGFYAMDY-10...",
         "remaining_budget_usd": 0.493697,
         "cumulative_spent_usd": 0.006303000000000003
       },
@@ -807,7 +807,7 @@
       {
         "iteration": 3,
         "step": "strategy_complete",
-        "message": "Round 3: Strategy defined: Targeting CDR-H3 binding pocket shell residues 99,102,106 while strictly preserving catalytic machinery at [1, 2, 22, 92, 119, 120], plus a secondary solvent-exposed FR2 surface shell to unlock allosteric folding cooperativity after core convergence.",
+        "message": "Round 3: Strategy defined: Targeting central CDR-H3 binding pocket shell residues 104/106/107 while preserving catalytic machinery at [1, 2, 22, 92, 119, 120], plus secondary solvent-exposed glycine-hinge shell 100/101/102 to unlock allosteric folding cooperativity based on validated F104L/A106S/M107L synergy.",
         "remaining_budget_usd": 0.493697,
         "cumulative_spent_usd": 0.006303000000000003
       },
@@ -828,7 +828,7 @@
       {
         "iteration": 3,
         "step": "authorization",
-        "message": "Round 3 APPROVED: Charged $0.000061 (warm=True, ROI=3162.30)",
+        "message": "Round 3 APPROVED: Charged $0.000061 (warm=True, ROI=11676.75)",
         "remaining_budget_usd": 0.493636,
         "cumulative_spent_usd": 0.006363999999999981
       },
@@ -842,21 +842,21 @@
       {
         "iteration": 3,
         "step": "update",
-        "message": "Round 3 COMPLETED: Recorded 10 scores. Top fitness to date: 1.7101",
+        "message": "Round 3 COMPLETED: Recorded 10 scores. Top fitness to date: 1.4498",
         "remaining_budget_usd": 0.493636,
         "cumulative_spent_usd": 0.006363999999999981
       },
       {
         "iteration": 3,
         "step": "reflection_complete",
-        "message": "Round 3 Llama 3.1 Reflection: Positive outliers share a D102G + F104Y epistatic core in the CDR-H3 apex WGGDGFY: D102G removes a buried aspartate desolvation penalty and ...",
+        "message": "Round 3 Llama 3.1 Reflection: All three positive outliers share A106G plus truncation of bulky hydrophobic bulk at 107 to A/L/V and relief of N-terminal CDR-H3 strain at ...",
         "remaining_budget_usd": 0.493636,
         "cumulative_spent_usd": 0.006363999999999981
       },
       {
         "iteration": 3,
         "step": "complete",
-        "message": "Run complete (max_iterations). Total spent: $0.0064. Best fitness: 1.7101.",
+        "message": "Run complete (max_iterations). Total spent: $0.0064. Best fitness: 1.4498.",
         "remaining_budget_usd": 0.493636,
         "cumulative_spent_usd": 0.006364
       }

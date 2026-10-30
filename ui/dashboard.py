@@ -642,7 +642,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
 
                         gr.Markdown("### Designed De Novo Binders (Biophysical & Developability Evaluation)")
                         diff_results_table = gr.Dataframe(
-                            headers=["Design ID", "Length", "Sequence", "pLDDT", "RMSD (Å)", "Rg (Å)", "Developability", "Twist USD"],
+                            headers=["Design ID", "Length", "Sequence", "Interface Contacts", "Min Dist (Å)", "Rg (Å)", "Developability", "Twist USD"],
                             datatype=["str", "number", "str", "number", "number", "number", "str", "str"],
                             interactive=False,
                             wrap=True,
@@ -1093,8 +1093,9 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                     d.design_id,
                     d.length,
                     d.sequence,
-                    f"{d.predicted_plddt:.1f}",
-                    f"{d.estimated_rmsd_to_target:.2f}",
+                    str(d.interface_contact_pairs),
+                    (f"{d.min_interface_distance_angstrom:.2f}"
+                     if d.min_interface_distance_angstrom is not None else "n/a"),
                     f"{d.radius_of_gyration:.2f}",
                     f"{d.developability_score:.2f} (0 Unpaired Cys)",
                     f"${d.synthesis_cost_usd:.2f}",
@@ -1128,7 +1129,7 @@ def create_dashboard(db_path: Optional[str] = None) -> gr.Blocks:
                 {
                     "variant_sequence": d.sequence,
                     "mutations": d.design_id,
-                    "computed_score": d.predicted_plddt / 100.0,
+                    "computed_score": d.developability_score,
                 }
                 for d in designs
             ]
