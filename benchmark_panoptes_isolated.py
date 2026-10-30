@@ -1266,7 +1266,22 @@ class PanoptesSelector(Selector):
         # cannot undo it (tanh saturates). Set per selector construction; seeds run
         # in separate processes under --parallel-seeds, so this does not race.
         import workers.math_worker as _mw
-        _mw.PRIOR_CALIBRATION_ENABLED = ablation not in ("raw-prior", "legacy")
+
+        # Honour the module default when no ablation is requested.
+        #
+        # This previously read `ablation not in ("raw-prior", "legacy")`, and `ablation`
+        # is None for an ordinary run - so `None not in (...)` is True and EVERY default
+        # run silently forced calibration ON, overriding math_worker's default of False.
+        # That is the configuration docs/545.md §2 measured as worse and reverted: a
+        # plain `--methods panoptes_default` produced 0.7165 / 33.83 against the
+        # documented 0.7462 / 45.60, reproducing the reverted arm rather than the
+        # shipped one. It also made `--prior-spread 8.0` look like an improvement when
+        # it was only loose enough to approximate the uncalibrated behaviour.
+        # Valid --prior-ablation values are ("none", "aux-weighted", "raw-prior",
+        # "legacy"). Only the two that name the prior change it; "none" and
+        # "aux-weighted" leave the shipped default in place.
+        if ablation in ("raw-prior", "legacy"):
+            _mw.PRIOR_CALIBRATION_ENABLED = False
         if prior_spread is not None:
             # An explicit spread means calibrate at that weight, overriding the
             # ablation default: this is the sweep that settles the prior's weight by
