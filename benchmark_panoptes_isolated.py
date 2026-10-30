@@ -2582,14 +2582,24 @@ def _load_repo_dotenv() -> None:
     another module's import side effect.
     """
     env_path = REPO_ROOT / ".env"
-    if not env_path.is_file():
-        return
+    if env_path.is_file():
+        try:
+            from dotenv import load_dotenv
+
+            load_dotenv(env_path, override=False)
+        except ImportError:
+            logger.debug("python-dotenv unavailable; relying on the ambient environment")
+
+    # After .env is loaded, so VERITAS_USE_OS_TRUSTSTORE can be set there, and before
+    # any live planner or Modal call. On an intercepted network, omitting this makes
+    # every live arm fail over to a mock and report as though it had run live.
     try:
-        from dotenv import load_dotenv
+        from controller.tls_trust import enable_os_trust_store
+
+        if enable_os_trust_store():
+            logger.info("TLS verification is using the OS certificate store")
     except ImportError:
-        logger.debug("python-dotenv unavailable; relying on the ambient environment")
-        return
-    load_dotenv(env_path, override=False)
+        pass
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

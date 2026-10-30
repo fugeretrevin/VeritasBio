@@ -39,6 +39,13 @@ try:
 except ImportError:
     pass
 
+# Must run before the first outbound HTTPS call. On a network that terminates TLS, the
+# Meta/Llama endpoint presents a locally-signed certificate that certifi does not trust,
+# so every planner call fails and silently falls back to the mock planner. Opt-in via
+# VERITAS_USE_OS_TRUSTSTORE=1; see controller/tls_trust.py for why it is not automatic.
+from controller.tls_trust import enable_os_trust_store
+enable_os_trust_store()
+
 from pydantic import BaseModel, Field
 
 from controller.gatekeeper import (

@@ -31,6 +31,50 @@ logger = logging.getLogger(__name__)
 # is forgeable offline by anyone with the source. When unset, signing refuses.
 PART11_SIGNATURE_SECRET = os.getenv("PART11_SIGNATURE_SECRET", "")
 
+# Secrets that were once committed to this repository and are therefore permanently
+# compromised: they remain readable in git history (commits 147d15c and b6584aa) even
+# though they are gone from the working tree, so anyone who can clone can forge a
+# signature keyed on them. Listing them here is not a disclosure - history is already
+# public - it is a revocation, so the value cannot be reinstated by accident, by an
+# old deployment script, or by a copied .env file.
+_BURNED_PART11_SECRETS = frozenset({
+    "panoptesbio-fda-part11-hmac-sha256-signature-key-2026",
+})
+
+# A signature is only as strong as its key. 32 characters is not a cryptographic
+# guarantee, it is a floor that rejects obvious placeholders like "changeme".
+_MIN_PART11_SECRET_LENGTH = 32
+
+
+def part11_secret_problem(secret: Optional[str] = None) -> Optional[str]:
+    """
+    Returns why the configured signing secret is unusable, or None if it is acceptable.
+
+    Separated from signing so that deployments can surface the problem at startup
+    rather than discovering it when an operator first tries to sign something.
+    """
+    value = PART11_SIGNATURE_SECRET if secret is None else secret
+    if not value:
+        return (
+            "PART11_SIGNATURE_SECRET is not set. Electronic signing is disabled; set it "
+            "to a high-entropy value unique to this deployment."
+        )
+    if value in _BURNED_PART11_SECRETS:
+        return (
+            "PART11_SIGNATURE_SECRET is set to a value that was previously committed to "
+            "this repository and is readable in git history. Every signature it produces "
+            "is forgeable offline by anyone who can clone the repo. Rotate it: generate a "
+            "new secret (for example `python -c \"import secrets; "
+            "print(secrets.token_urlsafe(48))\"`), set it in the environment, and treat "
+            "any signature already minted with the old key as unverified."
+        )
+    if len(value) < _MIN_PART11_SECRET_LENGTH:
+        return (
+            f"PART11_SIGNATURE_SECRET is only {len(value)} characters; at least "
+            f"{_MIN_PART11_SECRET_LENGTH} are required for an audit-grade signing key."
+        )
+    return None
+
 # Mock identities are a development convenience and must be opted into explicitly.
 # Previously `allow_mock` defaulted to True and no caller ever passed False, so any
 # token beginning `mock_token_` was accepted AND its role was parsed out of the
@@ -393,11 +437,9 @@ def create_part11_electronic_signature(
     no signature because it looks authoritative. Also refuses for identities that
     are not Part 11 certified, which includes every mock identity.
     """
-    if not PART11_SIGNATURE_SECRET:
-        raise AuthenticationError(
-            "PART11_SIGNATURE_SECRET is not configured; refusing to mint an electronic "
-            "signature. Set it in the environment to enable signing."
-        )
+    problem = part11_secret_problem()
+    if problem:
+        raise AuthenticationError(f"Refusing to mint an electronic signature: {problem}")
     if not user.is_part11_certified:
         raise AuthenticationError(
             f"Identity {user.uid!r} is not Part 11 certified (mock or unverified); "

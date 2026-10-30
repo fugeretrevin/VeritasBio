@@ -22,6 +22,15 @@ import logging
 import os
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence
 
+# Before the Modal client opens its first connection: on an intercepted network Modal's
+# TLS handshake fails against certifi and scoring falls back to the mock worker. Opt-in
+# via VERITAS_USE_OS_TRUSTSTORE=1; see controller/tls_trust.py.
+try:
+    from controller.tls_trust import enable_os_trust_store
+    enable_os_trust_store()
+except ImportError:  # keeps workers importable without the controller package
+    pass
+
 try:
     import modal
     app = modal.App("veritasbio-esm")

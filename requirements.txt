@@ -1,8 +1,16 @@
-# requirements.txt — Python dependencies for VeritasBio.
+﻿# requirements.txt â€” Python dependencies for VeritasBio.
 #
 # Version ranges pin the major version to protect against breaking releases while
 # still allowing patch/minor updates. Once a clean install succeeds, generate an
 # exact lockfile with `pip freeze > requirements.lock.txt` for reproducible builds.
+
+# --- TLS on networks that terminate HTTPS -------------------------------------
+# Some networks (corporate proxies, Norton/Kaspersky-class security suites) present a
+# locally-signed certificate that certifi does not trust, which makes every Meta/Llama
+# and Modal call fail and silently fall back to mock planning and mock scoring.
+# truststore reads trust anchors from the OS store with verification still ENABLED.
+# Opt in at runtime with VERITAS_USE_OS_TRUSTSTORE=1; see controller/tls_trust.py.
+truststore>=0.9,<1
 
 # --- Core engine: quant active learning, ledger, biophysics ---
 pydantic>=2.7,<3
@@ -33,3 +41,4 @@ firebase-admin>=6.5,<8
 # and are only needed to run real GPU inference on Modal. The full test suite and
 # the local mock pipeline run without them. Install with:
 #     pip install -r requirements-cloud.txt
+

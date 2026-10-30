@@ -214,6 +214,48 @@ class TestFirebaseAuth(unittest.TestCase):
                     errors.append(str(ctx.exception))
                 self.assertEqual(errors[0], errors[1])
 
+    def test_burned_signing_secret_is_revoked(self) -> None:
+        """
+        A secret that was once committed cannot be reinstated.
+
+        The value below is readable in this repository's git history (commits 147d15c
+        and b6584aa), so every signature keyed on it is forgeable offline by anyone who
+        can clone. Removing it from the working tree is not sufficient — an old
+        deployment script or a copied .env would silently restore it — so it is
+        explicitly revoked. Listing it here discloses nothing that history does not.
+        """
+        from controller.auth import part11_secret_problem
+
+        burned = "panoptesbio-fda-part11-hmac-sha256-signature-key-2026"
+        problem = part11_secret_problem(burned)
+        self.assertIsNotNone(problem, "the burned secret must be refused")
+        self.assertIn("git history", problem)
+
+        # Unset and obvious placeholders are refused too.
+        self.assertIsNotNone(part11_secret_problem(""))
+        self.assertIsNotNone(part11_secret_problem("changeme"))
+        # A high-entropy secret of adequate length is accepted.
+        self.assertIsNone(part11_secret_problem("k" * 48))
+
+    def test_signing_refuses_the_burned_secret(self) -> None:
+        """Signing must fail closed on a compromised key, not merely warn."""
+        import controller.auth as auth_module
+
+        user = AuthenticatedUser(
+            uid="usr_director_02", email="director2@panoptesbio.com",
+            role="lab_director", is_part11_certified=True,
+        )
+        with patch.object(
+            auth_module, "PART11_SIGNATURE_SECRET",
+            "panoptesbio-fda-part11-hmac-sha256-signature-key-2026",
+        ):
+            with self.assertRaises(AuthenticationError) as ctx:
+                create_part11_electronic_signature(
+                    user=user, action="Approval of Compute Spend",
+                    meaning="Signed with a known-compromised key",
+                )
+        self.assertIn("git history", str(ctx.exception))
+
     def test_authenticated_user_is_uncertified_unless_stated(self) -> None:
         """The model default must fail closed: omitting certification cannot grant it."""
         user = AuthenticatedUser(uid="usr_x", email="x@panoptesbio.com")
