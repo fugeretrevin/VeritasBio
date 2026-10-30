@@ -46,6 +46,14 @@ ALLOWED_TARGET_MODELS: Set[str] = {
     "mock_cascade",
     "rfdiffusion_proteinmpnn_a10g",
     "mock_diffusion",
+    # Physical measurement rather than cloud inference: the outcome of a round comes
+    # from a synthesised and assayed plate, so the batch is priced with the wet-lab
+    # DNA + robotic assay model instead of GPU seconds. See calculate_cost().
+    "wetlab_assay",
+    # A full DBTL round: ESM-2 scores the batch on GPU, then the same batch is
+    # synthesised and assayed. Both stages are really incurred, so both are charged.
+    # Pricing only the GPU understates a round by roughly five orders of magnitude.
+    "esm_triage_plus_wetlab_assay",
 }
 
 # Mutation regex: e.g. S65T or A123V
@@ -334,13 +342,41 @@ class Gatekeeper:
         target_model: str,
         current_time: Optional[float] = None,
         force_warm: Optional[bool] = None,
+        sequence_length_aa: Optional[int] = None,
     ) -> Tuple[float, bool]:
         """
         Determine execution cost in USD and whether container is warm.
 
         Formula (D3 & INNOVATION_ROADMAP Phase 1):
           Cost = (variant_count * gpu_sec_per_variant + boot_penalty) * a10g_usd_per_sec
+
+        `wetlab_assay` is priced instead with the physical DNA synthesis + robotic
+        assay model, which needs `sequence_length_aa` to compute basepairs per
+        variant. There is no container, so it is never "warm".
         """
+        if target_model in ("wetlab_assay", "esm_triage_plus_wetlab_assay"):
+            if not sequence_length_aa or sequence_length_aa <= 0:
+                raise ValueError(
+                    f"{target_model} pricing requires a positive sequence_length_aa: "
+                    "physical cost scales with the synthesised construct length."
+                )
+            breakdown = estimate_wetlab_synthesis_cost(
+                variant_count=variant_count,
+                sequence_length_aa=int(sequence_length_aa),
+            )
+            physical_usd = float(breakdown["total_wetlab_cost_usd"])
+            if target_model == "wetlab_assay":
+                return round(physical_usd, 6), False
+            # Combined round: add the GPU triage pass at the 650M rate. Recursing with
+            # the GPU model keeps one definition of GPU pricing, including cold start.
+            gpu_usd, gpu_warm = self.calculate_cost(
+                variant_count=variant_count,
+                target_model="esm2_650m",
+                current_time=current_time,
+                force_warm=force_warm,
+            )
+            return round(physical_usd + gpu_usd, 6), gpu_warm
+
         if target_model == "mock_esm":
             # Nominal synthetic cost for local/mock mode (D2)
             return self.config.mock_nominal_cost, True
@@ -467,6 +503,7 @@ class Gatekeeper:
             variant_count=variant_count,
             target_model=target_model,
             force_warm=force_warm,
+            sequence_length_aa=len(request.wildtype_sequence),
         )
         roi = self.calculate_roi(request.expected_improvements, cost_usd)
 

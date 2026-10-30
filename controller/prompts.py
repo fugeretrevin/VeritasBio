@@ -1,12 +1,12 @@
-"""
-controller/prompts.py — DOMAIN: Brains & Security (Pillar 2: Strategic Planner).
+﻿"""
+controller/prompts.py â€” DOMAIN: Brains & Security (Pillar 2: Strategic Planner).
 
 Purpose:
     System instructions and few-shot JSON templates for Meta Llama 3.1.
     The LLM consumes biological RAG context from UniProt and formulates a search
     boundary strategy targeting synergistic combinatorial residue clusters.
 
-Constraints & Invariants (ARCHITECTURE.md §3.2, §7.4; INNOVATION_ROADMAP Phase 2):
+Constraints & Invariants (ARCHITECTURE.md Â§3.2, Â§7.4; INNOVATION_ROADMAP Phase 2):
     1. Strict JSON Mode: The LLM MUST output valid JSON conforming to SearchStrategy.
        No markdown conversational prose, commentary, or pleasantries.
     2. No Math / No Code: The LLM NEVER computes fitness scores, never runs optimization,
@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -130,7 +130,7 @@ CRITICAL RULES:
    - Destructive non-conservative mutations to catalytic residues abolish enzyme turnover, ligand binding, or chromophore cyclization.
 6. 3D SPATIAL PROXIMITY CONSTRAINT:
    - Residues grouped in a cluster MUST be physically or allosterically coupled in 3D tertiary space (mean C-alpha distance <= 16 Angstroms, max distance <= 24 Angstroms).
-   - Interacting residues located within the same active-site pocket, coupled loop manifolds (e.g. entrance loops 183-184 and 227-228), substrate channels, or interacting paratope CDR loops are prime targets for combinatorial epistasis.
+   - Interacting residues located within the same active-site pocket, coupled loop manifolds such as two entrance loops that face each other across a substrate channel, substrate channels, or interacting paratope CDR loops are prime targets for combinatorial epistasis.
    - Do NOT group residues separated across opposite poles of the scaffold that share no physical coupling (> 25 to 30 Angstroms).
 7. BURIED HYDROPHOBIC CORE STABILITY:
    - Deeply buried hydrophobic core residues maintain the tertiary folding energy of the scaffold.
@@ -151,127 +151,71 @@ CRITICAL RULES:
      - Substrate Entrance Channel (4.5 to 12.0 Angstroms): prime target for steric decongestion mutations (e.g. F/W/Y -> I/V/A/L or small neutrals) that relieve substrate bottlenecks and accommodate non-natural bulky substrates while maintaining loop closure.
 """
 
+# A deliberately SYNTHETIC schema illustration.
+#
+# This example teaches the response format and nothing else. It must never describe a
+# protein the engine is benchmarked on, because a few-shot example is read as guidance:
+# the previous version used avGFP and named Ser65Thr and Thr203Tyr - the two best-known
+# enhancing mutations of that landscape - and a target-tailored branch did the same for
+# TrpB, naming three of the four residues of its published global optimum. Any campaign
+# on those targets was therefore handed most of its answer before it began.
+#
+# Rules for editing this block:
+#   - Use the placeholder accession and a generic protein description.
+#   - Use positions that correspond to no real benchmark library.
+#   - Keep suggested_chemistries to a neutral physicochemical spread, never a set
+#     chosen because those substitutions are known to work.
+# The target's real annotated sites already reach the model through the "Verified
+# Biological Context" section of the user prompt, which is derived from UniProt/PDB
+# rather than hand-written here.
 FEW_SHOT_EXAMPLE_JSON = {
-    "target_protein": "avGFP",
-    "target_accession": "P42212",
-    "hypothesis": "Focusing on the chromophore contact shell (Phe64, Ser65, Val68, Thr203) to discover synergistic variants that enhance spectral quantum yield and thermal stability while locking invariant catalytic backbone residue Gly67.",
+    "target_protein": "ExampleEnzyme (illustrative only - not a real target)",
+    "target_accession": "X00000",
+    "hypothesis": "Schema illustration: group annotated active-site contact residues into spatially coupled clusters, withhold annotated catalytic machinery, and propose a neutral physicochemical spread at each targeted position.",
     "target_clusters": [
         {
-            "cluster_id": "chromophore_core",
-            "positions": [64, 65, 68],
-            "rationale": "Direct chromophore cavity residues that dictate fluorescence excitation/emission wavelengths and chromophore maturation kinetics.",
+            "cluster_id": "primary_contact_shell",
+            "positions": [41, 42],
+            "rationale": "Annotated first-shell contact residues lining the substrate channel.",
         },
         {
-            "cluster_id": "hydrophobic_pocket",
-            "positions": [203, 206, 222],
-            "rationale": "Spatial interaction partners in contact with the internal chromophore; known to modulate green-to-yellow shifts (T203Y) and monomeric stability.",
+            "cluster_id": "opposing_loop",
+            "positions": [118, 119],
+            "rationale": "Residues on the opposing loop within van der Waals contact of the first shell.",
         },
     ],
-    "forbidden_positions": [1, 2, 67, 238],
+    "forbidden_positions": [1, 55, 150],
     "max_mutation_depth": 3,
     "mechanistic_hypotheses": [
         {
-            "pocket_name": "chromophore_contact_shell",
-            "target_residues": [64, 65, 203],
-            "mechanism": "Excited-state proton transfer (ESPT) stabilization and non-radiative decay suppression.",
-            "structural_rationale": "Residue 203 pi-stacks directly above the Tyr66 aromatic ring. Thr203Tyr creates extended pi-orbital overlap, while Phe64Leu optimizes internal barrel packing without disrupting the Gly67 backbone.",
+            "pocket_name": "substrate_channel",
+            "target_residues": [41, 42, 118, 119],
+            "mechanism": "Steric and electrostatic tuning of the substrate channel under conserved fold constraints.",
+            "structural_rationale": "The two clusters face each other across the annotated channel, so substitutions in one are expected to couple to the other. Catalytic positions are withheld rather than mutated.",
             "suggested_chemistries": {
-                "64": ["L", "M"],
-                "65": ["T", "A", "G"],
-                "203": ["Y", "F", "H"],
+                "41": ["A", "S", "D", "K", "L", "F"],
+                "42": ["A", "S", "D", "K", "L", "F"],
+                "118": ["A", "S", "D", "K", "L", "F"],
+                "119": ["A", "S", "D", "K", "L", "F"],
             },
-            "epistatic_coupling": "Cooperative synergy between position 65 maturation kinetics and 203 aromatic pi-stacking dictates fluorescence brightness.",
+            "epistatic_coupling": "Treat spatially coupled clusters as potentially epistatic and reason about combinations rather than single points.",
         }
     ],
 }
 
 
 def generate_few_shot_example(protein_metadata: Optional[Any] = None) -> Dict[str, Any]:
-    """Generates a target-tailored few-shot SearchStrategy JSON conforming strictly to schema."""
-    if protein_metadata is None:
-        return FEW_SHOT_EXAMPLE_JSON
+    """
+    Returns the synthetic schema illustration, independent of the target.
 
-    prot_name = getattr(protein_metadata, "protein_name", "TargetProtein")
-    acc = getattr(protein_metadata, "accession", "P00000")
-    cat_pos = getattr(protein_metadata, "catalytic_positions", [])
-    bind_pos = getattr(protein_metadata, "binding_positions", [])
-    length = getattr(protein_metadata, "length", 200)
-
-    # TrpB target family
-    if "trpb" in prot_name.lower() or "tryptophan synthase" in prot_name.lower() or acc in ("P50909", "TRPB_TM9D8"):
-        return {
-            "target_protein": prot_name,
-            "target_accession": acc,
-            "hypothesis": "Targeting substrate entrance loop residues (183, 184, 227, 228) to modulate catalytic turnover while preserving invariant PLP-binding lysine 83.",
-            "target_clusters": [
-                {
-                    "cluster_id": "substrate_entrance_loop_1",
-                    "positions": [183, 184],
-                    "rationale": "Active-site entrance loop gating substrate access to the PLP cofactor pocket.",
-                },
-                {
-                    "cluster_id": "substrate_entrance_loop_2",
-                    "positions": [227, 228],
-                    "rationale": "Opposing loop residues directly contacting loop 1 to stabilize the closed catalytic conformation.",
-                },
-            ],
-            "forbidden_positions": sorted(list(set([83] + cat_pos))),
-            "max_mutation_depth": 4,
-            "mechanistic_hypotheses": [
-                {
-                    "pocket_name": "substrate_entrance_loops",
-                    "target_residues": [183, 184, 227, 228],
-                    "mechanism": "Steric relief of substrate entry gate combined with compensatory loop closure stabilization.",
-                    "structural_rationale": "Phe184 sits 6.2 Angstroms from the PLP cofactor Schiff base. Mutating Phe184 to smaller branched hydrophobics (Ile/Val) eliminates steric clash with bulky indole analogs, while residue 227 on opposing Loop 2 provides compensatory van der Waals packing.",
-                    "suggested_chemistries": {
-                        "183": ["A", "V", "C"],
-                        "184": ["I", "V", "L"],
-                        "227": ["M", "L", "Q"],
-                        "228": ["G", "A", "S"],
-                    },
-                    "epistatic_coupling": "Strong positive cooperative epistasis: Loop 1 (183/184) and Loop 2 (227/228) form a dynamic lid gating catalytic turnover.",
-                }
-            ],
-        }
-
-    # General target with annotated binding pocket
-    if bind_pos and len(bind_pos) >= 2:
-        c1 = sorted(bind_pos[:min(3, len(bind_pos))])
-        c2 = sorted(bind_pos[min(3, len(bind_pos)):min(6, len(bind_pos))])
-        clusters = [
-            {
-                "cluster_id": "active_pocket_shell",
-                "positions": c1,
-                "rationale": "Substrate/cofactor binding pocket residues directly modulating active-site geometry.",
-            }
-        ]
-        if c2:
-            clusters.append({
-                "cluster_id": "pocket_interaction_network",
-                "positions": c2,
-                "rationale": "Secondary shell interacting residues modulating conformational flexibility.",
-            })
-        forbidden = sorted(list(set(cat_pos + [1, length])))
-        return {
-            "target_protein": prot_name,
-            "target_accession": acc,
-            "hypothesis": f"Targeting binding pocket shell residues while strictly preserving catalytic machinery at {cat_pos}.",
-            "target_clusters": clusters,
-            "forbidden_positions": forbidden,
-            "max_mutation_depth": 3,
-            "mechanistic_hypotheses": [
-                {
-                    "pocket_name": "active_pocket_shell",
-                    "target_residues": c1,
-                    "mechanism": "Pocket volume and electrostatic optimization for substrate binding affinity.",
-                    "structural_rationale": f"Primary shell residues {c1} directly line the active site within 5-8 Angstroms of catalytic centers {cat_pos}.",
-                    "suggested_chemistries": {str(p): ["A", "L", "S", "T"] for p in c1},
-                    "epistatic_coupling": "Direct first-shell contacts influence binding pocket geometry.",
-                }
-            ],
-        }
-
+    `protein_metadata` is accepted and ignored, for call-site compatibility. It used to
+    tailor the example to the target, which is the wrong shape for a few-shot example:
+    the model reads it as guidance, so tailoring it to the protein under study
+    pre-answers the question. The target's own annotated sites already reach the model
+    through the prompt's "Verified Biological Context" section.
+    """
     return FEW_SHOT_EXAMPLE_JSON
+
 
 
 def get_strategy_system_prompt() -> str:
@@ -363,6 +307,101 @@ def build_strategy_user_prompt(
     ])
 
     return "\n".join(lines)
+
+
+def infer_assayable_positions(
+    wt_sequence: str,
+    evidence: Optional[Sequence[Dict[str, Any]]],
+) -> List[int]:
+    """
+    Derives which positions the campaign's library actually varies, by diffing the
+    measured variant sequences against wild type.
+
+    This is observation, not configuration. A combinatorial library saturates a fixed
+    set of sites, so every measured variant differs from WT only within that set: the
+    scope is recoverable from the evidence the planner already holds, without anyone
+    hardcoding position numbers. Returns [] when there is no evidence yet, in which
+    case the caller has nothing to constrain on and should leave the search open.
+
+    Accepts rows keyed `variant_sequence` (the ledger's evidence shape).
+    """
+    if not evidence or not wt_sequence:
+        return []
+    varying: Set[int] = set()
+    for row in evidence:
+        seq = (row or {}).get("variant_sequence") or ""
+        if len(seq) != len(wt_sequence):
+            # A length-changing construct tells us nothing about substitution scope.
+            continue
+        for index, (wt_aa, mut_aa) in enumerate(zip(wt_sequence, seq), start=1):
+            if wt_aa != mut_aa:
+                varying.add(index)
+    return sorted(varying)
+
+
+def restrict_strategy_to_assayable(
+    strategy: SearchStrategy,
+    assayable_positions: Optional[Iterable[int]],
+) -> SearchStrategy:
+    """
+    Deterministically clips a SearchStrategy to positions the assay can measure.
+
+    A planner reasoning about biophysics will legitimately propose distal allosteric
+    residues, which is desirable science and unmeasurable on a library that saturates
+    only a handful of sites: those proposals are discarded downstream as
+    not_in_eligible_universe and the round's batch silently runs short. Prompt
+    guidance alone cannot guarantee compliance, so the scope is also enforced here.
+
+    Clips cluster positions, hypothesis target residues and suggested chemistries,
+    drops anything left empty, and caps mutation depth at the number of measurable
+    positions. The strategy is returned unchanged when no scope is supplied, which
+    keeps the planner unconstrained by default. Raises ValueError when the scope and
+    the strategy do not intersect at all, because silently substituting a different
+    search space would misreport what was explored.
+    """
+    if not assayable_positions:
+        return strategy
+
+    allowed = {int(p) for p in assayable_positions}
+    if not allowed:
+        return strategy
+
+    clipped_clusters = []
+    for cluster in strategy.target_clusters:
+        kept = [p for p in cluster.positions if p in allowed]
+        if kept:
+            clipped_clusters.append(cluster.model_copy(update={"positions": kept}))
+
+    if not clipped_clusters:
+        raise ValueError(
+            "strategy proposes no assayable positions: "
+            f"clusters targeted {sorted({p for c in strategy.target_clusters for p in c.positions})} "
+            f"but only {sorted(allowed)} can be measured"
+        )
+
+    clipped_hypotheses = []
+    for hyp in strategy.mechanistic_hypotheses or []:
+        kept_residues = [p for p in hyp.target_residues if p in allowed]
+        if not kept_residues:
+            continue
+        kept_chem = {
+            pos: aas
+            for pos, aas in (hyp.suggested_chemistries or {}).items()
+            if str(pos).isdigit() and int(pos) in allowed
+        }
+        clipped_hypotheses.append(
+            hyp.model_copy(update={"target_residues": kept_residues, "suggested_chemistries": kept_chem})
+        )
+
+    measurable = len({p for c in clipped_clusters for p in c.positions})
+    return strategy.model_copy(update={
+        "target_clusters": clipped_clusters,
+        "mechanistic_hypotheses": clipped_hypotheses,
+        "max_mutation_depth": max(1, min(strategy.max_mutation_depth, measurable)),
+        # Keep only forbidden positions that are actually in scope, so the selector is
+        # not handed a forbidden list referring to sites it cannot touch anyway.
+        "forbidden_positions": [p for p in strategy.forbidden_positions if p in allowed],
+    })
 
 
 def parse_strategy_response(raw_response: str, sequence_length: int) -> SearchStrategy:
@@ -526,20 +565,23 @@ def build_reflection_prompt(
     else:
         lines.append("- (No severe negative crashes this round)")
 
+    # Synthetic schema illustration, as in FEW_SHOT_EXAMPLE_JSON and for the same
+    # reason. The previous version used TrpB's own positions and recommended "184": I
+    # and "228": G - two residues of that landscape's published global optimum - in a
+    # block the model is shown on every reflection call, whatever the target.
+    # Placeholder positions here correspond to no real benchmark library.
     example_reflection = {
-        "target_protein": target_protein,
+        "target_protein": "ExampleEnzyme (illustrative only - not a real target)",
         "round_number": round_number,
-        "mechanistic_diagnosis": "Positive outlier F184I relieved steric congestion in the substrate channel, permitting S228G to relieve backbone strain without disrupting the PLP Schiff base. Negative outlier V183K placed a charged amine too close to the cofactor binding sphere, causing electrostatic repulsion.",
+        "mechanistic_diagnosis": "Schema illustration: name the specific physical mechanism behind each residual. For a positive outlier, say which strain or clash the substitution relieved and which neighbouring position that enables. For a negative outlier, say which interaction it disrupted - charge placed near a cofactor, a cavity left unfilled, a buried polar atom left unsatisfied.",
         "updated_suggested_chemistries": {
-            "184": ["I", "V"],
-            "227": ["M", "Q", "A"],
-            "228": ["G", "A"],
+            "41": ["A", "S", "L"],
+            "118": ["G", "A", "V"],
         },
         "forbidden_chemistries": {
-            "183": ["K", "R", "D", "E"],
-            "228": ["K", "R"],
+            "42": ["K", "R", "D", "E"],
         },
-        "structural_cooperativity_insight": "Loops 183-184 and 227-228 interact across an 18.9A cleft. Relaxing Loop 1 enables Loop 2 to adopt a closed catalytic conformation.",
+        "structural_cooperativity_insight": "Schema illustration: state the geometric relationship between the coupled clusters and what it implies for the next round's combinations.",
     }
 
     lines.extend([

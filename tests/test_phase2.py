@@ -58,18 +58,50 @@ class TestPhase2(unittest.TestCase):
     # 2. Prompts & Strategy Schema Tests
     # -------------------------------------------------------------------------
     def test_parse_valid_strategy_json(self):
+        """
+        Parses the shipped schema example.
+
+        Asserts against the fixture rather than against literal values: the example is
+        deliberately a synthetic, target-independent schema illustration, so pinning
+        it to a particular protein's positions would re-couple these parser tests to
+        example content and would quietly invite the leak back in.
+        """
         raw_json = json.dumps(FEW_SHOT_EXAMPLE_JSON)
         strategy = parse_strategy_response(raw_json, sequence_length=238)
-        self.assertEqual(strategy.target_protein, "avGFP")
-        self.assertEqual(len(strategy.target_clusters), 2)
-        self.assertEqual(strategy.target_clusters[0].cluster_id, "chromophore_core")
-        self.assertIn(65, strategy.target_clusters[0].positions)
+        self.assertEqual(strategy.target_protein, FEW_SHOT_EXAMPLE_JSON["target_protein"])
+        self.assertEqual(
+            len(strategy.target_clusters), len(FEW_SHOT_EXAMPLE_JSON["target_clusters"])
+        )
+        expected_first = FEW_SHOT_EXAMPLE_JSON["target_clusters"][0]
+        self.assertEqual(strategy.target_clusters[0].cluster_id, expected_first["cluster_id"])
+        self.assertIn(expected_first["positions"][0], strategy.target_clusters[0].positions)
+
+    def test_shipped_example_names_no_real_target(self):
+        """
+        The schema example must not describe a benchmarked landscape.
+
+        It is injected verbatim into the live planner prompt, so naming a real target's
+        active-site positions or its known-good substitutions hands the model the answer
+        before the campaign starts. It previously named avGFP's Ser65Thr and Thr203Tyr,
+        and a target-tailored branch named three of TrpB's four optimum residues.
+        """
+        blob = json.dumps(FEW_SHOT_EXAMPLE_JSON).lower()
+        for banned in ("avgfp", "p42212", "trpb", "tryptophan", "p50909", "tm9d8", "gfp"):
+            self.assertNotIn(banned, blob, f"schema example references real target {banned!r}")
+        positions = {
+            p for cluster in FEW_SHOT_EXAMPLE_JSON["target_clusters"] for p in cluster["positions"]
+        }
+        # The four saturated sites of the TrpB benchmark library and avGFP's chromophore
+        # shell. An example must not point the planner at either.
+        for banned_pos in (183, 184, 227, 228, 64, 65, 66, 67, 203, 206, 222):
+            self.assertNotIn(banned_pos, positions,
+                             f"schema example targets benchmarked position {banned_pos}")
 
     def test_parse_strategy_with_code_fences(self):
         # Even if LLM wraps in ```json ... ```, parser should clean it
         raw_with_fences = f"```json\n{json.dumps(FEW_SHOT_EXAMPLE_JSON)}\n```"
         strategy = parse_strategy_response(raw_with_fences, sequence_length=238)
-        self.assertEqual(strategy.target_accession, "P42212")
+        self.assertEqual(strategy.target_accession, FEW_SHOT_EXAMPLE_JSON["target_accession"])
 
     def test_parse_strategy_out_of_bounds(self):
         payload = dict(FEW_SHOT_EXAMPLE_JSON)
@@ -83,8 +115,10 @@ class TestPhase2(unittest.TestCase):
 
     def test_forbidden_position_overlap(self):
         payload = dict(FEW_SHOT_EXAMPLE_JSON)
-        # Cluster contains position 65, which is also set as forbidden
-        payload["forbidden_positions"] = [65]
+        # Forbid a position the example's own first cluster targets, taken from the
+        # fixture so this stays correct if the example changes.
+        clashing = FEW_SHOT_EXAMPLE_JSON["target_clusters"][0]["positions"][0]
+        payload["forbidden_positions"] = [clashing]
         with self.assertRaises(ValueError) as cm:
             parse_strategy_response(json.dumps(payload), sequence_length=238)
         self.assertIn("forbidden positions", str(cm.exception))

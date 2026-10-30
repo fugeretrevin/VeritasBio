@@ -28,7 +28,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Protocol, Set, Union
 
 import requests
 from requests.adapters import HTTPAdapter, Retry
@@ -57,8 +57,10 @@ from controller.prompts import (
     build_strategy_user_prompt,
     get_reflection_system_prompt,
     get_strategy_system_prompt,
+    infer_assayable_positions,
     parse_reflection_response,
     parse_strategy_response,
+    restrict_strategy_to_assayable,
 )
 from ledger import database as ledger_db
 from workers.esm_worker import score_variants_cascade, score_variants_with_provenance
@@ -308,11 +310,60 @@ class OrchestratorSummary(BaseModel):
     pocket_hops_completed: int = 0
 
 
+class OutcomeSource(Protocol):
+    """
+    Supplies step 5 outcomes: what a round actually measures.
+
+    Step 5 used to be hard-wired to `workers.esm_worker.score_variants*`, which made
+    the loop learn from ESM pseudo-likelihoods and nothing else. Any caller holding a
+    different ground truth - a measured plate, a benchmark's assay table, a CRO
+    readout - had no way to supply it, so the only way to evaluate the engine was to
+    bypass steps 4 and 5 entirely and exercise planning and selection alone.
+
+    Implementations declare:
+      engine_name:  recorded verbatim as the evidence row's `compute_engine`, so the
+                    ledger says which instrument produced each number.
+      target_model: what the Gatekeeper prices and authorises in step 4. Must be in
+                    gatekeeper.ALLOWED_TARGET_MODELS; use "wetlab_assay" for physical
+                    measurement, which is priced with the DNA + robotic assay model.
+
+    `score()` returns one finite float per input sequence, in the same order. Raising
+    marks the job failed with funds already deducted, exactly as an ESM failure does.
+    """
+
+    engine_name: str
+    target_model: str
+
+    def score(
+        self,
+        wt_sequence: str,
+        variant_sequences: List[str],
+        round_number: int,
+    ) -> List[float]:
+        ...
+
+
 class Orchestrator:
     """The 6-step unidirectional active learning engine."""
 
-    def __init__(self, config: Optional[OrchestratorConfig] = None) -> None:
+    def __init__(
+        self,
+        config: Optional[OrchestratorConfig] = None,
+        outcome_source: Optional[OutcomeSource] = None,
+        assayable_positions: Optional[Iterable[int]] = None,
+        planner: Optional[Any] = None,
+    ) -> None:
         self.config: OrchestratorConfig = config or OrchestratorConfig()
+        # When supplied, replaces ESM inference as step 5's outcome source and
+        # overrides the priced target model in step 4. None keeps the ESM path.
+        self.outcome_source: Optional[OutcomeSource] = outcome_source
+        # The positions this campaign's ordered library can actually measure. When
+        # None the planner is left unconstrained and the scope is instead inferred
+        # from accumulated evidence each round, so proposals converge on the
+        # measurable sites without any position being hardcoded.
+        self.assayable_positions: Optional[Set[int]] = (
+            {int(p) for p in assayable_positions} if assayable_positions else None
+        )
 
         # Apply campaign profile presets for optimal efficiency vs accuracy balance
         if self.config.campaign_profile == "deep_lead_optimization":
@@ -330,7 +381,11 @@ class Orchestrator:
 
         self.db_path: Optional[Path] = Path(self.config.db_path) if self.config.db_path else None
         self.gatekeeper = Gatekeeper(db_path=self.db_path)
-        self.mock_llm = MockLLMWorker()
+        # The non-live planner. Defaults to MockLLMWorker, which is scripted per target
+        # and must not be used as an evaluation baseline (see its docstring); callers
+        # that need a dataset-agnostic planner inject one here instead.
+        self.mock_llm = planner if planner is not None else MockLLMWorker()
+        self.planner_is_injected = planner is not None
         # Which planner produced the current round, and the per-round history. These
         # make a campaign auditable after the fact: a run whose live LLM calls all
         # failed over to the mock planner reads identically to a genuine live run
@@ -342,6 +397,11 @@ class Orchestrator:
         self.last_reflection: Optional[ReflectionDiagnosis] = None
         self.last_wetlab_artifacts: Optional[Dict[str, Any]] = None
         self._http_session: Optional[requests.Session] = None
+        # Provider-reported token counts, accumulated across every live model call in
+        # this campaign so cost can be reported rather than estimated.
+        self.token_usage: Dict[str, int] = {
+            "calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
+        }
 
     @property
     def http_session(self) -> requests.Session:
@@ -398,6 +458,16 @@ class Orchestrator:
                 resp = self.http_session.post(url, json=payload, headers=headers, timeout=60.0)
                 resp.raise_for_status()
                 data = resp.json()
+                # Accumulate the provider's own token counts. These were discarded, which
+                # is why every benchmark reported "token usage: unknown" and why the
+                # dollar cost of a campaign could only ever be estimated.
+                usage = data.get("usage") or {}
+                if usage:
+                    self.token_usage["calls"] += 1
+                    for field in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                        value = usage.get(field)
+                        if isinstance(value, (int, float)):
+                            self.token_usage[field] += int(value)
                 return data["choices"][0]["message"]["content"]
             except Exception as exc:
                 last_exc = exc
@@ -420,6 +490,29 @@ class Orchestrator:
         """Step 2: Obtains SearchStrategy JSON from Meta Model API or fallback Mock."""
         live_opt_in = self.config.enable_live_llm or (os.getenv("ENABLE_LIVE_LLM", "").lower() in ("true", "1"))
         api_key = os.getenv("LLAMA_API_KEY") or os.getenv("META_API_KEY")
+
+        # Two different things, deliberately not conflated:
+        #
+        # `enforced_scope` is the library that was actually ordered - a hard fact the
+        # caller supplies. Only this is clipped against, because only this is known to
+        # bound what can be measured.
+        #
+        # `scope_hint` additionally falls back to the positions observed to vary in
+        # evidence so far. That is a useful signal for the planner but a terrible
+        # constraint: early rounds have only sampled part of the library, so enforcing
+        # it would permanently lock the search into whatever round 1 happened to touch
+        # and would break pocket-hopping, whose entire purpose is to move to a cluster
+        # no evidence covers yet. It therefore informs the prompt and nothing else.
+        enforced_scope: Optional[Set[int]] = self.assayable_positions
+        scope_hint: Optional[Set[int]] = enforced_scope
+        if not scope_hint:
+            inferred = infer_assayable_positions(metadata.sequence, top_evidence)
+            scope_hint = set(inferred) if inferred else None
+        if scope_hint:
+            logger.debug(
+                "Round %d scope hint: %s (enforced=%s)",
+                round_number, sorted(scope_hint), bool(enforced_scope),
+            )
 
         # Reset per round: provenance must describe THIS round, not carry over the
         # previous one, or a single successful round would label the whole campaign live.
@@ -444,8 +537,34 @@ class Orchestrator:
                         f"Pocket 1 has converged. Shift target cluster to secondary interacting pocket "
                         f"and enable multi-point coupling (max_mutation_depth 4)."
                     )
+                if scope_hint:
+                    if enforced_scope:
+                        user_prompt += (
+                            f"\n\n[ASSAYABLE SCOPE — THIS LIBRARY MEASURES {len(scope_hint)} "
+                            f"POSITIONS]: {sorted(scope_hint)}. This is the combinatorial library "
+                            "that was ordered, so a proposal at any other position cannot be "
+                            "measured this round and will be discarded, wasting the batch. Confine "
+                            "every target cluster and mechanistic hypothesis to these positions, "
+                            "and spend your reasoning on WHICH substitutions and WHICH epistatic "
+                            "combinations to try within them. If you believe a distal allosteric "
+                            "residue matters, say so in the hypothesis rationale rather than "
+                            "placing it in a target cluster."
+                        )
+                    else:
+                        user_prompt += (
+                            f"\n\n[MEASURED SO FAR AT THESE POSITIONS]: {sorted(scope_hint)}. Every "
+                            "variant assayed to date differs from wild type only here, which "
+                            "indicates the library in hand saturates these sites. Proposals "
+                            "elsewhere may not be measurable. Prefer substitutions and epistatic "
+                            "combinations within this set unless you have a specific structural "
+                            "reason to expand it, and state that reason in the hypothesis rationale."
+                        )
                 raw_json = self._call_llama_api(sys_prompt, user_prompt)
                 strategy = parse_strategy_response(raw_json, sequence_length=metadata.length)
+                # Guarantee, not hope: prompt guidance does not bind the model. Only an
+                # explicitly declared library is enforced - see the note above on why
+                # the inferred hint must not be clipped against.
+                strategy = restrict_strategy_to_assayable(strategy, enforced_scope)
                 self.strategy_engine = model_name
                 self.strategy_engine_is_mock = False
                 return strategy
@@ -492,7 +611,10 @@ class Orchestrator:
                     epistatic_coupling="Synergistic empirical feedback bonus applied to next round",
                 )
                 strategy.mechanistic_hypotheses.append(ref_hyp)
-        return strategy
+        # The reflection merge can reintroduce out-of-scope positions, so clip after it
+        # rather than before. Applied to the mock path too: a scripted planner is no
+        # more entitled to propose unmeasurable sites than a live one.
+        return restrict_strategy_to_assayable(strategy, enforced_scope)
 
     def _generate_reflection(
         self,
@@ -895,7 +1017,12 @@ class Orchestrator:
                 current_job_id=job_id,
             )
 
-            if self.config.enable_cloud_cascade:
+            if self.outcome_source is not None:
+                # An injected outcome source decides what is actually executed, so it
+                # also decides what step 4 prices. Pricing GPU seconds for a round
+                # measured on a plate would fabricate spend in the audited ledger.
+                effective_target_model = self.outcome_source.target_model
+            elif self.config.enable_cloud_cascade:
                 effective_target_model = (
                     "mock_cascade"
                     if self.config.target_model in ("mock_esm", "mock_cascade")
@@ -949,14 +1076,33 @@ class Orchestrator:
             yield OrchestratorEvent(
                 iteration=round_num,
                 step="execution",
-                message=f"Round {round_num}: Executing ESM tensor scoring on {len(decision.mutated_sequences)} variants...",
+                message=(
+                    f"Round {round_num}: Measuring {len(decision.mutated_sequences)} variants via "
+                    f"{self.outcome_source.engine_name}..."
+                    if self.outcome_source is not None
+                    else f"Round {round_num}: Executing ESM tensor scoring on {len(decision.mutated_sequences)} variants..."
+                ),
                 remaining_budget_usd=rem_after_spend,
                 cumulative_spent_usd=spent_after_spend,
                 current_job_id=job_id,
             )
 
             try:
-                if self.config.enable_cloud_cascade:
+                if self.outcome_source is not None:
+                    sequences = list(decision.mutated_sequences or [])
+                    scores = self.outcome_source.score(
+                        wt_sequence=wt_sequence,
+                        variant_sequences=sequences,
+                        round_number=round_num,
+                    )
+                    if len(scores) != len(sequences):
+                        raise RuntimeError(
+                            f"outcome source {self.outcome_source.engine_name!r} returned "
+                            f"{len(scores)} scores for {len(sequences)} sequences"
+                        )
+                    compute_engine = self.outcome_source.engine_name
+                    results_pairs = list(zip(sequences, (float(s) for s in scores)))
+                elif self.config.enable_cloud_cascade:
                     cascade_res = score_variants_cascade(
                         wt_sequence=wt_sequence,
                         variant_sequences=decision.mutated_sequences or [],
@@ -1201,11 +1347,19 @@ class Orchestrator:
                     max_refine_count = max(40, self.config.batch_size * 2 * top_n)
                     refine_batch = all_novel_neighbors[:max_refine_count]
                     refine_job_id = f"job-refine-{int(time.time())}"
-                    refine_model = (
-                        "mock_esm"
-                        if self.config.target_model in ("mock_esm", "mock_cascade")
-                        else "esm2_650m"
-                    )
+                    if self.outcome_source is not None:
+                        # The refine sweep is measured the same way every other round is.
+                        # It previously priced as esm2_650m and called ESM directly even
+                        # when an outcome source was injected, so the polish stage scored
+                        # its candidates on a different instrument from the loop that
+                        # produced them - and charged GPU cents for a physical plate.
+                        refine_model = self.outcome_source.target_model
+                    else:
+                        refine_model = (
+                            "mock_esm"
+                            if self.config.target_model in ("mock_esm", "mock_cascade")
+                            else "esm2_650m"
+                        )
 
                     refine_req = BatchEvaluationRequest(
                         job_id=refine_job_id,
@@ -1225,19 +1379,31 @@ class Orchestrator:
                             cumulative_spent_usd=self.config.total_budget_usd - ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
                             current_job_id=refine_job_id,
                         )
-                        refine_outcome = score_variants_with_provenance(
-                            wt_sequence=wt_sequence,
-                            variant_sequences=refine_decision.mutated_sequences or [],
-                            target_model=refine_model,
-                            use_mock_fallback=self.config.allow_mock_scoring_fallback,
-                        )
-                        refine_scores = refine_outcome.scores
-                        refine_pairs = list(zip(refine_decision.mutated_sequences or [], refine_scores))
+                        refine_seqs = list(refine_decision.mutated_sequences or [])
+                        if self.outcome_source is not None:
+                            refine_scores = [
+                                float(s) for s in self.outcome_source.score(
+                                    wt_sequence=wt_sequence,
+                                    variant_sequences=refine_seqs,
+                                    round_number=round_num,
+                                )
+                            ]
+                            refine_engine = self.outcome_source.engine_name
+                        else:
+                            refine_outcome = score_variants_with_provenance(
+                                wt_sequence=wt_sequence,
+                                variant_sequences=refine_seqs,
+                                target_model=refine_model,
+                                use_mock_fallback=self.config.allow_mock_scoring_fallback,
+                            )
+                            refine_scores = list(refine_outcome.scores)
+                            refine_engine = refine_outcome.engine
+                        refine_pairs = list(zip(refine_seqs, refine_scores))
                         ledger_db.record_evidence(
                             refine_job_id,
                             refine_pairs,
                             db_path=self.db_path,
-                            compute_engine=refine_outcome.engine,
+                            compute_engine=refine_engine,
                         )
                         ledger_db.mark_job_completed(refine_job_id, db_path=self.db_path)
 
