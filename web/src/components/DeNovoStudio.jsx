@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, FileSpreadsheet, Bot, ArrowRight } from 'lucide-react';
+import { Sparkles, FileSpreadsheet, Bot } from 'lucide-react';
 import Protein3DViewer from './Protein3DViewer';
 
 export default function DeNovoStudio({
@@ -8,7 +8,6 @@ export default function DeNovoStudio({
   currentUser,
   onRefreshLedger,
   onRunComplete,
-  onNavigateTab,
 }) {
   const [targetScaffold, setTargetScaffold] = useState(
     ['SCFV_9004G_CN2', 'HER2_TRASTUZUMAB', 'P42212'].includes(targetAccession)
@@ -107,11 +106,11 @@ export default function DeNovoStudio({
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '20px', alignItems: 'start' }}>
       {/* Left Control Column */}
-      <div className="glass-panel" style={{ padding: '22px' }}>
+      <div className="glass-panel" style={{ padding: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Sparkles size={16} color="var(--text-main)" />
-            <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: 600, margin: 0, color: 'var(--text-main)' }}>
               De Novo Binder Parameters
             </h2>
           </div>
@@ -203,7 +202,6 @@ export default function DeNovoStudio({
               padding: '10px 12px',
               borderRadius: '8px',
               background: '#fef2f2',
-              border: '1px solid #fecaca',
               color: '#dc2626',
               fontSize: '12px',
               marginBottom: '14px',
@@ -250,7 +248,7 @@ export default function DeNovoStudio({
         {/* Candidates Table */}
         <div className="glass-panel" style={{ padding: '18px 20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0, color: 'var(--text-main)' }}>
               Designed Binder Candidates
             </h3>
             {generationResult?.audit_block_hash && (
@@ -282,7 +280,7 @@ export default function DeNovoStudio({
                         borderBottom: '1px solid var(--border-subtle)',
                         background:
                           selectedDesign?.design_id === design.design_id
-                            ? 'var(--bg-elevated)'
+                            ? 'var(--bg-card)'
                             : 'transparent',
                       }}
                     >
@@ -296,7 +294,7 @@ export default function DeNovoStudio({
                       <td className="mono tabular" style={{ padding: '8px' }}>
                         {design.min_interface_distance_angstrom != null
                           ? `${design.min_interface_distance_angstrom.toFixed(2)} Å`
-                          : '—'}
+                          : 'N/A'}
                       </td>
                       <td className="mono tabular" style={{ padding: '8px' }}>
                         {design.radius_of_gyration.toFixed(2)} Å

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
-import KpiBar from './components/KpiBar';
 import HomeView from './components/HomeView';
 import StudioView from './components/StudioView';
 import ExperimentsView from './components/ExperimentsView';
@@ -93,7 +92,7 @@ export default function App() {
       />
 
       {/* Main Content Container */}
-      <div style={{ maxWidth: '1400px', width: '100%', margin: '0 auto', padding: '28px 28px 64px', flex: 1 }}>
+      <div style={{ maxWidth: '1360px', width: '100%', margin: '0 auto', padding: '36px 28px 64px', flex: 1 }}>
         {/* Main Page Viewport */}
         <main>
           {activePage === 'home' && (
@@ -129,7 +128,7 @@ export default function App() {
         {/* Footer */}
         <footer
           style={{
-            marginTop: '80px',
+            marginTop: '96px',
             paddingTop: '24px',
             borderTop: '1px solid var(--border-subtle)',
             display: 'flex',

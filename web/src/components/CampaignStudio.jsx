@@ -81,10 +81,6 @@ export default function CampaignStudio({
       currentUser?.id_token ||
       (currentUser?.uid ? `panoptes_session_${currentUser.uid}` : null);
 
-    // Campaign parameters go up in a POST, which returns a single-use ticket for
-    // the SSE stream. The stream used to take the budget and batch size as GET
-    // query parameters and spend real money, so any page could start a run with
-    // an <img> tag. The GET below now carries nothing but the opaque ticket.
     let streamUrl;
     try {
       const prepareRes = await fetch('/api/campaign/prepare-stream', {
@@ -107,7 +103,7 @@ export default function CampaignStudio({
       const prepared = await prepareRes.json();
       streamUrl = prepared.stream_url;
     } catch (err) {
-      setTerminalLogs((prev) => [...prev, `✗ ${err.message}`]);
+      setTerminalLogs((prev) => [...prev, `[Error] ${err.message}`]);
       setIsRunning(false);
       return;
     }
@@ -121,7 +117,7 @@ export default function CampaignStudio({
         if (data.step === 'complete') {
           setTerminalLogs((prev) => [
             ...prev,
-            '✓ ' + (data.message || 'Optimization campaign completed.'),
+            '[Done] ' + (data.message || 'Optimization campaign completed.'),
           ]);
           if (data.top_variants) {
             setTopVariants(data.top_variants);
@@ -150,7 +146,7 @@ export default function CampaignStudio({
           if (data.step === 'reflection_complete') tag = `[R${data.iteration} · Reflection]`;
           if (data.step === 'authorization') tag = `[R${data.iteration} · Spend Gate]`;
           if (data.step === 'strategy') tag = `[R${data.iteration} · Llama Prior]`;
-          if (data.step === 'selection') tag = `[R${data.iteration} · DKL GP]`;
+          if (data.step === 'selection') tag = `[R${data.iteration} · Surrogate]`;
           if (data.step === 'execution') tag = `[R${data.iteration} · A10G Scoring]`;
 
           setTerminalLogs((prev) => [...prev, `${tag} ${data.message}${remStr}`]);
@@ -183,11 +179,11 @@ export default function CampaignStudio({
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '20px', alignItems: 'start' }}>
       {/* Left Column: Focused Search Parameters Card */}
-      <div className="glass-panel" style={{ padding: '22px' }}>
+      <div className="glass-panel" style={{ padding: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Sliders size={16} color="var(--text-main)" />
-            <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: 600, margin: 0, color: 'var(--text-main)' }}>
               Campaign Parameters
             </h2>
           </div>
@@ -278,10 +274,9 @@ export default function CampaignStudio({
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
-            padding: '10px 12px',
+            padding: '12px',
             borderRadius: '8px',
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-card)',
             marginBottom: '18px',
           }}
         >
@@ -294,10 +289,10 @@ export default function CampaignStudio({
           />
           <label htmlFor="hop_check" style={{ fontSize: '12px', cursor: 'pointer', lineHeight: 1.35 }}>
             <span style={{ fontWeight: 600, color: 'var(--text-main)', display: 'block' }}>
-              Pocket-Hopping Recombination
+              Qualify-Then-Optimize Frontier
             </span>
             <span style={{ color: 'var(--text-dim)', fontSize: '11px' }}>
-              Lock top mutations & sweep secondary shell
+              Probe unseen epistatic residues once scaffold qualifies
             </span>
           </label>
         </div>
@@ -316,7 +311,7 @@ export default function CampaignStudio({
             <button
               onClick={handleStop}
               className="btn btn-secondary"
-              style={{ padding: '11px 14px', fontSize: '13px', borderColor: '#dc2626', color: '#dc2626' }}
+              style={{ padding: '11px 14px', fontSize: '13px', color: '#dc2626' }}
             >
               Stop
             </button>
@@ -334,7 +329,7 @@ export default function CampaignStudio({
           height="320px"
         />
 
-        {/* Clean Execution Stream (No macOS Traffic Dots) */}
+        {/* Clean Execution Stream */}
         <div className="terminal-window">
           <div className="terminal-header" style={{ justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -380,7 +375,7 @@ export default function CampaignStudio({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Award size={16} color="var(--emerald-primary)" />
-                <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0, color: 'var(--text-main)' }}>
                   Discovered Lead Variants
                 </h3>
               </div>

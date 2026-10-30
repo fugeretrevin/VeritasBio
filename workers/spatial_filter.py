@@ -803,6 +803,12 @@ def compute_structural_surrogate_score(
         elif pos == 67 and mut_aa != "G" and wt_aa == "G":
             score -= 4.8
 
+    # Positions already charged for burying a formal charge. The buried-core and
+    # cofactor-shell terms describe ONE desolvation event, and both used to fire on
+    # the same substitution - V227K took -2.0 and -2.5 for a single physical cause,
+    # totalling the -4.5 that ranked the global optimum as catastrophic.
+    charge_burial_billed: Set[int] = set()
+
     # 2. Buried Core Packing Density
     buried_set = cmap.buried_core_residues if cmap.buried_core_residues else AVGFP_BURIED_CORE_RESIDUES
     for pos, wt_aa, mut_aa in parsed_tuples:
@@ -814,8 +820,16 @@ def compute_structural_surrogate_score(
                 score -= 1.5
             elif vol_delta > 50.0:
                 score -= 1.0  # core overcrowding
-            if wt_aa in "AILVMF" and mut_aa in "KRDENQ":
-                score -= 2.0  # desolvation penalty
+            # Burying a FORMAL charge (K/R/D/E) costs more than burying a
+            # neutral-polar amide (N/Q); the previous "KRDENQ" class charged both
+            # the same. Positions billed here are recorded so the cofactor-shell
+            # term below cannot charge the same desolvation event a second time.
+            if wt_aa in "AILVMF":
+                if mut_aa in "KRDE":
+                    score -= 2.0
+                    charge_burial_billed.add(pos)
+                elif mut_aa in "NQ":
+                    score -= 0.9
 
     # 3. Pairwise Epistatic Proximity Bonus & Steric Clash Penalty
     n = len(parsed_tuples)
@@ -850,8 +864,15 @@ def compute_structural_surrogate_score(
                     vol_delta = AA_VOLUMES.get(mut_aa, 120.0) - AA_VOLUMES.get(wt_aa, 120.0)
                     if vol_delta > 40.0:
                         score -= 3.5  # Steric crowding of catalytic pocket / cofactor
-                    if wt_aa in "AILVMF" and mut_aa in "KRDENQ":
-                        score -= 2.5  # Inappropriate charge introduced into catalytic pocket
+                    # One desolvation event, billed once. The buried-core term above
+                    # already charges a formal charge buried in the hydrophobic core;
+                    # a residue that is both buried AND in the cofactor shell used to
+                    # pay twice for the same cause. The incremental penalty here is
+                    # for proximity to the cofactor specifically.
+                    if wt_aa in "AILVMF" and mut_aa in "KRDE":
+                        score -= 0.9 if pos in charge_burial_billed else 2.5
+                    elif wt_aa in "AILVMF" and mut_aa in "NQ":
+                        score -= 0.4 if pos in charge_burial_billed else 1.1
                     if mut_aa == "P" and wt_aa != "P":
                         score -= 2.0  # Backbone rigidity disrupting catalytic orientation
                 # Zone 2: Entrance channel & substrate accession (4.5 A to 12.0 A)

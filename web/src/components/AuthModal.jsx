@@ -114,7 +114,7 @@ export default function AuthModal({
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(15, 23, 42, 0.35)',
+        backgroundColor: 'rgba(20, 20, 19, 0.42)',
         backdropFilter: 'blur(6px)',
         zIndex: 1000,
         display: 'flex',
@@ -129,13 +129,11 @@ export default function AuthModal({
       <div
         style={{
           width: '100%',
-          maxWidth: '480px',
+          maxWidth: '460px',
           background: 'var(--bg-elevated)',
-          borderRadius: '14px',
+          borderRadius: '16px',
           padding: '32px',
           position: 'relative',
-          border: '1px solid var(--border-subtle)',
-          boxShadow: '0 24px 48px rgba(15, 23, 42, 0.12)',
         }}
       >
         <button
@@ -157,19 +155,18 @@ export default function AuthModal({
         {mode === 'profile' && currentUser?.uid ? (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-              <ShieldCheck size={22} color="#059669" />
+              <ShieldCheck size={22} color="#0d9488" />
               <h2 className="title-display" style={{ fontSize: '21px', margin: 0, color: 'var(--text-main)' }}>
                 Operator Account
               </h2>
             </div>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-              Signed in to PanoptesBio Cloud Identity (`panoptesbio.firebaseapp.com`).
+              Signed in to PanoptesBio Cloud Identity (panoptesbio.firebaseapp.com).
             </p>
 
             <div
               style={{
                 background: 'var(--bg-card)',
-                border: '1px solid var(--border-subtle)',
                 borderRadius: '10px',
                 padding: '16px 18px',
                 marginBottom: '20px',
@@ -240,13 +237,12 @@ export default function AuthModal({
                     fontSize: '12px',
                     padding: '12px 14px',
                     borderRadius: '8px',
-                    background: '#f8fafc',
-                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-card)',
                     color: 'var(--text-main)',
                     wordBreak: 'break-all',
                   }}
                 >
-                  <div style={{ color: '#059669', fontWeight: 600, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ color: '#0d9488', fontWeight: 600, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <CheckCircle2 size={14} />
                     <span>Signed by {generatedSig.operator_email}</span>
                   </div>
@@ -290,7 +286,6 @@ export default function AuthModal({
                 padding: '4px',
                 borderRadius: '8px',
                 marginBottom: '20px',
-                border: '1px solid var(--border-subtle)',
               }}
             >
               <button
@@ -303,9 +298,9 @@ export default function AuthModal({
                   padding: '8px',
                   fontSize: '13px',
                   fontWeight: mode === 'signup' ? 600 : 500,
-                  background: mode === 'signup' ? '#ffffff' : 'transparent',
+                  background: mode === 'signup' ? 'var(--bg-elevated)' : 'transparent',
                   color: mode === 'signup' ? 'var(--text-main)' : 'var(--text-muted)',
-                  border: mode === 'signup' ? '1px solid var(--border-subtle)' : '1px solid transparent',
+                  border: 'none',
                   borderRadius: '6px',
                   cursor: 'pointer',
                 }}
@@ -322,9 +317,9 @@ export default function AuthModal({
                   padding: '8px',
                   fontSize: '13px',
                   fontWeight: mode === 'signin' ? 600 : 500,
-                  background: mode === 'signin' ? '#ffffff' : 'transparent',
+                  background: mode === 'signin' ? 'var(--bg-elevated)' : 'transparent',
                   color: mode === 'signin' ? 'var(--text-main)' : 'var(--text-muted)',
-                  border: mode === 'signin' ? '1px solid var(--border-subtle)' : '1px solid transparent',
+                  border: 'none',
                   borderRadius: '6px',
                   cursor: 'pointer',
                 }}
@@ -342,7 +337,6 @@ export default function AuthModal({
                   padding: '10px 12px',
                   borderRadius: '8px',
                   background: '#fef2f2',
-                  border: '1px solid #fecaca',
                   color: '#dc2626',
                   fontSize: '13px',
                   marginBottom: '16px',

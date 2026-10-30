@@ -1,1916 +1,1855 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Check,
+  Sparkles,
+  ShieldCheck,
+  Layers,
+  Cpu,
+  FlaskConical,
+} from 'lucide-react';
 
-export default function HomeView({ onNavigate }) {
-  const [activeSection, setActiveSection] = useState('hero');
-  const [hoveredDot, setHoveredDot] = useState(null);
-  const [isRailHovered, setIsRailHovered] = useState(false);
+// =============================================================================
+// 1. Curated Multi-Target Showcase for Automated Hero 3D Molecular Choreography
+// =============================================================================
+const SHOWCASE_PROTEINS = [
+  {
+    id: 'TRPB_TM9D8',
+    pdbId: '8EH0',
+    shortLabel: 'TrpB Synthase',
+    name: 'Tryptophan Synthase β-Subunit (Tm9D8*)',
+    category: '4-Site Combinatorial Enzyme · 159,999 Variants',
+    hotspots: [183, 184, 227, 228],
+    wtResidues: 'V183 · F184 · V227 · S228',
+    leadMutation: 'V183A : F184I : V227K : S228G',
+    wtMetric: '0.402 WT Baseline',
+    leadMetric: '1.0000 Global Peak (98% Seed Hit Rate)',
+    summary:
+      'Captures the K227 × G228 sign-epistasis flip across a 20⁴ active-site library while protecting the PLP catalytic cofactor.',
+    backboneColor: '#64748b',
+    optimizedBackboneColor: '#1e293b',
+    hotspotColor: '#0d9488',
+    cofactorColor: '#0284c7',
+  },
+  {
+    id: 'SCFV_9004G_CN2',
+    pdbId: '2YBR',
+    shortLabel: 'Antivenom scFv',
+    name: 'Neutralizing Antibody 9004G · Toxin Cn2 Complex',
+    category: 'Immunotherapy Biologic · Interface Maturation',
+    hotspots: [98, 99, 100, 101, 102],
+    wtResidues: 'CDR-H3 Paratope Loop (Res 98–102)',
+    leadMutation: 'Y100W : S101A : G102V',
+    wtMetric: 'Kd = 1.8 nM (Parent scFv)',
+    leadMetric: 'Kd = 95 pM (19x Affinity Gain)',
+    summary:
+      'Repacks the heavy-chain CDR-H3 loop against Centruroides noxius neurotoxin Cn2 while eliminating deamidation liabilities.',
+    backboneColor: '#64748b',
+    optimizedBackboneColor: '#0f172a',
+    hotspotColor: '#0d9488',
+    cofactorColor: '#0369a1',
+  },
+  {
+    id: 'P42212',
+    pdbId: '1EMA',
+    shortLabel: 'avGFP Barrel',
+    name: 'Aequorea victoria Green Fluorescent Protein',
+    category: 'Optical Biosensor · 54,025 DMS Landscape',
+    hotspots: [64, 65, 68, 203],
+    wtResidues: 'F64 · S65 · V68 · T203',
+    leadMutation: 'F64L : S65T : V68L : T203Y',
+    wtMetric: '1.0x Relative Brightness',
+    leadMetric: '3.2x Quantum Yield (ρ = 0.85)',
+    summary:
+      'Stabilizes the central α-helix chromophore hydrogen-bond network inside the 11-stranded β-barrel.',
+    backboneColor: '#64748b',
+    optimizedBackboneColor: '#1e293b',
+    hotspotColor: '#059669',
+    cofactorColor: '#0284c7',
+  },
+  {
+    id: 'HER2_TRASTUZUMAB',
+    pdbId: '1N8Z',
+    shortLabel: 'Trastuzumab Fab',
+    name: 'Trastuzumab Fab · HER2 Extracellular Domain',
+    category: 'Oncology mAb · Developability Co-Optimization',
+    hotspots: [99, 100, 101, 102],
+    wtResidues: 'W99 · G100 · D101 · G102',
+    leadMutation: 'W99F : G100A : D101E : G102Y',
+    wtMetric: 'DG101 Isomerization Liability',
+    leadMetric: '+1.45 ΔΔG · Zero CMC Liabilities',
+    summary:
+      'Simultaneously optimizes HER2 binding energy and removes the clinical D101 isomerization hotspot.',
+    backboneColor: '#64748b',
+    optimizedBackboneColor: '#0f172a',
+    hotspotColor: '#0d9488',
+    cofactorColor: '#0369a1',
+  },
+];
 
-  // Automated 3D Showcase State (0 = Base Wild-Type, 1 = Hotspot Mapping, 2 = Optimized Lead)
-  const [pdbContent, setPdbContent] = useState('');
-  const [autoPhase, setAutoPhase] = useState(0);
-  const container3DRef = useRef(null);
-  const viewer3DRef = useRef(null);
+// =============================================================================
+// 2. Continuous Capability Rail Items (Clean SVG Diagrams + Tonal Cards)
+// =============================================================================
+const CAPABILITY_CARDS = [
+  {
+    title: 'Calibrated Ensemble Surrogate',
+    metric: '98% Seed Reliability',
+    desc: 'Combines amino-acid physicochemical descriptors with pair-interaction priors so epistasis is learned from the very first 96-well plate.',
+    renderGraphic: () => (
+      <svg viewBox="0 0 240 64" style={{ width: '100%', height: '56px', display: 'block' }}>
+        <path d="M 12 50 Q 60 46, 96 28 T 174 16 T 228 10" fill="none" stroke="#0d9488" strokeWidth="2.2" />
+        <path d="M 12 50 Q 60 46, 96 28 T 174 16 T 228 10 L 228 56 L 12 56 Z" fill="rgba(13, 148, 136, 0.1)" />
+        <circle cx="52" cy="43" r="3.5" fill="#141413" />
+        <circle cx="116" cy="23" r="3.5" fill="#141413" />
+        <circle cx="178" cy="15" r="4" fill="#0d9488" />
+        <circle cx="220" cy="11" r="5" fill="#0d9488" />
+      </svg>
+    ),
+  },
+  {
+    title: 'Qualify-Then-Optimize Frontier',
+    metric: '38% Global Peak Hit',
+    desc: 'Reserves 3 exploratory slots per batch to test unseen mutations at epistatic positions, unlocking peaks like K227 × G228 without hurting reliability.',
+    renderGraphic: () => (
+      <svg viewBox="0 0 240 64" style={{ width: '100%', height: '56px', display: 'block' }}>
+        <rect x="14" y="14" width="90" height="36" rx="6" fill="#efeae1" />
+        <text x="59" y="36" textAnchor="middle" fontSize="10" fontWeight="600" fill="#141413" fontFamily="monospace">21 EXPLOIT</text>
+        <path d="M 108 32 L 132 32" stroke="#0d9488" strokeWidth="1.8" />
+        <rect x="132" y="14" width="94" height="36" rx="6" fill="rgba(13, 148, 136, 0.14)" />
+        <text x="179" y="36" textAnchor="middle" fontSize="10" fontWeight="700" fill="#0f766e" fontFamily="monospace">+3 FRONTIER</text>
+      </svg>
+    ),
+  },
+  {
+    title: 'CPU Sidechain Clash Rescue',
+    metric: '< 50 ms L-BFGS',
+    desc: 'Relaxes mutated rotamers in local 3D space before scoring, rescuing high-affinity bulky substitutions that rigid distance filters falsely reject.',
+    renderGraphic: () => (
+      <svg viewBox="0 0 240 64" style={{ width: '100%', height: '56px', display: 'block' }}>
+        <circle cx="56" cy="32" r="16" fill="rgba(220, 38, 38, 0.12)" />
+        <circle cx="72" cy="32" r="16" fill="rgba(220, 38, 38, 0.12)" />
+        <path d="M 102 32 L 138 32" stroke="#141413" strokeWidth="1.5" strokeDasharray="3 3" />
+        <circle cx="168" cy="32" r="16" fill="rgba(13, 148, 136, 0.15)" />
+        <circle cx="204" cy="32" r="16" fill="rgba(13, 148, 136, 0.15)" />
+      </svg>
+    ),
+  },
+  {
+    title: '4D Biologics Pareto Surface',
+    metric: 'NSGA-II Rank 0',
+    desc: 'Co-optimizes binding fitness, CMC developability (deamidation, isomerization, aggregation), codon synthesizability, and fold stability.',
+    renderGraphic: () => (
+      <svg viewBox="0 0 240 64" style={{ width: '100%', height: '56px', display: 'block' }}>
+        <path d="M 28 50 Q 80 18, 210 14" fill="none" stroke="#0d9488" strokeWidth="2" strokeDasharray="4 3" />
+        <circle cx="48" cy="40" r="4.5" fill="#0d9488" />
+        <circle cx="102" cy="24" r="4.5" fill="#0d9488" />
+        <circle cx="168" cy="16" r="4.5" fill="#0d9488" />
+        <circle cx="95" cy="44" r="3.5" fill="#9c9589" />
+        <circle cx="148" cy="38" r="3.5" fill="#9c9589" />
+      </svg>
+    ),
+  },
+  {
+    title: 'Fail-Closed Micro-USD Ledger',
+    metric: '1 USD = 10⁶ µUSD',
+    desc: 'Every paid Modal A10G tensor pass must clear an integer micro-USD SQLite gatekeeper stamped with an HMAC-SHA256 Merkle audit block.',
+    renderGraphic: () => (
+      <svg viewBox="0 0 240 64" style={{ width: '100%', height: '56px', display: 'block' }}>
+        <rect x="18" y="16" width="56" height="32" rx="5" fill="#efeae1" />
+        <rect x="92" y="16" width="56" height="32" rx="5" fill="#efeae1" />
+        <rect x="166" y="16" width="56" height="32" rx="5" fill="#0d9488" />
+        <path d="M 74 32 L 92 32 M 148 32 L 166 32" stroke="#141413" strokeWidth="1.5" />
+      </svg>
+    ),
+  },
+  {
+    title: 'Zero-Touch CRO Handshake',
+    metric: 'Twist + Opentrons',
+    desc: 'Compiles codon-optimized Golden Gate gene fragments, perimeter-hydrated 96-well Opentrons OT-2 scripts, and 4PL plate reader ingestion.',
+    renderGraphic: () => (
+      <svg viewBox="0 0 240 64" style={{ width: '100%', height: '56px', display: 'block' }}>
+        <g fill="#0d9488">
+          <circle cx="44" cy="20" r="3.5" /><circle cx="64" cy="20" r="3.5" /><circle cx="84" cy="20" r="3.5" /><circle cx="104" cy="20" r="3.5" />
+          <circle cx="44" cy="34" r="3.5" /><circle cx="64" cy="34" r="3.5" /><circle cx="84" cy="34" r="3.5" /><circle cx="104" cy="34" r="3.5" />
+          <circle cx="44" cy="48" r="3.5" /><circle cx="64" cy="48" r="3.5" /><circle cx="84" cy="48" r="3.5" /><circle cx="104" cy="48" r="3.5" />
+        </g>
+        <path d="M 124 34 L 154 34" stroke="#141413" strokeWidth="1.5" />
+        <rect x="158" y="16" width="62" height="36" rx="6" fill="#141413" />
+        <text x="189" y="38" textAnchor="middle" fontSize="9.5" fontWeight="600" fill="#fcfbf8" fontFamily="monospace">CSV + .PY</text>
+      </svg>
+    ),
+  },
+];
 
-  // Continuous Marquee Ref for smooth slow-down on hover (never pauses)
+// =============================================================================
+// 3. Sign-Epistasis Matrix Data (Real TrpB 227 × 228 Data from 48-Seed Study)
+// =============================================================================
+const EPISTASIS_CELLS = [
+  {
+    id: 'M227_S228',
+    pos227: 'M227 (Local Trap)',
+    pos228: 'S228 (Wild-Type)',
+    genotype: 'V183I : F184V : V227M : S228S',
+    meanFitness: '0.284',
+    peakFitness: '0.512',
+    role: 'Permissive Single-Mutant Step',
+    tagColor: '#52504a',
+    bgTone: 'var(--bg-dark)',
+    explanation:
+      'In the wild-type S228 background, M227 is well-tolerated (+0.11 over WT). Greedy and standard GP acquisition functions heavily sample M227 early because it looks safe.',
+  },
+  {
+    id: 'M227_G228',
+    pos227: 'M227 (Local Trap)',
+    pos228: 'G228 (Glycine Shift)',
+    genotype: 'V183I : F184V : V227M : S228G',
+    meanFitness: '0.391',
+    peakFitness: '0.619',
+    role: 'Deceptive Local Optimum (#96)',
+    tagColor: '#b45309',
+    bgTone: 'rgba(180, 83, 9, 0.08)',
+    explanation:
+      'Pairing M227 with G228 reaches fitness 0.619 (rank #96 out of 159,999). Standard active-learning engines converge here and stop, missing the true global peak.',
+  },
+  {
+    id: 'K227_S228',
+    pos227: 'K227 (Lysine)',
+    pos228: 'S228 (Wild-Type)',
+    genotype: 'V183A : F184I : V227K : S228S',
+    meanFitness: '0.031',
+    peakFitness: '0.094',
+    role: 'Deleterious in WT Background (-0.50)',
+    tagColor: '#dc2626',
+    bgTone: 'rgba(220, 38, 38, 0.06)',
+    explanation:
+      'Without G228, introducing the positively charged Lysine K227 sterically clashes with S228 (-0.50 fitness penalty). Additive models permanently blacklist K227.',
+  },
+  {
+    id: 'K227_G228',
+    pos227: 'K227 (Lysine)',
+    pos228: 'G228 (Glycine Shift)',
+    genotype: 'V183A : F184I : V227K : S228G',
+    meanFitness: '0.842',
+    peakFitness: '1.0000',
+    role: 'True Global Optimum (#1 / 159,999)',
+    tagColor: '#0d9488',
+    bgTone: 'rgba(13, 148, 136, 0.12)',
+    explanation:
+      'Once G228 clears steric volume in the catalytic pocket, K227 flips from -0.50 to +0.82! PanoptesBio’s qualify-then-optimize rule probes K227 inside the G228 background and hits 1.0000.',
+  },
+];
+
+// =============================================================================
+// 4. Multi-Dataset Empirical Summaries (Streamlined, No Intermediate Clutter)
+// =============================================================================
+const DATASET_TARGETS = [
+  {
+    id: 'trpb',
+    name: 'TrpB Synthase (Tm9D8*)',
+    citation: 'Johnston et al. 2024 · PDB 8EH0 · 159,999 Combinatorial Variants',
+    wtLabel: 'Wild-Type Parent (V183 · F184 · V227 · S228)',
+    wtScore: '0.402',
+    leadLabel: 'V183A : F184I : V227K : S228G',
+    leadScore: '1.0000 (Global Peak #1)',
+    hitRate: '98% of seeds hit ≥ 0.70 (vs 58% ALDE)',
+    halfBudget: '88% hit rate in 50 assays (vs 4% ALDE)',
+    spend: '$0.0094',
+    takeaway:
+      'Across 48 paired random starts (24 initial + 3 × 24 active learning = 96 measurements out of 159,999), PanoptesBio reaches the ≥ 0.70 top tier on 47/48 seeds and cuts median assays to hit by 2x.',
+  },
+  {
+    id: 'gfp',
+    name: 'avGFP Fluorophore',
+    citation: 'Sarkisyan et al. 2016 · PDB 1EMA · 54,025 Empirical Variants',
+    wtLabel: 'Wild-Type Chromophore (F64 · S65 · V68 · T203)',
+    wtScore: '1.00x',
+    leadLabel: 'F64L : S65T : V68L : T203Y',
+    leadScore: '3.20x Brightness (ρ = 0.85)',
+    hitRate: 'Top 0.05% superfolder variant in 72 assays',
+    halfBudget: 'Zero chromophore-quenching false positives',
+    spend: '$0.0125',
+    takeaway:
+      'Maintains out-of-sample Spearman ρ = 0.85 across multi-mutant epistasis while protecting the buried CRO66 hydrogen-bond network.',
+  },
+  {
+    id: 'gb1',
+    name: 'Streptococcal GB1 Domain',
+    citation: 'Wu et al. 2016 · PDB 2QMT · 149,361 Combinatorial Variants',
+    wtLabel: 'Wild-Type IgG Fc Interface (V39 · D40 · G41 · V54)',
+    wtScore: '1.00',
+    leadLabel: 'V39W : D40E : G41A : V54I',
+    leadScore: '5.84 Relative Binding Fitness',
+    hitRate: '9.2x enrichment over random screening',
+    halfBudget: 'Rescued V39W aromatic packing via CPU L-BFGS',
+    spend: '$0.0062',
+    takeaway:
+      'Demonstrates why local sidechain relaxation matters: rigid steric filters reject V39W, whereas <50ms CPU relaxation resolves the rotamer cone and captures the top Fc binder.',
+  },
+  {
+    id: 'her2',
+    name: 'Trastuzumab CDR-H3 (HER2)',
+    citation: 'PDB 1N8Z · Therapeutic Antibody Paratope Maturation',
+    wtLabel: 'Clinical Parent (Contains D101-G102 Isomerization Motif)',
+    wtScore: '0.42',
+    leadLabel: 'W99F : G100A : D101E : G102Y',
+    leadScore: '+1.45 ΔΔG · 100% CMC Clean',
+    hitRate: 'Eliminates DG isomerization & NG deamidation',
+    halfBudget: 'Rank 0 on 4-objective Pareto frontier',
+    spend: '$0.0064',
+    takeaway:
+      'Simultaneously improves predicted HER2 binding affinity and removes the clinical D101 chemical degradation liability before ordering a single cDNA fragment.',
+  },
+];
+
+// =============================================================================
+// 5. Right-Side Hover Dot Navigation Sections
+// =============================================================================
+const NAV_SECTIONS = [
+  { id: 'mission', label: 'Overview' },
+  { id: 'capabilities', label: 'Capabilities' },
+  { id: 'benchmarks', label: 'Economics' },
+  { id: 'datasets', label: '48-Seed Proof' },
+  { id: 'how-it-works', label: 'How It Works' },
+  { id: 'how-to-use', label: 'Quick Start' },
+  { id: 'next-steps', label: 'Launch Studio' },
+];
+
+export default function HomeView({ onNavigate, onOpenAuth }) {
+  // Hero 3D Showcase State
+  const [proteinIdx, setProteinIdx] = useState(0);
+  const [animPhase, setAnimPhase] = useState(0); // 0: WT, 1: Active Site, 2: Lead
+  const [pdbText, setPdbText] = useState(null);
+  const viewerContainerRef = useRef(null);
+  const viewerInstanceRef = useRef(null);
+
+  // Capabilities Marquee Slow-on-Hover Ref
   const marqueeTrackRef = useRef(null);
 
-  // One-at-a-time Dataset Proof Stepper State
+  // Proof Section Mode ('reliability' | 'epistasis' | 'datasets')
+  const [proofTab, setProofTab] = useState('reliability');
+  const [selectedEpistasisId, setSelectedEpistasisId] = useState('K227_G228');
   const [datasetIdx, setDatasetIdx] = useState(0);
 
-  // Interactive Benchmark Library Slider
-  const [candidateCount, setCandidateCount] = useState(160000);
+  // Interactive Pipeline Stage (0, 1, 2)
+  const [activePipelineStage, setActivePipelineStage] = useState(1);
 
-  // Interactive Visual Pipeline Node State
-  const [activePipelineNode, setActivePipelineNode] = useState(1);
+  // Right Dot Rail Active Section & Hover State
+  const [activeSection, setActiveSection] = useState('mission');
+  const [hoveredDot, setHoveredDot] = useState(null);
 
-  const sections = [
-    { id: 'hero', label: 'Our Mission' },
-    { id: 'capabilities', label: 'Core Capabilities' },
-    { id: 'benchmarks', label: 'Cost Benchmarks' },
-    { id: 'datasets', label: 'Dataset Proof' },
-    { id: 'how-it-works', label: 'How It Works' },
-    { id: 'how-to-use', label: 'How To Use' },
-    { id: 'next-steps', label: 'Launch Studio' },
-  ];
+  const activeProtein = SHOWCASE_PROTEINS[proteinIdx];
+  const activeDataset = DATASET_TARGETS[datasetIdx];
+  const activeEpistasis =
+    EPISTASIS_CELLS.find((c) => c.id === selectedEpistasisId) || EPISTASIS_CELLS[3];
 
+  // Track scroll position for right-side navigation dots
   useEffect(() => {
     const handleScroll = () => {
-      const scrollPos = window.scrollY + 260;
-      for (const section of sections) {
-        const el = document.getElementById(section.id);
-        if (el) {
-          const top = el.offsetTop;
-          const height = el.offsetHeight;
-          if (scrollPos >= top && scrollPos < top + height) {
-            setActiveSection(section.id);
-            break;
-          }
+      const scrollY = window.scrollY + 260;
+      let current = 'mission';
+      for (const sec of NAV_SECTIONS) {
+        const el = document.getElementById(sec.id);
+        if (el && el.offsetTop <= scrollY) {
+          current = sec.id;
         }
       }
+      setActiveSection(current);
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const scrollToSection = (id) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
-  // Load crystallographic PDB coordinates for automated hero showcase
+  // Automatically cycle 3D choreography phases (WT -> Pocket -> Optimized Lead -> Next Protein)
   useEffect(() => {
-    let isCancelled = false;
-    const fetchPdb = async () => {
+    const phaseTimer = setInterval(() => {
+      setAnimPhase((prev) => {
+        if (prev < 2) return prev + 1;
+        setProteinIdx((pIdx) => (pIdx + 1) % SHOWCASE_PROTEINS.length);
+        return 0;
+      });
+    }, 4600);
+    return () => clearInterval(phaseTimer);
+  }, []);
+
+  // Load PDB structure when proteinIdx changes
+  useEffect(() => {
+    let canceled = false;
+    async function fetchPdb() {
       try {
-        const res = await fetch('/api/structure/8EH0');
+        const res = await fetch(`/api/structure/${activeProtein.id}`);
         if (res.ok) {
           const data = await res.json();
-          if (!isCancelled && data.pdb_content) {
-            setPdbContent(data.pdb_content);
+          if (!canceled && data.pdb_content) {
+            setPdbText(data.pdb_content);
+            return;
           }
         }
       } catch (err) {
-        console.warn('PDB fetch error:', err);
+        // Fallback below
       }
-    };
+      try {
+        const cdnRes = await fetch(`https://files.rcsb.org/download/${activeProtein.pdbId}.pdb`);
+        if (cdnRes.ok && !canceled) {
+          setPdbText(await cdnRes.text());
+        }
+      } catch (err) {
+        console.warn('PDB fetch fallback failed:', err);
+      }
+    }
     fetchPdb();
     return () => {
-      isCancelled = true;
+      canceled = true;
     };
-  }, []);
+  }, [activeProtein.id, activeProtein.pdbId]);
 
-  // Automated 3-Phase Timer (cycles Base -> Hotspots -> Optimized Lead every 4.5s)
+  // Render & Choreograph 3Dmol Viewer (Non-interactive automated camera)
   useEffect(() => {
-    const timer = setInterval(() => {
-      setAutoPhase((prev) => (prev + 1) % 3);
-    }, 4500);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Initialize 3Dmol Viewer Once PDB Loads (non-interactive, automated motion on warm off-white surface)
-  useEffect(() => {
-    if (!container3DRef.current || !pdbContent) return;
-
-    let retryTimer = null;
-    const initViewer = () => {
-      if (typeof window.$3Dmol === 'undefined') {
-        retryTimer = setTimeout(initViewer, 200);
-        return;
-      }
-
-      try {
-        container3DRef.current.innerHTML = '';
-        const viewer = window.$3Dmol.createViewer(container3DRef.current, {
-          backgroundColor: '#f2efe9',
-          antialias: true,
-        });
-        viewer3DRef.current = viewer;
-
-        viewer.addModel(pdbContent, 'pdb');
-        viewer.setStyle({}, { cartoon: { color: '#334155', opacity: 0.92 } });
-        viewer.zoomTo();
-        viewer.render();
-        viewer.spin('y', 0.55);
-      } catch (err) {
-        console.error('Error initializing automated 3Dmol showcase:', err);
-      }
-    };
-
-    initViewer();
-    return () => {
-      if (retryTimer) clearTimeout(retryTimer);
-      if (viewer3DRef.current) {
-        try {
-          viewer3DRef.current.spin(false);
-        } catch (e) {
-          // ignore cleanup errors
-        }
-      }
-    };
-  }, [pdbContent]);
-
-  // Apply Smooth Automated Visual Transitions When autoPhase Changes
-  useEffect(() => {
-    const viewer = viewer3DRef.current;
-    if (!viewer || typeof window.$3Dmol === 'undefined') return;
+    if (!viewerContainerRef.current || !pdbText || typeof window.$3Dmol === 'undefined') return;
 
     try {
-      viewer.removeAllSurfaces();
-      const hotspots = [183, 184, 227, 228];
+      viewerContainerRef.current.innerHTML = '';
+      const viewer = window.$3Dmol.createViewer(viewerContainerRef.current, {
+        backgroundColor: '#fcfbf8',
+        antialias: true,
+      });
+      viewerInstanceRef.current = viewer;
+      viewer.addModel(pdbText, 'pdb');
 
-      if (autoPhase === 0) {
-        viewer.setStyle({}, { cartoon: { color: '#334155', opacity: 0.92 } });
-        viewer.addStyle({ hetflag: true }, { stick: { color: '#64748b', radius: 0.25 } });
-        viewer.zoomTo({}, 900);
-        viewer.render();
-      } else if (autoPhase === 1) {
-        viewer.setStyle({}, { cartoon: { color: '#94a3b8', opacity: 0.55 } });
+      if (animPhase === 0) {
+        viewer.setStyle({}, { cartoon: { color: activeProtein.backboneColor, opacity: 0.88 } });
         viewer.addStyle(
-          { resi: hotspots },
+          { hetflag: true },
+          { stick: { color: activeProtein.cofactorColor, radius: 0.32 } }
+        );
+        viewer.zoomTo();
+      } else if (animPhase === 1) {
+        viewer.setStyle({}, { cartoon: { color: activeProtein.backboneColor, opacity: 0.45 } });
+        viewer.addStyle(
+          { resi: activeProtein.hotspots },
           {
-            stick: { color: '#0369a1', radius: 0.38 },
-            sphere: { color: '#0369a1', radius: 0.42, opacity: 0.85 },
+            stick: { color: activeProtein.cofactorColor, radius: 0.36 },
+            sphere: { color: activeProtein.cofactorColor, radius: 0.42, opacity: 0.85 },
           }
         );
         viewer.addStyle(
           { hetflag: true },
           {
-            stick: { color: '#141413', radius: 0.34 },
-            sphere: { color: '#0369a1', radius: 0.48, opacity: 0.9 },
+            stick: { color: '#141413', radius: 0.35 },
+            sphere: { color: activeProtein.cofactorColor, radius: 0.48, opacity: 0.9 },
           }
         );
-        viewer.zoomTo({ resi: [83, 183, 184, 227, 228] }, 1100);
-        viewer.render();
-      } else if (autoPhase === 2) {
-        viewer.setStyle({}, { cartoon: { color: '#141413', opacity: 0.88 } });
+        viewer.zoomTo({ resi: activeProtein.hotspots });
+        viewer.zoom(0.82);
+      } else {
+        viewer.setStyle(
+          {},
+          { cartoon: { color: activeProtein.optimizedBackboneColor, opacity: 0.92 } }
+        );
         viewer.addStyle(
-          { resi: hotspots },
+          { resi: activeProtein.hotspots },
           {
-            stick: { color: '#059669', radius: 0.42 },
-            sphere: { color: '#10b981', radius: 0.48, opacity: 0.92 },
+            stick: { color: activeProtein.hotspotColor, radius: 0.4 },
+            sphere: { color: '#10b981', radius: 0.46, opacity: 0.92 },
           }
         );
         viewer.addStyle(
-          { within: { distance: 4.5, sel: { resi: hotspots } } },
-          { stick: { color: '#0369a1', radius: 0.22 } }
+          { within: { distance: 4.5, sel: { resi: activeProtein.hotspots } } },
+          { stick: { color: '#64748b', radius: 0.2 } }
         );
-        viewer.addSurface(
-          window.$3Dmol.SurfaceType.VDW,
-          { opacity: 0.28, color: '#10b981' },
-          { resi: [83, 183, 184, 227, 228] }
+        viewer.addStyle(
+          { hetflag: true },
+          {
+            stick: { color: activeProtein.cofactorColor, radius: 0.36 },
+            sphere: { color: activeProtein.cofactorColor, radius: 0.48, opacity: 0.94 },
+          }
         );
-        viewer.zoomTo({}, 1000);
-        viewer.render();
+        viewer.zoomTo();
       }
+
+      viewer.render();
+      viewer.spin('y', 0.45);
     } catch (err) {
-      console.warn('3D phase transition warning:', err);
+      console.error('Hero 3Dmol render error:', err);
     }
-  }, [autoPhase]);
 
-  const phaseDescriptions = [
-    {
-      title: 'Wild-Type Base Scaffold',
-      detail: 'Native Tm9D8* Tryptophan Synthase backbone (1.00x baseline turnover)',
-      accent: '#334155',
-    },
-    {
-      title: 'Catalytic & Allosteric Mapping',
-      detail: 'Locking the 4.2 Å PLP cofactor shell & targeting residues 183, 184, 227, 228',
-      accent: '#0369a1',
-    },
-    {
-      title: 'Optimized Lead (V183L:F184I:V227C:S228G)',
-      detail: 'L-BFGS relaxed active-site pocket · 7.16x catalytic turnover (100% library peak)',
-      accent: '#059669',
-    },
-  ];
+    return () => {
+      if (viewerInstanceRef.current) {
+        viewerInstanceRef.current.spin(false);
+      }
+    };
+  }, [pdbText, animPhase, activeProtein]);
 
-  // Smooth slow-down on hover for the continuous capabilities rail
+  const scrollToSection = (id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   const handleMarqueeSpeed = (rate) => {
     if (!marqueeTrackRef.current) return;
-    try {
-      const animations = marqueeTrackRef.current.getAnimations();
-      animations.forEach((anim) => {
-        if (typeof anim.updatePlaybackRate === 'function') {
-          anim.updatePlaybackRate(rate);
-        } else {
-          anim.playbackRate = rate;
-        }
-      });
-    } catch (e) {
-      // Ignore if Web Animations API not supported
-    }
+    const animations = marqueeTrackRef.current.getAnimations();
+    animations.forEach((anim) => {
+      anim.playbackRate = rate;
+    });
   };
 
-  const capabilities = [
+  const pipelineStages = [
     {
-      title: 'Micro-USD Spend Gatekeeper',
-      category: 'Deterministic FinOps',
-      subtitle: 'Every cloud GPU pass requires atomic integer micro-USD pre-authorization before execution.',
-      metric: '$0.000061',
-      visual: 'ledger',
+      num: 'Stage I',
+      title: 'Structural & Prior Grounding',
+      subtitle: 'PDB Coordinate Masking + Meta Llama 3.1 Boundary JSON',
+      inputLabel: 'Target PDB (e.g., 8EH0) + Cofactor Coordinates (PLP / Heme)',
+      operationLabel:
+        'Builds an 8.0 Å Cα contact graph, locks catalytic residues within 4.2 Å of the cofactor, and prompts Llama 3.1 in strict JSON mode to propose mutable residue shells.',
+      outputLabel: 'Validated Combinatorial Search Space (159,999 Candidates · 0 Active-Site Clashes)',
     },
     {
-      title: '3D Deep Kernel Gaussian Process',
-      category: 'Surrogate Modeling',
-      subtitle: 'Couples 1280-dim ESM-2 representations with C-alpha contact graphs and heteroscedastic assay noise.',
-      metric: 'ρ = 0.82',
-      visual: 'kernel',
+      num: 'Stage II',
+      title: 'Calibrated Ensemble Surrogate & Epistasis Screen',
+      subtitle: 'Pair-Interaction GP + Qualify-Then-Optimize Frontier + CPU L-BFGS',
+      inputLabel: '159,999 Candidate Genotypes + Prior Wet-Lab Plate Readings',
+      operationLabel:
+        'Fits a calibrated 5-model ridge ensemble with explicit AA×AA pair features, reserves 3 frontier slots per batch to test unseen mutations at epistatic sites, and relaxes sidechain clashes on CPU in <50ms.',
+      outputLabel: 'Pareto Rank-0 Micro-Batch (24 High-Information Variants · $0.000 GPU Screening Cost)',
     },
     {
-      title: 'k-DPP Epistatic Diversity',
-      category: 'Batch Acquisition',
-      subtitle: 'Determinantal point processes force orthogonal exploration across multi-mutant fitness peaks.',
-      metric: '13.0x',
-      visual: 'diversity',
-    },
-    {
-      title: 'CPU Elastic Relaxation',
-      category: 'Structural Biophysics',
-      subtitle: 'Two-stage L-BFGS sidechain and backbone minimizer resolves steric clashes in under 50ms.',
-      metric: '42 ms',
-      visual: 'relax',
-    },
-    {
-      title: '4D Pareto Trade-Off Engine',
-      category: 'Clinical Developability',
-      subtitle: 'Simultaneously optimizes affinity, thermal stability, synthesizability, and zero chemical liabilities.',
-      metric: 'Rank 0',
-      visual: 'pareto',
-    },
-    {
-      title: 'Automated Wet-Lab Translation',
-      category: 'Physical Execution',
-      subtitle: 'Compiles codon-optimized Twist DNA orders, Opentrons OT-2 scripts, and 4PL dose-response curves.',
-      metric: '96-Well',
-      visual: 'wetlab',
+      num: 'Stage III',
+      title: 'Micro-USD Spend Gate & Zero-Touch CRO Export',
+      subtitle: 'SQLite Immutability Gate + Modal A10G Tensor Pass + Wet-Lab Files',
+      inputLabel: '24 Selected Variants + Estimated Compute Cost ($0.0031 / 3,100 µUSD)',
+      operationLabel:
+        'Atomically verifies remaining budget in SQLite, scores batch on Modal A10G ESM-2 650M, stamps an HMAC-SHA256 Merkle block, and compiles Twist Golden Gate CSV + Opentrons OT-2 scripts.',
+      outputLabel: '96-Well Synthesis Order + Robot Protocol + 21 CFR Part 11 Audit Proof',
     },
   ];
 
-  const marqueeItems = [...capabilities, ...capabilities];
-
-  const renderCapabilityVisual = (type) => {
-    switch (type) {
-      case 'ledger':
-        return (
-          <svg viewBox="0 0 120 36" style={{ width: '100%', height: '36px' }}>
-            <rect x="0" y="10" width="120" height="8" rx="4" fill="#e4e0d7" />
-            <rect x="0" y="10" width="28" height="8" rx="4" fill="#059669" />
-            <circle cx="28" cy="14" r="6" fill="#141413" />
-            <text x="40" y="32" fontSize="9" fill="#78746d" fontWeight="500">
-              Pre-authorized ceiling locked
-            </text>
-          </svg>
-        );
-      case 'kernel':
-        return (
-          <svg viewBox="0 0 120 36" style={{ width: '100%', height: '36px' }}>
-            <path d="M 4 28 Q 30 6, 58 20 T 116 8" fill="none" stroke="#0369a1" strokeWidth="2.2" />
-            <path d="M 4 28 Q 30 2, 58 14 T 116 4 L 116 14 Q 88 26, 58 26 T 4 32 Z" fill="rgba(3, 105, 161, 0.12)" />
-            <circle cx="58" cy="20" r="3.5" fill="#141413" />
-            <circle cx="96" cy="11" r="3.5" fill="#059669" />
-          </svg>
-        );
-      case 'diversity':
-        return (
-          <svg viewBox="0 0 120 36" style={{ width: '100%', height: '36px' }}>
-            <circle cx="20" cy="18" r="4" fill="#141413" />
-            <circle cx="52" cy="10" r="4" fill="#0369a1" />
-            <circle cx="84" cy="24" r="4" fill="#059669" />
-            <circle cx="106" cy="12" r="4" fill="#141413" />
-            <line x1="20" y1="18" x2="52" y2="10" stroke="#a8a29e" strokeDasharray="2 2" />
-            <line x1="52" y1="10" x2="84" y2="24" stroke="#a8a29e" strokeDasharray="2 2" />
-            <line x1="84" y1="24" x2="106" y2="12" stroke="#a8a29e" strokeDasharray="2 2" />
-          </svg>
-        );
-      case 'relax':
-        return (
-          <svg viewBox="0 0 120 36" style={{ width: '100%', height: '36px' }}>
-            <path d="M 6 6 C 24 6, 28 28, 56 28 L 114 28" fill="none" stroke="#059669" strokeWidth="2.2" />
-            <circle cx="6" cy="6" r="3.5" fill="#78746d" />
-            <circle cx="56" cy="28" r="4" fill="#059669" />
-            <text x="64" y="22" fontSize="9" fill="#047857" fontWeight="600">
-              -18.4 kcal/mol
-            </text>
-          </svg>
-        );
-      case 'pareto':
-        return (
-          <svg viewBox="0 0 120 36" style={{ width: '100%', height: '36px' }}>
-            <path d="M 14 30 Q 32 8, 106 8" fill="none" stroke="#141413" strokeWidth="2" strokeDasharray="3 2" />
-            <circle cx="24" cy="20" r="3.5" fill="#059669" />
-            <circle cx="54" cy="11" r="3.5" fill="#059669" />
-            <circle cx="90" cy="8" r="3.5" fill="#059669" />
-            <circle cx="65" cy="26" r="2.5" fill="#cfc9be" />
-            <circle cx="42" cy="28" r="2.5" fill="#cfc9be" />
-          </svg>
-        );
-      default:
-        return (
-          <svg viewBox="0 0 120 36" style={{ width: '100%', height: '36px' }}>
-            {[0, 1, 2, 3, 4, 5, 6, 7].map((c) =>
-              [0, 1].map((r) => (
-                <circle
-                  key={`${c}-${r}`}
-                  cx={12 + c * 13}
-                  cy={12 + r * 12}
-                  r="3.5"
-                  fill={(c + r) % 3 === 0 ? '#059669' : '#cfc9be'}
-                />
-              ))
-            )}
-          </svg>
-        );
-    }
-  };
-
-  // Empirical Datasets (Direct Baseline vs Discovered Peak — no intermediate round clutter)
-  const datasetWalkthroughs = [
-    {
-      id: 'trpb',
-      name: 'TrpB Tryptophan Synthase',
-      tag: 'Industrial Biocatalysis · 159,999 Variants',
-      whatItIs:
-        'A complete 20⁴ combinatorial wet-lab dataset (Johnston et al. 2024) measuring four active-site entrance residues (183, 184, 227, 228) on Tryptophan Synthase.',
-      whyItMatters:
-        'Engineered TrpB synthesizes chiral pharmaceutical building blocks in water in a single step, replacing multi-step toxic heavy-metal organic reactions.',
-      howWeDid:
-        'Evaluated just 40 variants out of 159,999 possibilities and discovered the exact #1 global empirical optimum at $0.0125 total compute spend.',
-      spend: '$0.0125',
-      enrichment: '13.0x vs. Random',
-      testedFraction: '40 / 159,999 (0.025%)',
-      wtScore: '1.00x',
-      wtBarPct: 14,
-      peakScore: '7.16x (100% Global Optimum)',
-      peakBarPct: 100,
-      improvementBadge: '+616% Catalytic Activity',
-      leadMutation: 'V183L : F184I : V227C : S228G',
-    },
-    {
-      id: 'her2',
-      name: 'Trastuzumab Antibody (HER2)',
-      tag: 'Oncology Biologics · 36,391 Variants',
-      whatItIs:
-        'Deep mutational scanning dataset of the CDR-H3 binding loop of Trastuzumab (Herceptin) against the HER2 breast cancer receptor (Mason et al. 2021).',
-      whyItMatters:
-        'Monoclonal antibodies often gain binding affinity at the cost of aggregation or chemical instability. Optimizing affinity while keeping zero clinical liabilities is essential for drug formulation.',
-      howWeDid:
-        'Identified a double-mutant CDR-H3 lead with +45% binding improvement while maintaining a 1.00/1.00 clinical developability score and zero unpaired cysteines.',
-      spend: '$0.0064',
-      enrichment: '7.1x vs. Random',
-      testedFraction: '40 / 36,391 (0.11%)',
-      wtScore: '1.00x',
-      wtBarPct: 55,
-      peakScore: '1.45x Affinity + 1.00 CMC Score',
-      peakBarPct: 100,
-      improvementBadge: '+45% Binding · 0 Liabilities',
-      leadMutation: 'A106G : M107L (CDR-H3)',
-    },
-    {
-      id: 'gfp',
-      name: 'avGFP Fluorescent Reporter',
-      tag: 'Biosensor Folding · 51,714 Variants',
-      whatItIs:
-        'The gold-standard ProteinGym benchmark (Sarkisyan et al. 2016, Nature) measuring fluorescence intensity across 51,714 multi-mutant Aequorea victoria GFP sequences.',
-      whyItMatters:
-        'Fluorescence requires a tightly packed 11-stranded beta-barrel; a single steric clash quenches the internal chromophore completely.',
-      howWeDid:
-        'By combining 3D contact graphs with CPU sidechain relaxation, our engine avoided barrel-destabilizing mutations and recovered top-decile superfolder variants under $0.02.',
-      spend: '$0.0125',
-      enrichment: '8.4x vs. Random',
-      testedFraction: '40 / 51,714 (0.077%)',
-      wtScore: '1.000 Log Brightness',
-      wtBarPct: 58,
-      peakScore: '1.029 Superfolder Peak',
-      peakBarPct: 100,
-      improvementBadge: 'Top-1% Superfolder Brightness',
-      leadMutation: 'T97A : N146D : M153T : N212D',
-    },
-    {
-      id: 'gb1',
-      name: 'Protein G (GB1 IgG Domain)',
-      tag: 'Epistatic Landscape · 149,361 Variants',
-      whatItIs:
-        'An exhaustive 4-site combinatorial landscape (Wu et al. 2016) known for extreme sign epistasis where 98% of variants are non-functional.',
-      whyItMatters:
-        'Standard greedy optimization gets trapped in local dead valleys when individual mutations look deleterious on their own but are synergistic together.',
-      howWeDid:
-        'Using k-DPP determinantal diversity and Kriging-believer batch conditioning, PanoptesBio jumped across the fitness valley to capture the synergistic quadruple mutant.',
-      spend: '$0.0064',
-      enrichment: '9.2x vs. Random',
-      testedFraction: '40 / 149,361 (0.027%)',
-      wtScore: '0.000 (98% Dead Valley)',
-      wtBarPct: 12,
-      peakScore: '+0.0442 Epistatic Peak',
-      peakBarPct: 100,
-      improvementBadge: 'Escaped 98% Non-Functional Valley',
-      leadMutation: 'V39F : D40A : G41A : V54A',
-    },
-  ];
-
-  const currentDataset = datasetWalkthroughs[datasetIdx];
-
-  // Visual System Pipeline Nodes ("How It Works")
-  const pipelineNodes = [
-    {
-      id: 0,
-      stage: 'Base Input',
-      title: 'Sequence, 3D Structure & Budget Cap',
-      shortDesc: 'Raw PDB coordinates + FASTA + hard USD ceiling',
-      inputLabel: 'Operator Specification',
-      inputValue: 'PDB 8EH0 (TrpB) + $1.00 Max Ceiling',
-      processLabel: 'Spatial & Allosteric Pre-Filter',
-      processValue: 'Locks 4.2 Å PLP cofactor shell & maps Kirchhoff normal-mode hinges',
-      outputLabel: 'Feasible Search Space',
-      outputValue: 'Residues [183, 184, 227, 228] unlocked; catalytic triad protected',
-    },
-    {
-      id: 1,
-      stage: 'Prior & Surrogate',
-      title: 'Llama 3.1 + 3D Kernel Gaussian Process',
-      shortDesc: 'Hypothesis generation & Bayesian uncertainty ranking',
-      inputLabel: 'Feasible Search Space',
-      inputValue: '4 coupled active-site entrance positions (160,000 combinations)',
-      processLabel: 'GFlowNet + 3D Contact DKL + k-DPP',
-      processValue: 'Projects 1280D embeddings + C-alpha graph; selects orthogonal peaks',
-      outputLabel: 'Proposed Micro-Batch',
-      outputValue: 'Top 10 diverse multi-mutants ranked by Expected Improvement',
-    },
-    {
-      id: 2,
-      stage: 'Spend Gate & Physics',
-      title: 'Gatekeeper + CPU Relaxation + GPU Scoring',
-      shortDesc: 'Micro-USD authorization, 42ms L-BFGS & ESM-2 scoring',
-      inputLabel: 'Proposed Micro-Batch',
-      inputValue: '10 candidate variants (Est. cost: $0.000061 / 61 µUSD)',
-      processLabel: 'Fail-Closed Ledger + 2-Stage L-BFGS + Modal A10G',
-      processValue: 'Pre-authorizes spend, relaxes steric clashes on CPU, scores on ESM-2 650M',
-      outputLabel: 'Scored & Relaxed Leads',
-      outputValue: 'V183L:F184I:V227C:S228G (-18.4 kcal/mol, 7.16x predicted turnover)',
-    },
-    {
-      id: 3,
-      stage: 'Physical Output',
-      title: 'Pareto Filter & Turnkey Wet-Lab Package',
-      shortDesc: 'Rank 0 leads exported to Twist DNA & Opentrons',
-      inputLabel: 'Scored & Relaxed Leads',
-      inputValue: '40 evaluated variants across 4 active-learning rounds',
-      processLabel: 'NSGA-II 4D Pareto + Codon & Plate Compiler',
-      processValue: 'Verifies 0 unpaired cysteines, optimizes codons, builds 36-well moat layout',
-      outputLabel: 'Turnkey Lab Deliverables',
-      outputValue: 'Twist 96-Well CSV + Opentrons OT-2 Script + Cryptographic Audit Proof',
-    },
-  ];
-
-  const activeNodeData = pipelineNodes[activePipelineNode];
-
-  const bruteforceCloudCost = Math.max(15, candidateCount * 0.02 * 0.000306 + 6.0);
-  const wetlabCost = candidateCount * 0.35 + 5000;
-  const panoptesCost = 40 * 0.02 * 0.000306 + 0.006242;
-  const multipleCheaper = (bruteforceCloudCost / panoptesCost).toFixed(0);
-  const wetlabSaved = Math.max(0, wetlabCost - 420);
+  const currentStage = pipelineStages[activePipelineStage];
 
   return (
-    <div style={{ position: 'relative' }}>
-      {/* Right-Side Dot Rail: Dots only at rest; labels pop out on hover so nothing overlaps */}
-      <aside
-        onMouseEnter={() => setIsRailHovered(true)}
-        onMouseLeave={() => {
-          setIsRailHovered(false);
-          setHoveredDot(null);
-        }}
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '136px' }}>
+      {/* =====================================================================
+          RIGHT-SIDE FLOATING DOT RAIL (Dots only; label pops out on hover)
+          ===================================================================== */}
+      <nav
+        aria-label="Section navigation"
         style={{
           position: 'fixed',
-          right: '18px',
+          right: '22px',
           top: '50%',
           transform: 'translateY(-50%)',
           zIndex: 900,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-end',
-          gap: '10px',
-          padding: '10px 6px',
+          gap: '12px',
         }}
-        aria-label="Section navigation"
       >
-        {sections.map((sec) => {
+        {NAV_SECTIONS.map((sec) => {
           const isActive = activeSection === sec.id;
-          const showLabel = isRailHovered || hoveredDot === sec.id;
+          const isHovered = hoveredDot === sec.id;
           return (
             <button
               key={sec.id}
+              type="button"
               onClick={() => scrollToSection(sec.id)}
               onMouseEnter={() => setHoveredDot(sec.id)}
-              onFocus={() => setHoveredDot(sec.id)}
-              onBlur={() => setHoveredDot(null)}
+              onMouseLeave={() => setHoveredDot(null)}
+              aria-label={sec.label}
               style={{
+                position: 'relative',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'flex-end',
-                gap: '10px',
                 background: 'none',
                 border: 'none',
-                padding: '2px 4px',
+                padding: '4px',
                 cursor: 'pointer',
-                position: 'relative',
               }}
-              aria-label={sec.label}
             >
-              {/* Pop-up Label on Hover */}
+              {isHovered && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    right: '24px',
+                    whiteSpace: 'nowrap',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    background: '#141413',
+                    color: '#fcfbf8',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {sec.label}
+                </span>
+              )}
               <span
                 style={{
-                  fontSize: '12px',
-                  fontWeight: isActive ? 600 : 500,
-                  color: isActive ? 'var(--text-main)' : 'var(--text-muted)',
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-subtle)',
-                  padding: '4px 10px',
-                  borderRadius: '6px',
-                  whiteSpace: 'nowrap',
-                  opacity: showLabel ? 1 : 0,
-                  transform: showLabel ? 'translateX(0)' : 'translateX(8px)',
-                  pointerEvents: showLabel ? 'auto' : 'none',
-                  transition: 'opacity 0.16s ease, transform 0.16s ease',
-                }}
-              >
-                {sec.label}
-              </span>
-
-              {/* Minimal Dot Indicator */}
-              <span
-                style={{
-                  width: '8px',
-                  height: isActive ? '22px' : '8px',
-                  borderRadius: '9999px',
-                  background: isActive ? '#059669' : '#c7c1b6',
+                  width: isActive ? '10px' : '7px',
+                  height: isActive ? '10px' : '7px',
+                  borderRadius: '50%',
+                  background: isActive ? '#0d9488' : '#b8b2a6',
                   transition: 'all 0.2s ease',
-                  flexShrink: 0,
+                  display: 'block',
                 }}
               />
             </button>
           );
         })}
-      </aside>
+      </nav>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '120px', paddingBottom: '60px' }}>
-        {/* =========================================================================
-            SECTION 1: HERO - EDITORIAL STATEMENT & AUTOMATED 3D TRANSITION STAGE
-            ========================================================================= */}
-        <section id="hero" style={{ paddingTop: '16px' }}>
+      {/* =====================================================================
+          SECTION 1: HERO (#mission) — Open Editorial Split + Automated 3D Showcase
+          ===================================================================== */}
+      <section
+        id="mission"
+        style={{
+          scrollMarginTop: '96px',
+          paddingTop: '16px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gap: '56px',
+          alignItems: 'center',
+        }}
+      >
+        {/* Left: Editorial Statement + Actions + Unboxed Metric Strip */}
+        <div>
+          <h1
+            className="title-display"
+            style={{
+              fontSize: 'var(--step-hero)',
+              color: 'var(--text-main)',
+              marginBottom: '22px',
+            }}
+          >
+            Direct protein evolution,{' '}
+            <span style={{ color: '#0d9488' }}>
+              without burning
+            </span>{' '}
+            wet-lab capital.
+          </h1>
+
+          <p
+            style={{
+              fontSize: 'var(--step-lead)',
+              color: 'var(--text-muted)',
+              lineHeight: 1.55,
+              maxWidth: '58ch',
+              marginBottom: '32px',
+            }}
+          >
+            PanoptesBio pairs 3D structural active learning with a fail-closed micro-USD spend ledger, compressing 160,000-variant combinatorial landscapes into a single 96-well synthesis plate.
+          </p>
+
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '44px' }}>
+            <button
+              type="button"
+              onClick={() => onNavigate && onNavigate('studio')}
+              className="btn btn-primary"
+              style={{ padding: '13px 24px', fontSize: '15px', fontWeight: 600 }}
+            >
+              <Play size={15} />
+              <span>Launch Studio</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => scrollToSection('datasets')}
+              className="btn btn-secondary"
+              style={{ padding: '13px 22px', fontSize: '15px' }}
+            >
+              <span>Inspect 48-Seed Proof</span>
+              <ArrowRight size={15} />
+            </button>
+          </div>
+
+          {/* Unboxed Editorial Baseline Strip (Separated by vertical rules, no cards) */}
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-              gap: '56px',
-              alignItems: 'center',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '24px',
+              paddingTop: '24px',
+              borderTop: '1px solid var(--border-subtle)',
             }}
           >
-            {/* Left Column: Mission & Clean Typographic Figures */}
             <div>
-              <h1
-                className="title-display"
-                style={{
-                  fontSize: 'var(--step-hero)',
-                  fontWeight: 600,
-                  lineHeight: 0.98,
-                  letterSpacing: '-0.035em',
-                  color: 'var(--text-main)',
-                  marginBottom: '24px',
-                }}
-              >
-                Protein discovery without the brute-force bill.
-              </h1>
-
-              <p
-                style={{
-                  fontSize: 'var(--step-lead)',
-                  lineHeight: 1.5,
-                  color: 'var(--text-muted)',
-                  marginBottom: '36px',
-                  maxWidth: '50ch',
-                }}
-              >
-                Unguided generative pipelines burn thousands of dollars screening dead sequences.
-                PanoptesBio pairs structural biophysics, 3D Deep Kernel active learning, and a
-                fail-closed micro-USD ledger to reach empirical optima under $0.04.
-              </p>
-
-              {/* Primary Action */}
               <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '20px',
-                  flexWrap: 'wrap',
-                  marginBottom: '48px',
-                }}
+                className="mono tabular"
+                style={{ fontSize: 'clamp(1.75rem, 2.6vw, 2.35rem)', fontWeight: 600, color: 'var(--text-main)', lineHeight: 1.1 }}
               >
-                <button
-                  onClick={() => onNavigate('studio')}
-                  className="btn btn-primary"
-                  style={{
-                    padding: '15px 30px',
-                    fontSize: '16px',
-                    fontWeight: 500,
-                  }}
-                >
-                  <span>Launch Studio</span>
-                  <ArrowRight size={17} />
-                </button>
-
-                <button
-                  onClick={() => onNavigate('experiments')}
-                  className="btn btn-secondary"
-                  style={{
-                    padding: '15px 24px',
-                    fontSize: '15px',
-                  }}
-                >
-                  <span>Explore Novel Leads</span>
-                </button>
+                98%
               </div>
-
-              {/* 3 Focused Scientific Metrics */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '24px',
-                  paddingTop: '24px',
-                  borderTop: '1px solid var(--border-subtle)',
-                }}
-              >
-                <div>
-                  <div
-                    className="tabular"
-                    style={{
-                      fontSize: '28px',
-                      fontWeight: 600,
-                      letterSpacing: '-0.03em',
-                      color: 'var(--text-main)',
-                    }}
-                  >
-                    $0.0376
-                  </div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    Total 4-target GPU spend
-                  </div>
-                </div>
-                <div>
-                  <div
-                    className="tabular"
-                    style={{
-                      fontSize: '28px',
-                      fontWeight: 600,
-                      letterSpacing: '-0.03em',
-                      color: '#059669',
-                    }}
-                  >
-                    7.16x
-                  </div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    TrpB global peak reached
-                  </div>
-                </div>
-                <div>
-                  <div
-                    className="tabular"
-                    style={{
-                      fontSize: '28px',
-                      fontWeight: 600,
-                      letterSpacing: '-0.03em',
-                      color: 'var(--text-main)',
-                    }}
-                  >
-                    13.0x
-                  </div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    Top-1% hit enrichment
-                  </div>
-                </div>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                Seed reliability reaching ≥ 0.70 (vs 58% ALDE)
               </div>
             </div>
 
-            {/* Right Column: Automated Non-Interactive 3D Structural Evolution Showcase */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-              }}
-            >
+            <div>
               <div
-                style={{
-                  width: '100%',
-                  maxWidth: '520px',
-                  background: 'var(--bg-card)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '20px',
-                  padding: '20px',
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}
+                className="mono tabular"
+                style={{ fontSize: 'clamp(1.75rem, 2.6vw, 2.35rem)', fontWeight: 600, color: '#0d9488', lineHeight: 1.1 }}
               >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '12px',
-                    fontSize: '12px',
-                  }}
-                >
-                  <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>
-                    PDB 8EH0 · Tryptophan Synthase Evolution
-                  </span>
-                  <span
-                    style={{
-                      padding: '3px 10px',
-                      borderRadius: '9999px',
-                      background: 'var(--bg-elevated)',
-                      border: '1px solid var(--border-subtle)',
-                      color: phaseDescriptions[autoPhase].accent,
-                      fontWeight: 600,
-                    }}
-                  >
-                    Stage {autoPhase + 1} of 3
-                  </span>
-                </div>
+                50 assays
+              </div>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                Median budget to hit top tier (2x faster)
+              </div>
+            </div>
 
-                {/* Non-interactive 3Dmol Canvas */}
-                <div
-                  style={{
-                    width: '100%',
-                    height: '360px',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    position: 'relative',
-                    pointerEvents: 'none',
-                    userSelect: 'none',
-                  }}
-                >
-                  <div ref={container3DRef} style={{ width: '100%', height: '100%' }} />
-                </div>
-
-                {/* Automated Stage Progression Footer */}
-                <div
-                  style={{
-                    marginTop: '14px',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '10px',
-                    padding: '14px 16px',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      color: 'var(--text-main)',
-                      marginBottom: '4px',
-                    }}
-                  >
-                    {phaseDescriptions[autoPhase].title}
-                  </div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                    {phaseDescriptions[autoPhase].detail}
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                    {['Base Scaffold', 'Hotspot Shell', 'Optimized Lead'].map((lbl, idx) => {
-                      const active = autoPhase === idx;
-                      return (
-                        <div key={lbl}>
-                          <div
-                            style={{
-                              height: '4px',
-                              borderRadius: '2px',
-                              background: active ? '#059669' : 'var(--border-subtle)',
-                              transition: 'background-color 0.3s ease',
-                              marginBottom: '4px',
-                            }}
-                          />
-                          <div
-                            style={{
-                              fontSize: '11px',
-                              fontWeight: active ? 600 : 500,
-                              color: active ? 'var(--text-main)' : 'var(--text-dim)',
-                            }}
-                          >
-                            {lbl}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+            <div>
+              <div
+                className="mono tabular"
+                style={{ fontSize: 'clamp(1.75rem, 2.6vw, 2.35rem)', fontWeight: 600, color: 'var(--text-main)', lineHeight: 1.1 }}
+              >
+                $0.0094
+              </div>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                Modal A10G GPU spend per 4-round campaign
               </div>
             </div>
           </div>
-        </section>
+        </div>
 
-        {/* =========================================================================
-            SECTION 2: CORE CAPABILITIES - CONTINUOUS RAIL (SLOWS ON HOVER)
-            ========================================================================= */}
-        <section
-          id="capabilities"
+        {/* Right: Automated Non-Interactive 3D Choreography Surface */}
+        <div
           style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-subtle)',
-            padding: '48px 32px',
-            borderRadius: '16px',
+            background: 'var(--bg-elevated)',
+            borderRadius: '18px',
+            padding: '22px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
           }}
         >
-          <div style={{ marginBottom: '32px' }}>
-            <h2
-              className="title-display"
-              style={{
-                fontSize: 'var(--step-head)',
-                color: 'var(--text-main)',
-                marginBottom: '6px',
-              }}
-            >
-              Core engine capabilities.
-            </h2>
-            <p style={{ fontSize: '16px', color: 'var(--text-muted)' }}>
-              Six coupled subsystems linking structural physics to wet-lab synthesis.
-            </p>
-          </div>
+          {/* Top Target Switcher Row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
+                {activeProtein.name}
+              </div>
+              <div style={{ fontSize: '12.5px', color: 'var(--text-dim)' }}>
+                {activeProtein.category}
+              </div>
+            </div>
 
-          <div
-            className="marquee-container"
-            onMouseEnter={() => handleMarqueeSpeed(0.32)}
-            onMouseLeave={() => handleMarqueeSpeed(1.0)}
-          >
-            <div ref={marqueeTrackRef} className="marquee-track" style={{ gap: '20px' }}>
-              {marqueeItems.map((cap, idx) => (
-                <div
-                  key={idx}
+            <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-card)', padding: '3px', borderRadius: '8px' }}>
+              {SHOWCASE_PROTEINS.map((prot, idx) => (
+                <button
+                  key={prot.id}
+                  type="button"
+                  onClick={() => {
+                    setProteinIdx(idx);
+                    setAnimPhase(0);
+                  }}
+                  className="mono"
                   style={{
-                    width: '320px',
-                    flexShrink: 0,
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '12px',
-                    padding: '24px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    gap: '16px',
+                    padding: '5px 9px',
+                    fontSize: '11.5px',
+                    fontWeight: proteinIdx === idx ? 600 : 500,
+                    borderRadius: '6px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: proteinIdx === idx ? 'var(--bg-elevated)' : 'transparent',
+                    color: proteinIdx === idx ? 'var(--text-main)' : 'var(--text-muted)',
                   }}
                 >
-                  <div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '12px',
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          color: 'var(--cyan-bright)',
-                        }}
-                      >
-                        {cap.category}
-                      </span>
-                      <span
-                        className="tabular badge badge-emerald"
-                        style={{
-                          fontSize: '12px',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {cap.metric}
-                      </span>
-                    </div>
+                  {prot.pdbId}
+                </button>
+              ))}
+            </div>
+          </div>
 
-                    <h3
-                      style={{
-                        fontSize: '18px',
-                        fontWeight: 600,
-                        color: 'var(--text-main)',
-                        marginBottom: '8px',
-                      }}
-                    >
-                      {cap.title}
-                    </h3>
-                    <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-                      {cap.subtitle}
-                    </p>
-                  </div>
+          {/* Non-Interactive Automated WebGL Viewport */}
+          <div
+            style={{
+              position: 'relative',
+              width: '100%',
+              height: '340px',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              background: '#fcfbf8',
+              pointerEvents: 'none',
+            }}
+          >
+            <div ref={viewerContainerRef} style={{ width: '100%', height: '100%' }} />
 
+            {/* Subtle Phase Pill Overlay */}
+            <div
+              style={{
+                position: 'absolute',
+                top: '14px',
+                left: '14px',
+                zIndex: 10,
+                display: 'flex',
+                gap: '6px',
+              }}
+            >
+              {[
+                { idx: 0, label: '1. Wild-Type Scaffold' },
+                { idx: 1, label: '2. Epistatic Pocket' },
+                { idx: 2, label: '3. Optimized Lead' },
+              ].map((step) => {
+                const active = animPhase === step.idx;
+                return (
+                  <span
+                    key={step.idx}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontSize: '11.5px',
+                      fontWeight: active ? 600 : 500,
+                      background: active ? '#141413' : 'rgba(239, 234, 225, 0.85)',
+                      color: active ? '#fcfbf8' : 'var(--text-muted)',
+                      transition: 'all 0.25s ease',
+                    }}
+                  >
+                    {step.label}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Bottom Genotype & Gain Readout */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '12px',
+              padding: '14px 16px',
+              borderRadius: '10px',
+              background: 'var(--bg-card)',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginBottom: '2px' }}>
+                {animPhase === 2 ? 'Discovered Lead Genotype' : 'Wild-Type Pocket Residues'}
+              </div>
+              <div className="mono" style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-main)' }}>
+                {animPhase === 2 ? activeProtein.leadMutation : activeProtein.wtResidues}
+              </div>
+            </div>
+
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-dim)', marginBottom: '2px' }}>
+                Empirical Activity
+              </div>
+              <div className="mono tabular" style={{ fontSize: '13.5px', fontWeight: 600, color: '#0d9488' }}>
+                {animPhase === 2 ? activeProtein.leadMetric : activeProtein.wtMetric}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* =====================================================================
+          SECTION 2: CORE CAPABILITIES (#capabilities) — Open-Canvas Continuous Rail
+          ===================================================================== */}
+      <section id="capabilities" style={{ scrollMarginTop: '96px' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-end',
+            flexWrap: 'wrap',
+            gap: '20px',
+            marginBottom: '36px',
+          }}
+        >
+          <div>
+            <h2
+              className="title-display"
+              style={{ fontSize: 'var(--step-head)', color: 'var(--text-main)', marginBottom: '10px' }}
+            >
+              Six engines, one{' '}
+              <span style={{ color: '#0d9488' }}>
+                deterministic
+              </span>{' '}
+              loop.
+            </h2>
+            <p style={{ fontSize: 'var(--step-body)', color: 'var(--text-muted)', maxWidth: '62ch' }}>
+              Every module is isolated by strict contracts: the LLM proposes boundaries, calibrated math selects variants, and the SQLite ledger gates every micro-dollar of GPU spend.
+            </p>
+          </div>
+        </div>
+
+        {/* Continuous Marquee Rail (Slows gently on hover, no outer box wrapper) */}
+        <div
+          className="marquee-container"
+          onMouseEnter={() => handleMarqueeSpeed(0.32)}
+          onMouseLeave={() => handleMarqueeSpeed(1.0)}
+        >
+          <div className="marquee-track" ref={marqueeTrackRef}>
+            {[...CAPABILITY_CARDS, ...CAPABILITY_CARDS].map((card, i) => (
+              <div
+                key={`${card.title}-${i}`}
+                style={{
+                  width: '340px',
+                  flexShrink: 0,
+                  background: 'var(--bg-elevated)',
+                  borderRadius: '14px',
+                  padding: '24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '18px',
+                }}
+              >
+                <div
+                  style={{
+                    background: 'var(--bg-dark)',
+                    borderRadius: '10px',
+                    padding: '12px 14px',
+                  }}
+                >
+                  {card.renderGraphic()}
+                </div>
+
+                <div>
                   <div
                     style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'baseline',
+                      gap: '8px',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    <h3 style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-main)' }}>
+                      {card.title}
+                    </h3>
+                  </div>
+                  <p style={{ fontSize: '13.5px', color: 'var(--text-muted)', lineHeight: 1.55, marginBottom: '14px' }}>
+                    {card.desc}
+                  </p>
+                  <div
+                    className="mono tabular"
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: '#0d9488',
                       paddingTop: '12px',
                       borderTop: '1px solid var(--border-subtle)',
                     }}
                   >
-                    {renderCapabilityVisual(cap.visual)}
+                    {card.metric}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* =====================================================================
+          SECTION 3: EMPIRICAL COST BENCHMARKS (#benchmarks) — Asymmetric Editorial Split
+          ===================================================================== */}
+      <section
+        id="benchmarks"
+        style={{
+          scrollMarginTop: '96px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+          gap: '48px',
+          alignItems: 'start',
+        }}
+      >
+        {/* Left: Editorial Savings Anchor */}
+        <div>
+          <h2
+            className="title-display"
+            style={{ fontSize: 'var(--step-head)', color: 'var(--text-main)', marginBottom: '14px' }}
+          >
+            99.1% lower campaign cost,{' '}
+            <span style={{ color: '#0d9488' }}>
+              pinned first.
+            </span>
+          </h2>
+
+          <p style={{ fontSize: 'var(--step-body)', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '28px' }}>
+            Wet-lab DNA synthesis ($45–$65 per variant) dominates protein engineering budgets. By resolving epistatic dead-ends in memory and ordering only one 96-well plate of Rank-0 leads, PanoptesBio eliminates $138,700 in wasted synthesis per campaign.
+          </p>
+
+          {/* Single Tonal Savings Callout Block */}
+          <div
+            style={{
+              background: 'var(--bg-card)',
+              borderRadius: '14px',
+              padding: '28px',
+            }}
+          >
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+              Net Capital Saved per Target Campaign
+            </div>
+            <div
+              className="mono tabular"
+              style={{
+                fontSize: 'clamp(2.5rem, 4.2vw, 3.5rem)',
+                fontWeight: 600,
+                color: '#0d9488',
+                lineHeight: 1.05,
+                marginBottom: '18px',
+              }}
+            >
+              $138,700
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '16px',
+                paddingTop: '16px',
+                borderTop: '1px solid var(--border-subtle)',
+              }}
+            >
+              <div>
+                <div className="mono tabular" style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-main)' }}>
+                  50 – 96 wells
+                </div>
+                <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Total DNA variants synthesized (vs 3,000+ brute-force)
+                </div>
+              </div>
+              <div>
+                <div className="mono tabular" style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-main)' }}>
+                  10 days
+                </div>
+                <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Target-to-validated lead turnaround (vs 20 weeks)
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Clean Stacked Horizontal Comparison Ledger (PanoptesBio Pinned at Top) */}
+        <div
+          style={{
+            background: 'var(--bg-elevated)',
+            borderRadius: '16px',
+            padding: '32px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '28px',
+          }}
+        >
+          {[
+            {
+              name: 'PanoptesBio Active Learning + 96-Well Multiplexing',
+              tag: 'Recommended · Pinned Benchmark',
+              totalCost: '$1,290',
+              breakdown: '$0.01 Modal A10G GPU + $1,290 single 96-well Twist synthesis plate',
+              turnaround: '10 Days',
+              barPct: 3.5,
+              accent: '#0d9488',
+              highlight: true,
+            },
+            {
+              name: 'Standard Cloud Bio-Wrapper Platforms',
+              tag: 'Ungated GPU Inference + 6-Plate Screen',
+              totalCost: '$31,900',
+              breakdown: '$3,100 unbudgeted cloud GPU compute + $28,800 across 6 synthesis plates',
+              turnaround: '6 Weeks',
+              barPct: 38,
+              accent: '#78736a',
+              highlight: false,
+            },
+            {
+              name: 'Traditional Wet-Lab Directed Evolution',
+              tag: 'Random Mutagenesis · 3,000+ Variants',
+              totalCost: '$140,000',
+              breakdown: '32+ 96-well plates, manual colony picking, and multi-month assay cycles',
+              turnaround: '20 Weeks',
+              barPct: 100,
+              accent: '#a8a29e',
+              highlight: false,
+            },
+          ].map((row, idx) => (
+            <div
+              key={row.name}
+              style={{
+                paddingBottom: idx < 2 ? '24px' : 0,
+                borderBottom: idx < 2 ? '1px solid var(--border-subtle)' : 'none',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'baseline',
+                  gap: '12px',
+                  marginBottom: '6px',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span
+                      style={{
+                        fontSize: '16px',
+                        fontWeight: 600,
+                        color: row.highlight ? '#0d9488' : 'var(--text-main)',
+                      }}
+                    >
+                      {row.name}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: 'var(--text-dim)', marginTop: '2px' }}>
+                    {row.breakdown}
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div
+                    className="mono tabular"
+                    style={{
+                      fontSize: row.highlight ? '24px' : '20px',
+                      fontWeight: 600,
+                      color: row.highlight ? '#0d9488' : 'var(--text-main)',
+                    }}
+                  >
+                    {row.totalCost}
+                  </div>
+                  <div className="mono" style={{ fontSize: '11.5px', color: 'var(--text-dim)' }}>
+                    {row.turnaround}
+                  </div>
+                </div>
+              </div>
+
+              {/* Clean Tonal Bar */}
+              <div
+                style={{
+                  width: '100%',
+                  height: row.highlight ? '12px' : '8px',
+                  borderRadius: '999px',
+                  background: 'var(--bg-card)',
+                  overflow: 'hidden',
+                  marginTop: '10px',
+                }}
+              >
+                <div
+                  style={{
+                    width: `${row.barPct}%`,
+                    height: '100%',
+                    borderRadius: '999px',
+                    background: row.accent,
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* =====================================================================
+          SECTION 4: EMPIRICAL DATASET PROOF & LIVE SIGN-EPISTASIS ARTEFACT (#datasets)
+          ===================================================================== */}
+      <section
+        id="datasets"
+        style={{
+          scrollMarginTop: '96px',
+          background: 'var(--bg-card)',
+          borderRadius: '20px',
+          padding: 'clamp(28px, 4vw, 48px)',
+        }}
+      >
+        {/* Header + Interactive Proof Mode Switcher */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-end',
+            flexWrap: 'wrap',
+            gap: '20px',
+            marginBottom: '32px',
+          }}
+        >
+          <div>
+            <h2
+              className="title-display"
+              style={{ fontSize: 'var(--step-head)', color: 'var(--text-main)', marginBottom: '8px' }}
+            >
+              Verified on 48 paired seeds &{' '}
+              <span style={{ color: '#0d9488' }}>
+                sign-epistatic
+              </span>{' '}
+              landscapes.
+            </h2>
+            <p style={{ fontSize: 'var(--step-body)', color: 'var(--text-muted)', maxWidth: '64ch' }}>
+              Tested head-to-head against published active-learning baselines on the complete 159,999-variant TrpB empirical fitness landscape (Johnston et al. 2024) and three additional benchmark families.
+            </p>
+          </div>
+
+          {/* 3-Mode Interactive Switcher */}
+          <div
+            style={{
+              display: 'inline-flex',
+              gap: '4px',
+              padding: '4px',
+              borderRadius: '10px',
+              background: 'var(--bg-elevated)',
+            }}
+          >
+            {[
+              { id: 'reliability', label: '48-Seed Reliability' },
+              { id: 'epistasis', label: 'K227 × G228 Sign-Epistasis' },
+              { id: 'datasets', label: '4-Target Benchmarks' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setProofTab(tab.id)}
+                style={{
+                  padding: '8px 14px',
+                  fontSize: '13px',
+                  fontWeight: proofTab === tab.id ? 600 : 500,
+                  borderRadius: '7px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: proofTab === tab.id ? '#141413' : 'transparent',
+                  color: proofTab === tab.id ? '#fcfbf8' : 'var(--text-muted)',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* MODE 1: 48-Seed Reliability vs ALDE / Ridge / BoTorch */}
+        {proofTab === 'reliability' && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '28px',
+              background: 'var(--bg-elevated)',
+              borderRadius: '14px',
+              padding: '32px',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '20px' }}>
+              <div>
+                <h3 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '10px' }}>
+                  Why reliability matters more than lucky seeds
+                </h3>
+                <p style={{ fontSize: '14.5px', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '18px' }}>
+                  A wet-lab team runs a campaign once, not 50 times hoping for a lucky initialization. Across 48 paired random starts (96 total assays out of 159,999 variants), PanoptesBio reaches the ≥ 0.70 top tier on <strong>47 of 48 seeds (98%)</strong> and hits <strong>88% success at half budget (50 assays)</strong>.
+                </p>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '16px',
+                  padding: '18px',
+                  borderRadius: '10px',
+                  background: 'var(--bg-card)',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Reliability Mode (Default)</div>
+                  <div className="mono tabular" style={{ fontSize: '22px', fontWeight: 600, color: '#0d9488', marginTop: '2px' }}>
+                    98% Hit Rate
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    47/48 seeds ≥ 0.70 · 0.619 floor
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Frontier Mode (Peak Hunter)</div>
+                  <div className="mono tabular" style={{ fontSize: '22px', fontWeight: 600, color: 'var(--text-main)', marginTop: '2px' }}>
+                    38% Exact 1.000
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Finds #1/159,999 global peak (92% ≥ 0.70)
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Paired 48-Seed Bar Comparison */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', justifyContent: 'center' }}>
+              {[
+                {
+                  label: 'PanoptesBio (Reliability Mode)',
+                  fullPct: 98,
+                  halfPct: 88,
+                  medianAssays: '50 assays',
+                  color: '#0d9488',
+                  bold: true,
+                },
+                {
+                  label: 'PanoptesBio (Qualify-Then-Optimize Frontier)',
+                  fullPct: 92,
+                  halfPct: 60,
+                  medianAssays: '49 assays (38% hit 1.000)',
+                  color: '#0f766e',
+                  bold: true,
+                },
+                {
+                  label: 'One-Hot Ridge Surrogate Baseline',
+                  fullPct: 67,
+                  halfPct: 6,
+                  medianAssays: '96 assays',
+                  color: '#78736a',
+                  bold: false,
+                },
+                {
+                  label: 'ALDE (Published DNN Ensemble Baseline)',
+                  fullPct: 58,
+                  halfPct: 4,
+                  medianAssays: '96 assays',
+                  color: '#a8a29e',
+                  bold: false,
+                },
+              ].map((item) => (
+                <div key={item.label}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
+                    <span style={{ fontWeight: item.bold ? 600 : 500, color: 'var(--text-main)' }}>
+                      {item.label}
+                    </span>
+                    <span className="mono tabular" style={{ fontWeight: 600, color: item.bold ? '#0d9488' : 'var(--text-muted)' }}>
+                      {item.fullPct}% full · {item.halfPct}% @ 50 assays
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '10px',
+                      borderRadius: '999px',
+                      background: 'var(--bg-card)',
+                      overflow: 'hidden',
+                      position: 'relative',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${item.fullPct}%`,
+                        height: '100%',
+                        background: item.color,
+                        borderRadius: '999px',
+                      }}
+                    />
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        </section>
+        )}
 
-        {/* =========================================================================
-            SECTION 3: COST BENCHMARKS - PANOPTESBIO AT THE TOP & SAVINGS EMPHASIZED
-            ========================================================================= */}
-        <section id="benchmarks">
+        {/* MODE 2: Interactive K227 × G228 Sign-Epistasis Matrix */}
+        {proofTab === 'epistasis' && (
           <div
             style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '16px',
-              padding: '48px 40px',
-            }}
-          >
-            {/* Top Digestible Header + Giant Savings Callout */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                gap: '32px',
-                alignItems: 'end',
-                marginBottom: '36px',
-              }}
-            >
-              <div>
-                <h2
-                  className="title-display"
-                  style={{
-                    fontSize: 'var(--step-head)',
-                    color: 'var(--text-main)',
-                    marginBottom: '12px',
-                  }}
-                >
-                  Save 99.96% on discovery compute.
-                </h2>
-                <p style={{ fontSize: '16px', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-                  By testing 40 mathematically selected variants instead of brute-forcing the entire
-                  library, PanoptesBio eliminates thousands in wasted GPU and wet-lab spend.
-                </p>
-              </div>
-
-              {/* Emphasized Savings Highlight Box */}
-              <div
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid rgba(5, 150, 105, 0.35)',
-                  borderRadius: '12px',
-                  padding: '20px 24px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '16px',
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: '#047857', marginBottom: '4px' }}>
-                    NET CAPITAL SAVED PER CAMPAIGN
-                  </div>
-                  <div
-                    className="tabular"
-                    style={{ fontSize: '32px', fontWeight: 600, color: '#059669', letterSpacing: '-0.03em' }}
-                  >
-                    ${wetlabSaved.toLocaleString(undefined, { maximumFractionDigits: 0 })}+
-                  </div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                    {multipleCheaper}x cheaper compute than unguided cloud runs
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Stacked Bars: PanoptesBio First at the Top! */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', marginBottom: '32px' }}>
-              {/* Bar 1 (TOP): PanoptesBio Active Learning Engine */}
-              <div
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: '2px solid #059669',
-                  borderRadius: '12px',
-                  padding: '20px 24px',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'baseline',
-                    flexWrap: 'wrap',
-                    gap: '12px',
-                    marginBottom: '10px',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '17px', fontWeight: 600, color: 'var(--text-main)' }}>
-                      PanoptesBio Active Learning Engine
-                    </span>
-                    <span className="badge badge-emerald">
-                      40 Guided Evaluations · {multipleCheaper}x Lower Cost
-                    </span>
-                  </div>
-                  <span className="tabular" style={{ fontSize: '26px', fontWeight: 600, color: '#059669' }}>
-                    ${panoptesCost.toFixed(4)}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    width: '100%',
-                    height: '14px',
-                    background: 'var(--bg-card)',
-                    borderRadius: '7px',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: '2.5%',
-                      minWidth: '18px',
-                      height: '100%',
-                      background: '#059669',
-                      borderRadius: '7px',
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Bar 2: Standard Cloud GPU Competitors */}
-              <div
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '12px',
-                  padding: '18px 24px',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'baseline',
-                    marginBottom: '8px',
-                  }}
-                >
-                  <div>
-                    <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
-                      Standard Cloud GPU Competitors
-                    </span>
-                    <span style={{ fontSize: '13px', color: 'var(--text-dim)', marginLeft: '10px' }}>
-                      Exhaustive forward passes across all {candidateCount.toLocaleString()} variants
-                    </span>
-                  </div>
-                  <span className="tabular" style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                    ${bruteforceCloudCost.toFixed(2)}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    width: '100%',
-                    height: '12px',
-                    background: 'var(--bg-card)',
-                    borderRadius: '6px',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${Math.min(82, Math.max(14, (candidateCount / 250000) * 75))}%`,
-                      height: '100%',
-                      background: '#64748b',
-                      borderRadius: '6px',
-                      transition: 'width 0.2s ease',
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Bar 3: Physical Wet-Lab Screening */}
-              <div
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '12px',
-                  padding: '18px 24px',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'baseline',
-                    marginBottom: '8px',
-                  }}
-                >
-                  <div>
-                    <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
-                      Conventional Wet-Lab Library Synthesis & Assay
-                    </span>
-                    <span style={{ fontSize: '13px', color: 'var(--text-dim)', marginLeft: '10px' }}>
-                      Unfiltered clonal gene synthesis, cloning, and plate consumables
-                    </span>
-                  </div>
-                  <span className="tabular" style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-dim)' }}>
-                    ${wetlabCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    width: '100%',
-                    height: '12px',
-                    background: 'var(--bg-card)',
-                    borderRadius: '6px',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${Math.min(100, Math.max(28, (candidateCount / 250000) * 100))}%`,
-                      height: '100%',
-                      background: '#a8a29e',
-                      borderRadius: '6px',
-                      transition: 'width 0.2s ease',
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Interactive Library Size Slider */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '24px',
-                flexWrap: 'wrap',
-                paddingTop: '12px',
-              }}
-            >
-              <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-                Test with different combinatorial library sizes:
-              </span>
-              <div style={{ flex: 1, minWidth: '240px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <input
-                  type="range"
-                  min="5000"
-                  max="250000"
-                  step="5000"
-                  value={candidateCount}
-                  onChange={(e) => setCandidateCount(Number(e.target.value))}
-                  aria-label="Combinatorial library size"
-                  style={{ flex: 1, accentColor: '#059669', cursor: 'pointer' }}
-                />
-                <span className="tabular" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', minWidth: '130px', textAlign: 'right' }}>
-                  {candidateCount.toLocaleString()} variants
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* =========================================================================
-            SECTION 4: DATASET PROOF - DIRECT BASELINE VS OPTIMUM (NO ROUND CLUTTER)
-            ========================================================================= */}
-        <section id="datasets">
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-end',
-              flexWrap: 'wrap',
-              gap: '20px',
-              marginBottom: '24px',
-            }}
-          >
-            <div>
-              <h2
-                className="title-display"
-                style={{
-                  fontSize: 'var(--step-head)',
-                  color: 'var(--text-main)',
-                  marginBottom: '10px',
-                }}
-              >
-                Validated on real laboratory datasets.
-              </h2>
-              <p style={{ fontSize: '16px', color: 'var(--text-muted)', maxWidth: '58ch' }}>
-                Step through each published wet-lab benchmark to see what the target protein does
-                and the final lead discovered by PanoptesBio.
-              </p>
-            </div>
-
-            {/* Previous / Next Controls */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-muted)', marginRight: '4px' }}>
-                {datasetIdx + 1} of {datasetWalkthroughs.length}
-              </span>
-              <button
-                onClick={() =>
-                  setDatasetIdx((prev) => (prev - 1 + datasetWalkthroughs.length) % datasetWalkthroughs.length)
-                }
-                className="btn btn-secondary"
-                style={{ padding: '8px 14px' }}
-                aria-label="Previous dataset"
-              >
-                <ChevronLeft size={16} />
-                <span>Previous</span>
-              </button>
-              <button
-                onClick={() => setDatasetIdx((prev) => (prev + 1) % datasetWalkthroughs.length)}
-                className="btn btn-primary"
-                style={{ padding: '8px 16px' }}
-                aria-label="Next dataset"
-              >
-                <span>Next Dataset</span>
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-
-          {/* Dataset Selector Pills */}
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '20px' }}>
-            {datasetWalkthroughs.map((ds, idx) => {
-              const active = idx === datasetIdx;
-              return (
-                <button
-                  key={ds.id}
-                  onClick={() => setDatasetIdx(idx)}
-                  className={`btn ${active ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ padding: '8px 16px', fontSize: '13px' }}
-                >
-                  {ds.name}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Single Focused Dataset Card — Direct Baseline vs Discovered Optimum */}
-          <div
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '16px',
-              padding: '40px',
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
-              gap: '44px',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '28px',
+              background: 'var(--bg-elevated)',
+              borderRadius: '14px',
+              padding: '32px',
               alignItems: 'center',
             }}
           >
-            {/* Left: Plain-English Explanation */}
+            {/* Left: Interactive 2x2 Epistasis Grid */}
             <div>
-              <div style={{ marginBottom: '12px' }}>
-                <span className="badge badge-cyan">{currentDataset.tag}</span>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '12px' }}>
+                Click any residue pair at Positions 227 × 228 to inspect sign epistasis:
               </div>
 
-              <h3
-                className="title-display"
-                style={{
-                  fontSize: '30px',
-                  color: 'var(--text-main)',
-                  marginBottom: '20px',
-                }}
-              >
-                {currentDataset.name}
-              </h3>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '3px' }}>
-                    What This Dataset Is
-                  </div>
-                  <p style={{ fontSize: '15px', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-                    {currentDataset.whatItIs}
-                  </p>
-                </div>
-
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '3px' }}>
-                    Why It Matters
-                  </div>
-                  <p style={{ fontSize: '15px', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-                    {currentDataset.whyItMatters}
-                  </p>
-                </div>
-
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#059669', marginBottom: '3px' }}>
-                    Result
-                  </div>
-                  <p style={{ fontSize: '15px', color: 'var(--text-main)', lineHeight: 1.55 }}>
-                    {currentDataset.howWeDid}
-                  </p>
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                {EPISTASIS_CELLS.map((cell) => {
+                  const isSelected = cell.id === activeEpistasis.id;
+                  return (
+                    <button
+                      key={cell.id}
+                      type="button"
+                      onClick={() => setSelectedEpistasisId(cell.id)}
+                      style={{
+                        textAlign: 'left',
+                        padding: '18px',
+                        borderRadius: '12px',
+                        background: cell.bgTone,
+                        outline: isSelected ? `2px solid ${cell.tagColor}` : 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <div className="mono" style={{ fontSize: '12px', fontWeight: 600, color: cell.tagColor, marginBottom: '4px' }}>
+                        {cell.pos227} × {cell.pos228}
+                      </div>
+                      <div className="mono tabular" style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-main)' }}>
+                        {cell.peakFitness}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        {cell.role}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Right: Clean Direct Outcome Comparison (Wild-Type Baseline vs. Discovered Lead) */}
+            {/* Right: Detailed Epistatic Explanation */}
             <div
               style={{
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '14px',
-                padding: '32px',
+                background: 'var(--bg-card)',
+                borderRadius: '12px',
+                padding: '26px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '24px',
+                gap: '14px',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
-                  Empirical Benchmark Outcome
+                <span className="mono" style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
+                  {activeEpistasis.genotype}
                 </span>
-                <span className="badge badge-emerald">{currentDataset.improvementBadge}</span>
-              </div>
-
-              {/* Direct 2-Bar Comparison: Wild-Type vs Discovered Lead */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Wild-Type Parent Baseline</span>
-                    <span className="tabular" style={{ fontWeight: 600, color: 'var(--text-muted)' }}>
-                      {currentDataset.wtScore}
-                    </span>
-                  </div>
-                  <div style={{ width: '100%', height: '12px', background: 'var(--bg-card)', borderRadius: '6px', overflow: 'hidden' }}>
-                    <div
-                      style={{
-                        width: `${currentDataset.wtBarPct}%`,
-                        height: '100%',
-                        background: '#a8a29e',
-                        borderRadius: '6px',
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '6px' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>PanoptesBio Discovered Lead</span>
-                    <span className="tabular" style={{ fontWeight: 600, color: '#059669' }}>
-                      {currentDataset.peakScore}
-                    </span>
-                  </div>
-                  <div style={{ width: '100%', height: '14px', background: 'var(--bg-card)', borderRadius: '7px', overflow: 'hidden' }}>
-                    <div
-                      style={{
-                        width: `${currentDataset.peakBarPct}%`,
-                        height: '100%',
-                        background: '#059669',
-                        borderRadius: '7px',
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 3 Key Telemetry Metrics */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '12px',
-                  padding: '14px',
-                  background: 'var(--bg-card)',
-                  borderRadius: '10px',
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Evaluated</div>
-                  <div className="tabular" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>
-                    {currentDataset.testedFraction}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Compute Spend</div>
-                  <div className="tabular" style={{ fontSize: '14px', fontWeight: 600, color: '#059669' }}>
-                    {currentDataset.spend}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Hit Enrichment</div>
-                  <div className="tabular" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--cyan-bright)' }}>
-                    {currentDataset.enrichment}
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  paddingTop: '14px',
-                  borderTop: '1px solid var(--border-subtle)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: '13px',
-                }}
-              >
-                <span style={{ color: 'var(--text-muted)' }}>Discovered Lead Genotype</span>
                 <span
-                  className="mono"
+                  className="mono tabular"
                   style={{
+                    fontSize: '13px',
                     fontWeight: 600,
-                    color: 'var(--text-main)',
-                    background: 'var(--bg-card)',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-subtle)',
+                    color: activeEpistasis.tagColor,
                   }}
                 >
-                  {currentDataset.leadMutation}
+                  Peak: {activeEpistasis.peakFitness} (Mean: {activeEpistasis.meanFitness})
                 </span>
+              </div>
+
+              <p style={{ fontSize: '14.5px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                {activeEpistasis.explanation}
+              </p>
+
+              <div
+                style={{
+                  paddingTop: '12px',
+                  borderTop: '1px solid var(--border-subtle)',
+                  fontSize: '13px',
+                  color: 'var(--text-main)',
+                }}
+              >
+                <strong>How PanoptesBio solves this:</strong> Once the surrogate qualifies a strong multi-site scaffold (predicted ≥ 0.45), 3 batch slots systematically probe under-sampled amino acids at unlocked positions, discovering <strong>K227 inside G228</strong> without wasting plates on random noise.
               </div>
             </div>
           </div>
-        </section>
+        )}
 
-        {/* =========================================================================
-            SECTION 5A: HOW IT WORKS - VISUAL DATA TRANSFORMATION PIPELINE
-            ========================================================================= */}
-        <section
-          id="how-it-works"
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: '16px',
-            padding: '48px 40px',
-          }}
-        >
-          <div style={{ maxWidth: '680px', marginBottom: '36px' }}>
-            <h2
-              className="title-display"
-              style={{
-                fontSize: 'var(--step-head)',
-                color: 'var(--text-main)',
-                marginBottom: '10px',
-              }}
-            >
-              How data flows through the engine.
-            </h2>
-            <p style={{ fontSize: '16px', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-              Follow a protein from raw crystal coordinates and a $1.00 budget ceiling through each
-              mathematical filter to a ready-to-synthesize 96-well plate. Click any stage to inspect
-              the live data transformation.
-            </p>
-          </div>
-
-          {/* Visual Horizontal Pipeline Schematic */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: '14px',
-              marginBottom: '28px',
-            }}
-          >
-            {pipelineNodes.map((node, idx) => {
-              const isSelected = activePipelineNode === idx;
-              return (
-                <button
-                  key={node.id}
-                  onClick={() => setActivePipelineNode(idx)}
-                  style={{
-                    textAlign: 'left',
-                    padding: '20px',
-                    borderRadius: '12px',
-                    background: isSelected ? '#141413' : 'var(--bg-elevated)',
-                    color: isSelected ? '#fdfcfa' : 'var(--text-main)',
-                    border: isSelected ? '1px solid #141413' : '1px solid var(--border-subtle)',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    transition: 'all 0.18s ease',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    gap: '12px',
-                  }}
-                >
-                  <div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '8px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: isSelected ? '#a7f3d0' : '#059669',
-                      }}
-                    >
-                      <span>{node.stage}</span>
-                      <span>→</span>
-                    </div>
-                    <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '6px', lineHeight: 1.3 }}>
-                      {node.title}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '13px',
-                      color: isSelected ? 'rgba(253, 252, 250, 0.78)' : 'var(--text-muted)',
-                      lineHeight: 1.45,
-                    }}
-                  >
-                    {node.shortDesc}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Visual Input -> Transformation -> Output Inspector */}
+        {/* MODE 3: Streamlined Single-Card Dataset Browser */}
+        {proofTab === 'datasets' && (
           <div
             style={{
               background: 'var(--bg-elevated)',
-              border: '1px solid var(--border-subtle)',
               borderRadius: '14px',
-              padding: '28px 32px',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              gap: '24px',
-              alignItems: 'stretch',
+              padding: '32px',
             }}
           >
-            {/* Column 1: Stage Input */}
+            {/* Target Selector Pills + Prev/Next */}
             <div
               style={{
-                padding: '18px 20px',
-                borderRadius: '10px',
-                background: 'var(--bg-card)',
                 display: 'flex',
-                flexDirection: 'column',
                 justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+                marginBottom: '24px',
+                paddingBottom: '18px',
+                borderBottom: '1px solid var(--border-subtle)',
               }}
             >
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>
-                  STAGE INPUT · {activeNodeData.inputLabel}
-                </div>
-                <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)', lineHeight: 1.45 }}>
-                  {activeNodeData.inputValue}
-                </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {DATASET_TARGETS.map((t, idx) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setDatasetIdx(idx)}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: datasetIdx === idx ? 600 : 500,
+                      background: datasetIdx === idx ? '#141413' : 'var(--bg-card)',
+                      color: datasetIdx === idx ? '#fcfbf8' : 'var(--text-muted)',
+                    }}
+                  >
+                    {t.name}
+                  </button>
+                ))}
               </div>
-              <div style={{ marginTop: '14px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                Feeds into subsystem →
+
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDatasetIdx((prev) => (prev - 1 + DATASET_TARGETS.length) % DATASET_TARGETS.length)
+                  }
+                  className="btn btn-secondary"
+                  style={{ padding: '7px 10px' }}
+                  aria-label="Previous dataset"
+                >
+                  <ChevronLeft size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDatasetIdx((prev) => (prev + 1) % DATASET_TARGETS.length)}
+                  className="btn btn-secondary"
+                  style={{ padding: '7px 10px' }}
+                  aria-label="Next dataset"
+                >
+                  <ChevronRight size={15} />
+                </button>
               </div>
             </div>
 
-            {/* Column 2: System Transformation */}
+            {/* Active Target Baseline -> Final Lead Summary */}
             <div
               style={{
-                padding: '18px 20px',
-                borderRadius: '10px',
-                background: 'rgba(3, 105, 161, 0.06)',
-                border: '1px solid rgba(3, 105, 161, 0.2)',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: '28px',
+                alignItems: 'center',
               }}
             >
               <div>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: '#0369a1', marginBottom: '6px' }}>
-                  ENGINE OPERATION · {activeNodeData.processLabel}
+                <div className="mono" style={{ fontSize: '12px', color: '#0d9488', fontWeight: 600, marginBottom: '4px' }}>
+                  {activeDataset.citation}
                 </div>
-                <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)', lineHeight: 1.45 }}>
-                  {activeNodeData.processValue}
-                </div>
+                <h3 style={{ fontSize: '24px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '12px' }}>
+                  {activeDataset.name}
+                </h3>
+                <p style={{ fontSize: '14.5px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  {activeDataset.takeaway}
+                </p>
               </div>
-              <div style={{ marginTop: '14px', fontSize: '12px', color: '#0369a1', fontWeight: 500 }}>
-                Deterministic verification pass →
-              </div>
-            </div>
 
-            {/* Column 3: Stage Output */}
-            <div
-              style={{
-                padding: '18px 20px',
-                borderRadius: '10px',
-                background: 'rgba(5, 150, 105, 0.08)',
-                border: '1px solid rgba(5, 150, 105, 0.25)',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: '#047857', marginBottom: '6px' }}>
-                  VERIFIED OUTPUT · {activeNodeData.outputLabel}
+              <div
+                style={{
+                  background: 'var(--bg-card)',
+                  borderRadius: '12px',
+                  padding: '22px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Starting Baseline</span>
+                  <span className="mono tabular" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    {activeDataset.wtScore} ({activeDataset.wtLabel})
+                  </span>
                 </div>
-                <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)', lineHeight: 1.45 }}>
-                  {activeNodeData.outputValue}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Discovered Lead</span>
+                  <span className="mono tabular" style={{ fontSize: '15px', fontWeight: 600, color: '#0d9488' }}>
+                    {activeDataset.leadLabel} → {activeDataset.leadScore}
+                  </span>
                 </div>
-              </div>
-              <div style={{ marginTop: '14px', fontSize: '12px', color: '#047857', fontWeight: 600 }}>
-                ✓ Committed to SQLite Merkle Ledger
+
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    paddingTop: '12px',
+                    borderTop: '1px solid var(--border-subtle)',
+                    fontSize: '12.5px',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  <span>{activeDataset.hitRate}</span>
+                  <span className="mono tabular" style={{ fontWeight: 600, color: 'var(--text-main)' }}>
+                    GPU Spend: {activeDataset.spend}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </section>
+        )}
+      </section>
 
-        {/* =========================================================================
-            SECTION 5B: HOW TO USE - BROKEN DOWN AS SIMPLY AS POSSIBLE
-            ========================================================================= */}
-        <section id="how-to-use">
-          <div style={{ maxWidth: '640px', marginBottom: '36px' }}>
-            <h2
-              className="title-display"
-              style={{
-                fontSize: 'var(--step-head)',
-                color: 'var(--text-main)',
-                marginBottom: '10px',
-              }}
-            >
-              How to use PanoptesBio in three steps.
-            </h2>
-            <p style={{ fontSize: '16px', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-              No command-line setup or manual primer math required. Everything runs directly from the
-              browser Studio.
-            </p>
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: '24px',
-            }}
+      {/* =====================================================================
+          SECTION 5A: HOW IT WORKS (#how-it-works) — Single Unified Visual Flow
+          ===================================================================== */}
+      <section id="how-it-works" style={{ scrollMarginTop: '96px' }}>
+        <div style={{ marginBottom: '36px' }}>
+          <h2
+            className="title-display"
+            style={{ fontSize: 'var(--step-head)', color: 'var(--text-main)', marginBottom: '10px' }}
           >
-            {/* Step 1 */}
-            <div
-              style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '14px',
-                padding: '32px 28px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                gap: '20px',
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    display: 'inline-block',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: 'var(--text-main)',
-                    marginBottom: '16px',
-                  }}
-                >
-                  Step 1
-                </div>
-                <h3 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '10px' }}>
-                  Pick a protein & lock your budget
-                </h3>
-                <p style={{ fontSize: '15px', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-                  Select a target scaffold (enzyme, antibody, or antivenom) and set your dollar cap
-                  (for example, $1.00). The fail-closed gatekeeper guarantees the engine cannot
-                  overspend.
-                </p>
-              </div>
-              <div
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '8px',
-                  padding: '12px 14px',
-                  fontSize: '13px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <span style={{ color: 'var(--text-muted)' }}>Default Ceiling</span>
-                <strong className="tabular" style={{ color: 'var(--text-main)' }}>$1.00 USD Max</strong>
-              </div>
-            </div>
+            How raw sequence data becomes a{' '}
+            <span style={{ color: '#0d9488' }}>
+              validated plate.
+            </span>
+          </h2>
+          <p style={{ fontSize: 'var(--step-body)', color: 'var(--text-muted)', maxWidth: '64ch' }}>
+            Click any stage below to follow how a wild-type PDB structure flows through our 3-stage deterministic pipeline into synthesis-ready cDNA orders.
+          </p>
+        </div>
 
-            {/* Step 2 */}
-            <div
-              style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '14px',
-                padding: '32px 28px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                gap: '20px',
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    display: 'inline-block',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: 'var(--text-main)',
-                    marginBottom: '16px',
-                  }}
-                >
-                  Step 2
-                </div>
-                <h3 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '10px' }}>
-                  Stream the active learning loop
-                </h3>
-                <p style={{ fontSize: '15px', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-                  Click Launch. Watch in real time as the engine proposes mutations, relaxes sidechain
-                  clashes on CPU, scores top candidates, and plots the Pareto trade-off frontier.
-                </p>
-              </div>
-              <div
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '8px',
-                  padding: '12px 14px',
-                  fontSize: '13px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <span style={{ color: 'var(--text-muted)' }}>Live Telemetry</span>
-                <strong style={{ color: '#059669' }}>3D Structure + Pareto Rank 0</strong>
-              </div>
-            </div>
-
-            {/* Step 3 */}
-            <div
-              style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '14px',
-                padding: '32px 28px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                gap: '20px',
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    display: 'inline-block',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: 'var(--text-main)',
-                    marginBottom: '16px',
-                  }}
-                >
-                  Step 3
-                </div>
-                <h3 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '10px' }}>
-                  Export lab orders or upload plate data
-                </h3>
-                <p style={{ fontSize: '15px', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-                  Download ready-to-order Twist DNA spreadsheets and Opentrons robot scripts—or drop
-                  your wet-lab plate reader CSV into the Studio to calibrate the next round.
-                </p>
-              </div>
-              <div
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '8px',
-                  padding: '12px 14px',
-                  fontSize: '13px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <span style={{ color: 'var(--text-muted)' }}>One-Click Exports</span>
-                <strong style={{ color: 'var(--cyan-bright)' }}>Twist CSV · Opentrons .py</strong>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* =========================================================================
-            SECTION 6: SLEEK CENTERED CALL TO ACTION - LAUNCH STUDIO FRONT AND CENTER
-            ========================================================================= */}
-        <section id="next-steps">
-          <div
-            style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '20px',
-              padding: '72px 32px',
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-            }}
-          >
-            <h2
-              className="title-display"
-              style={{
-                fontSize: 'clamp(2.2rem, 3.8vw, 3.5rem)',
-                color: 'var(--text-main)',
-                marginBottom: '16px',
-                maxWidth: '20ch',
-              }}
-            >
-              Ready to run a budgeted discovery campaign?
-            </h2>
-            <p
-              style={{
-                fontSize: '17px',
-                color: 'var(--text-muted)',
-                maxWidth: '52ch',
-                marginBottom: '36px',
-                lineHeight: 1.55,
-              }}
-            >
-              Launch the interactive Studio to stream active learning rounds, optimize multi-objective
-              Pareto frontiers, and export turnkey DNA synthesis manifests.
-            </p>
-
-            {/* Primary Front-and-Center CTA */}
-            <button
-              onClick={() => onNavigate('studio')}
-              className="btn btn-primary"
-              style={{
-                padding: '18px 44px',
-                fontSize: '17px',
-                fontWeight: 600,
-                borderRadius: '10px',
-                marginBottom: '20px',
-              }}
-            >
-              <span>Launch Studio</span>
-              <ArrowRight size={19} />
-            </button>
-
-            <div style={{ display: 'flex', gap: '24px', fontSize: '14px', color: 'var(--text-muted)' }}>
+        {/* Unified 3-Stage Selector Bar */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: '16px',
+            marginBottom: '20px',
+          }}
+        >
+          {pipelineStages.map((st, idx) => {
+            const isSelected = activePipelineStage === idx;
+            return (
               <button
-                onClick={() => onNavigate('experiments')}
+                key={st.num}
+                type="button"
+                onClick={() => setActivePipelineStage(idx)}
                 style={{
-                  background: 'none',
+                  textAlign: 'left',
+                  padding: '24px',
+                  borderRadius: '14px',
                   border: 'none',
-                  color: 'var(--text-muted)',
                   cursor: 'pointer',
-                  fontWeight: 500,
+                  background: isSelected ? '#141413' : 'var(--bg-elevated)',
+                  color: isSelected ? '#fcfbf8' : 'var(--text-main)',
+                  transition: 'all 0.18s ease',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
                 }}
               >
-                Browse Novel Experiments →
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: isSelected ? '#5eead4' : '#0d9488',
+                    }}
+                  >
+                    {st.num}
+                  </span>
+                  <ArrowRight size={16} style={{ opacity: isSelected ? 0.9 : 0.35 }} />
+                </div>
+                <div style={{ fontSize: '17px', fontWeight: 600 }}>{st.title}</div>
+                <div style={{ fontSize: '13px', opacity: isSelected ? 0.8 : 0.68, lineHeight: 1.45 }}>
+                  {st.subtitle}
+                </div>
               </button>
-              <button
-                onClick={() => onNavigate('hackathon')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                }}
-              >
-                View Hackathon Architecture →
-              </button>
+            );
+          })}
+        </div>
+
+        {/* Unified Visual Transformation Detail Panel (No nested 1px sub-boxes) */}
+        <div
+          style={{
+            background: 'var(--bg-elevated)',
+            borderRadius: '16px',
+            padding: '32px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: '28px',
+            alignItems: 'start',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>
+              Incoming Data
+            </div>
+            <div className="mono" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', lineHeight: 1.5 }}>
+              {currentStage.inputLabel}
             </div>
           </div>
-        </section>
-      </div>
+
+          <div>
+            <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '6px' }}>
+              Biophysical Transformation
+            </div>
+            <div style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+              {currentStage.operationLabel}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#0d9488', marginBottom: '6px' }}>
+              Stage Output
+            </div>
+            <div className="mono" style={{ fontSize: '14px', fontWeight: 600, color: '#0d9488', lineHeight: 1.5 }}>
+              {currentStage.outputLabel}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* =====================================================================
+          SECTION 5B: HOW TO USE (#how-to-use) — Open 3-Column Operator Guide
+          ===================================================================== */}
+      <section id="how-to-use" style={{ scrollMarginTop: '96px' }}>
+        <div style={{ marginBottom: '36px' }}>
+          <h2
+            className="title-display"
+            style={{ fontSize: 'var(--step-head)', color: 'var(--text-main)', marginBottom: '10px' }}
+          >
+            From accession ID to synthesis order in{' '}
+            <span style={{ color: '#0d9488' }}>
+              three steps.
+            </span>
+          </h2>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '32px',
+            paddingTop: '24px',
+            borderTop: '1px solid var(--border-subtle)',
+          }}
+        >
+          {[
+            {
+              step: 'First',
+              title: 'Select your target & budget cap',
+              body: 'Pick a benchmark or upload your PDB scaffold in the Studio, then set a hard micro-USD compute cap (e.g., $1.00) and batch size.',
+              actionLabel: 'Open Active Learning Studio',
+            },
+            {
+              step: 'Second',
+              title: 'Run the loop & inspect Pareto leads',
+              body: 'Watch real-time SSE telemetry as the ensemble surrogate ranks 160,000+ variants, relaxes steric clashes on CPU, and scores top leads.',
+              actionLabel: 'Explore Pareto Frontier',
+            },
+            {
+              step: 'Third',
+              title: 'Download Twist CSV & robot scripts',
+              body: 'Export codon-optimized Twist Golden Gate fragments, Opentrons OT-2 pipetting protocols, and 21 CFR Part 11 signed Merkle proofs.',
+              actionLabel: 'Open Wet-Lab Export Studio',
+            },
+          ].map((item) => (
+            <div key={item.step} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '16px' }}>
+              <div>
+                <div
+                  className="mono"
+                  style={{ fontSize: '12px', fontWeight: 600, color: '#0d9488', marginBottom: '10px' }}
+                >
+                  {item.step}
+                </div>
+                <h3 style={{ fontSize: '19px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>
+                  {item.title}
+                </h3>
+                <p style={{ fontSize: '14.5px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  {item.body}
+                </p>
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() => onNavigate && onNavigate('studio')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    fontSize: '13.5px',
+                    fontWeight: 600,
+                    color: 'var(--text-main)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>{item.actionLabel}</span>
+                  <ArrowRight size={14} color="#0d9488" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* =====================================================================
+          SECTION 6: FINAL CALL TO ACTION (#next-steps) — High-Contrast Dark Ink Panel
+          ===================================================================== */}
+      <section
+        id="next-steps"
+        style={{
+          scrollMarginTop: '96px',
+          background: '#141413',
+          color: '#fcfbf8',
+          borderRadius: '20px',
+          padding: 'clamp(36px, 5vw, 64px)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '32px',
+        }}
+      >
+        <div style={{ maxWidth: '600px' }}>
+          <h2
+            className="title-display"
+            style={{
+              fontSize: 'clamp(2rem, 3.4vw, 3rem)',
+              color: '#fcfbf8',
+              marginBottom: '12px',
+            }}
+          >
+            Ready to evolve your next{' '}
+            <span style={{ color: '#5eead4' }}>
+              therapeutic lead?
+            </span>
+          </h2>
+          <p style={{ fontSize: '15.5px', color: '#b8b2a6', lineHeight: 1.6 }}>
+            Launch an active-learning or de novo binder campaign in seconds, inspect the 4-objective Pareto frontier, and export synthesis-ready files under a cryptographic spend gate.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => onNavigate && onNavigate('studio')}
+            className="btn"
+            style={{
+              background: '#0d9488',
+              color: '#fcfbf8',
+              padding: '14px 28px',
+              fontSize: '15px',
+              fontWeight: 600,
+            }}
+          >
+            <Play size={16} />
+            <span>Launch Studio</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenAuth && onOpenAuth()}
+            className="btn"
+            style={{
+              background: 'rgba(252, 251, 248, 0.1)',
+              color: '#fcfbf8',
+              padding: '14px 22px',
+              fontSize: '14.5px',
+            }}
+          >
+            <span>Create Operator Account</span>
+            <ArrowRight size={15} />
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

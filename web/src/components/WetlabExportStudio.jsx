@@ -209,15 +209,14 @@ export default function WetlabExportStudio({
             gap: '4px',
             padding: '4px',
             borderRadius: '8px',
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-card)',
           }}
         >
           <button
             type="button"
             onClick={() => setWorkflowMode('outbound')}
             className={`btn ${workflowMode === 'outbound' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ padding: '6px 14px', fontSize: '12.5px', border: 'none' }}
+            style={{ padding: '6px 14px', fontSize: '12.5px' }}
           >
             Outbound Synthesis & Robot Orders
           </button>
@@ -225,7 +224,7 @@ export default function WetlabExportStudio({
             type="button"
             onClick={() => setWorkflowMode('inbound')}
             className={`btn ${workflowMode === 'inbound' ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ padding: '6px 14px', fontSize: '12.5px', border: 'none' }}
+            style={{ padding: '6px 14px', fontSize: '12.5px' }}
           >
             Inbound Plate Reader CSV
           </button>
@@ -237,7 +236,7 @@ export default function WetlabExportStudio({
               className="input-field"
               value={hostOrganism}
               onChange={(e) => setHostOrganism(e.target.value)}
-              style={{ width: 'auto', fontSize: '12px', padding: '6px 10px' }}
+              style={{ width: 'auto', fontSize: '12px', padding: '6px 28px 6px 10px' }}
             >
               <option value="Escherichia coli (BL21-DE3)">Host: E. coli (BL21-DE3)</option>
               <option value="Chinese Hamster Ovary (CHO-K1)">Host: CHO-K1 Mammalian</option>
@@ -248,7 +247,7 @@ export default function WetlabExportStudio({
               className="input-field"
               value={plateFormat}
               onChange={(e) => setPlateFormat(e.target.value)}
-              style={{ width: 'auto', fontSize: '12px', padding: '6px 10px' }}
+              style={{ width: 'auto', fontSize: '12px', padding: '6px 28px 6px 10px' }}
             >
               <option value="96_well">96-Well Format</option>
               <option value="384_well">384-Well Format</option>
@@ -270,7 +269,7 @@ export default function WetlabExportStudio({
       {workflowMode === 'outbound' ? (
         <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '16px', alignItems: 'start' }}>
           {/* Left: Compact Artifact Selector List */}
-          <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {[
               {
                 id: 'twist',
@@ -317,10 +316,9 @@ export default function WetlabExportStudio({
                   onClick={() => setActivePreviewTab(item.id)}
                   style={{
                     padding: '12px 14px',
-                    borderRadius: '8px',
+                    borderRadius: '10px',
                     cursor: 'pointer',
-                    background: isSelected ? 'var(--bg-elevated)' : 'transparent',
-                    border: isSelected ? '1px solid var(--text-main)' : '1px solid var(--border-subtle)',
+                    background: isSelected ? 'var(--bg-card)' : 'transparent',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
@@ -368,15 +366,13 @@ export default function WetlabExportStudio({
               </button>
             </div>
 
-            <div
+            <pre
               style={{
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '8px',
+                background: 'var(--bg-dark)',
+                borderRadius: '10px',
                 padding: '16px',
                 height: '330px',
                 overflowY: 'auto',
-                fontFamily: 'var(--font-mono)',
                 fontSize: '12px',
                 lineHeight: '1.6',
                 color: 'var(--text-main)',
@@ -385,7 +381,7 @@ export default function WetlabExportStudio({
               }}
             >
               {isExporting ? 'Compiling manifests...' : getActiveContent() || 'No manifest loaded.'}
-            </div>
+            </pre>
           </div>
         </div>
       ) : (
@@ -393,7 +389,7 @@ export default function WetlabExportStudio({
         <div className="glass-panel" style={{ padding: '28px', maxWidth: '760px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
             <div>
-              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 4px', color: 'var(--text-main)' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 4px', color: 'var(--text-main)' }}>
                 Ingest 96 / 384-Well Microplate Reader Data
               </h3>
               <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0 }}>
@@ -426,12 +422,11 @@ export default function WetlabExportStudio({
             }}
             onClick={() => fileInputRef.current?.click()}
             style={{
-              border: `1.5px dashed ${isDragging ? '#0d9488' : 'var(--border-subtle)'}`,
-              borderRadius: '10px',
+              borderRadius: '12px',
               padding: '32px 20px',
               textAlign: 'center',
               cursor: 'pointer',
-              background: 'var(--bg-elevated)',
+              background: isDragging ? 'var(--bg-card-hover)' : 'var(--bg-card)',
               marginBottom: '16px',
             }}
           >
@@ -474,7 +469,6 @@ export default function WetlabExportStudio({
                 padding: '10px 14px',
                 borderRadius: '8px',
                 background: '#fef2f2',
-                border: '1px solid #fecaca',
                 color: '#dc2626',
                 fontSize: '12px',
                 marginTop: '8px',
@@ -490,9 +484,8 @@ export default function WetlabExportStudio({
               style={{
                 marginTop: '12px',
                 padding: '16px',
-                borderRadius: '8px',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--border-subtle)',
+                borderRadius: '10px',
+                background: 'var(--bg-card)',
                 fontSize: '12.5px',
               }}
             >
