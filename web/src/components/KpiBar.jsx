@@ -105,7 +105,7 @@ export default function KpiBar({
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '4px' }}>
               CLOUD CAPITAL SAVINGS
             </div>
-            <div className="title-display" style={{ fontSize: '24px', color: '#a78bfa' }}>
+            <div className="title-display" style={{ fontSize: '24px', color: '#0284c7' }}>
               {savedPct}{' '}
               <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-muted)' }}>
                 ({speedup})
@@ -116,8 +116,8 @@ export default function KpiBar({
             style={{
               padding: '8px',
               borderRadius: '8px',
-              background: 'rgba(167, 139, 250, 0.15)',
-              color: '#a78bfa',
+              background: 'rgba(2, 132, 199, 0.1)',
+              color: '#0284c7',
             }}
           >
             <TrendingUp size={20} />
