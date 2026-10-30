@@ -1,5 +1,5 @@
-"""
-workers/spatial_filter.py — 3D Spatial Distance & Steric Clash Biomechanical Filter.
+﻿"""
+workers/spatial_filter.py â€” 3D Spatial Distance & Steric Clash Biomechanical Filter.
 
 Purpose:
     Extracts 3D C-alpha coordinates from crystallographic PDB structures (or AlphaFold models)
@@ -22,7 +22,35 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Fallback structure used when a caller supplies no pdb_path.
+#
+# This is avGFP. Applied to any other target it yields contact shells, C-alpha
+# distances and burial estimates for the wrong protein - silently, and with results
+# that look entirely plausible. The benchmarks always pass an explicit structure
+# (TrpB uses 8EH0), but server.py and the dashboard can reach these functions without
+# one, so every fallback use is now logged loudly rather than assumed intentional.
 DEFAULT_PDB_PATH: Path = Path(__file__).resolve().parent / "data" / "1EMA.pdb"
+
+_WARNED_DEFAULT_PDB: Set[str] = set()
+
+
+def _resolve_pdb_path(pdb_path: Optional[Any], caller: str) -> Path:
+    """
+    Returns the caller's structure, or the avGFP fallback with a loud warning.
+
+    Centralised so the fallback cannot be taken silently from any of the call sites
+    that previously each wrote `pdb_path if pdb_path is not None else DEFAULT_PDB_PATH`.
+    """
+    if pdb_path is not None:
+        return Path(pdb_path)
+    if caller not in _WARNED_DEFAULT_PDB:
+        _WARNED_DEFAULT_PDB.add(caller)
+        logger.warning(
+            "%s received no pdb_path and is falling back to %s (avGFP). Structural "
+            "results will describe avGFP, NOT the target under study. Pass pdb_path.",
+            caller, DEFAULT_PDB_PATH.name,
+        )
+    return DEFAULT_PDB_PATH
 
 # Standard Van der Waals sidechain volume estimates (in Angstroms^3)
 AA_VOLUMES: Dict[str, float] = {
@@ -68,7 +96,7 @@ class SpatialContactMap:
         chain_id: Optional[str] = None,
         reference_sequence: Optional[str] = None,
     ) -> None:
-        self.pdb_path: Optional[Path] = Path(pdb_path) if pdb_path is not None else DEFAULT_PDB_PATH
+        self.pdb_path: Optional[Path] = _resolve_pdb_path(pdb_path, "SpatialContactMap")
         self.chain_id = chain_id
         self.reference_sequence = reference_sequence
         self.ca_coordinates: Dict[int, Tuple[str, float, float, float]] = {}
@@ -543,7 +571,7 @@ def compute_gnm_hinge_residues(
     second derivatives and yields vector rather than scalar mode amplitudes; that
     is a different model and is not implemented here.
     """
-    resolved_path = str(pdb_path) if pdb_path is not None else str(DEFAULT_PDB_PATH)
+    resolved_path = str(_resolve_pdb_path(pdb_path, "spatial_filter"))
     inv_tuple = tuple(sorted(catalytic_invariants)) if catalytic_invariants else ()
     cache_key = (resolved_path, float(cutoff_distance), int(top_k), inv_tuple)
     if cache_key in _anm_hinge_cache:
@@ -636,7 +664,7 @@ def get_spatial_contact_map(
     reference_sequence: Optional[str] = None,
 ) -> SpatialContactMap:
     """Returns a cached SpatialContactMap instance for the target structure."""
-    resolved_path = str(pdb_path) if pdb_path is not None else str(DEFAULT_PDB_PATH)
+    resolved_path = str(_resolve_pdb_path(pdb_path, "spatial_filter"))
     key = (resolved_path, chain_id, reference_sequence)
     if key not in _contact_map_cache:
         _contact_map_cache[key] = SpatialContactMap(pdb_path, chain_id=chain_id, reference_sequence=reference_sequence)
@@ -861,7 +889,7 @@ def _load_multichain_ca(
     pdb_path: Optional[Path] = None,
 ) -> Dict[Tuple[str, int], Tuple[str, float, float, float]]:
     """Parses and caches C-alpha coordinates across ALL chains in a multi-chain PDB complex."""
-    path_obj = Path(pdb_path) if pdb_path is not None else DEFAULT_PDB_PATH
+    path_obj = _resolve_pdb_path(pdb_path, "multi_chain_ca_coords")
     key = str(path_obj)
     if key in _multichain_ca_cache:
         return _multichain_ca_cache[key]
@@ -1043,5 +1071,6 @@ def compute_interface_binding_ddg(
                     ddg_bind += 0.90  # Intermolecular charge repulsion
 
     return round(ddg_bind, 4)
+
 
 

@@ -476,18 +476,22 @@ class HeuristicInverseFolder:
 
         # Developability Post-Processing: Eliminate liability motifs
         seq = "".join(seq_chars)
-        # 1. Eliminate deamidation motifs (NG, NS, NA, NH -> replace N with Q or E)
+
+        # 1. Ensure NO cysteines. This MUST run before the motif sweeps below: C -> S
+        #    creates new serines, so running it afterwards turned "NC" into "NS" and
+        #    "DC" into "DS" - reintroducing exactly the deamidation and isomerization
+        #    motifs those sweeps had just removed, after they had finished checking.
+        seq = seq.replace("C", "S")
+
+        # 2. Eliminate deamidation motifs (NG, NS, NA, NH -> replace N with Q or E)
         for bad_motif, fix_motif in [("NG", "QG"), ("NS", "QS"), ("NA", "QA"), ("NH", "QH")]:
             while bad_motif in seq:
                 seq = seq.replace(bad_motif, fix_motif)
 
-        # 2. Eliminate isomerization motifs (DG, DS, DT -> replace D with E)
+        # 3. Eliminate isomerization motifs (DG, DS, DT -> replace D with E)
         for bad_motif, fix_motif in [("DG", "EG"), ("DS", "ES"), ("DT", "ET")]:
             while bad_motif in seq:
                 seq = seq.replace(bad_motif, fix_motif)
-
-        # 3. Ensure NO cysteines
-        seq = seq.replace("C", "S")
 
         return seq, sorted(list(engaged_hotspots))
 

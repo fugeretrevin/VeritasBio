@@ -37,6 +37,18 @@ from controller.prompts import BiophysicalHypothesis, SearchStrategy
 
 logger = logging.getLogger(__name__)
 
+# Causes already reported by _warn_once, so a per-candidate failure is surfaced once
+# instead of thousands of times across a large candidate pool.
+_WARNED_ONCE: Set[str] = set()
+
+
+def _warn_once(key: str, message: str, *args: Any) -> None:
+    """Logs `message` at WARNING the first time this `key` is seen in the process."""
+    if key in _WARNED_ONCE:
+        return
+    _WARNED_ONCE.add(key)
+    logger.warning(message, *args)
+
 # -----------------------------------------------------------------------------
 # Biophysical Property Scales (AAindex Reference Values)
 # 5 factors: [Hydrophobicity (Kyte-Doolittle), Molecular Mass (Da),
@@ -1360,8 +1372,19 @@ def sample_policy_gradient_candidates(
                     v = Variant(notation=notation)
                     r = float(reward_fn(v))
                     reward_cache[notation] = r
-                pass
-            except Exception:
+            except Exception as exc:
+                # An invalid trajectory is expected occasionally (a sampled notation can
+                # violate the WT cross-check), and -5.0 is the intended penalty for it.
+                # Surface the cause once, though: if reward_fn is broken rather than the
+                # trajectory, every sample lands here and GFlowNet trains on a constant
+                # -5.0 while the run looks entirely healthy.
+                _warn_once(
+                    f"gflownet_reward:{type(exc).__name__}",
+                    "GFlowNet reward evaluation failed (%s: %s); such trajectories take "
+                    "the -5.0 penalty. If this is systematic, sampling is training on a "
+                    "constant reward.",
+                    type(exc).__name__, exc,
+                )
                 r = -5.0
 
             trajectories.append(chosen_actions)
@@ -1491,8 +1514,18 @@ def compute_biological_prior(
                 catalytic_invariants=catalytic_invariants,
             )
             score += struct_score
-        except Exception:
-            pass
+        except Exception as exc:
+            # Was `pass`. A missing or unparseable structure silently removed the whole
+            # structural component from candidate scoring, so a misconfigured run looked
+            # identical to a working one while scoring on strictly less information.
+            # Warned once per cause: this runs per candidate, so logging every failure
+            # would flood the log over a 160k-variant pool and bury the signal.
+            _warn_once(
+                f"structural_surrogate:{type(exc).__name__}",
+                "structural scoring unavailable (%s: %s); candidates are being scored "
+                "WITHOUT the structural term. Check pdb_path.",
+                type(exc).__name__, exc,
+            )
 
     return score
 

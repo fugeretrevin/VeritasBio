@@ -204,7 +204,18 @@ class MockESMWorker:
 
 
 class MockLLMWorker:
-    """Mock strategic planner that produces valid SearchStrategy objects."""
+    """
+    Mock strategic planner that produces valid SearchStrategy objects.
+
+    NOT A SCIENTIFIC BASELINE. The per-target branches below are scripted for demo
+    and test determinism: the TrpB branch returns the literal positions
+    183/184/227/228 and `suggested_chemistries` naming three of the four residues of
+    the published global optimum (V183A:F184I:V227K:S228G), and the reflection
+    fallback seeds {"184": ["I"], "228": ["G"]}. That is fine for a demo and
+    disqualifying for any benchmark or evaluation, where it would encode the answer
+    being measured. Benchmarks must plan from the target's own annotations instead -
+    see `_AnnotationDrivenPlanner` in benchmark_panoptes_isolated.py.
+    """
 
     def __init__(self) -> None:
         pass
