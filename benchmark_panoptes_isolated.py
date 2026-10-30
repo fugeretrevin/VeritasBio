@@ -1200,6 +1200,11 @@ class _AnnotationDrivenPlanner:
         )
 
 
+def _parse_components(spec: str) -> Set[str]:
+    """Parse --ablate-components; unknown names are rejected by select_next_micro_batch."""
+    return {tok.strip() for tok in (spec or "").split(",") if tok.strip()}
+
+
 class PanoptesSelector(Selector):
     """
     E/F. The real production planning + selection path.
@@ -1233,12 +1238,32 @@ class PanoptesSelector(Selector):
         pdb_path: Optional[Path],
         call_budget: Optional[int] = None,
         qualify_threshold: Optional[float] = None,
+        ablation: str = "none",
     ) -> None:
         super().__init__(seed)
+        # Ablation arm. 'none' is the shipped configuration; the others restore one
+        # or both pre-fix behaviours so their effect can be measured on identical
+        # seeds. Recorded in the arm name so a report cannot confuse two arms.
+        self.ablation = ablation
         if qualify_threshold is not None:
             self.name = "panoptes_qualify_then_optimize"
         else:
             self.name = "panoptes_muse" if use_live_muse else "panoptes_default"
+        # The ablation is NOT folded into self.name: the method registry and the
+        # --methods filter both key on that name, so renaming the arm matched nothing
+        # and silently ran zero seeds. It goes in the description instead.
+        # The prior calibration is a module-level switch because raising its spread
+        # cannot undo it (tanh saturates). Set per selector construction; seeds run
+        # in separate processes under --parallel-seeds, so this does not race.
+        import workers.math_worker as _mw
+        _mw.PRIOR_CALIBRATION_ENABLED = ablation not in ("raw-prior", "legacy")
+        if ablation and ablation != "none":
+            self.notes.append(
+                f"ABLATION={ablation}: "
+                f"prior_calibration={_mw.PRIOR_CALIBRATION_ENABLED}, "
+                f"auxiliary_objective_weights="
+                f'{ablation in ("aux-weighted", "legacy")}'
+            )
         # When set, the selector switches to frontier search once a measured variant
         # reaches this fitness. None keeps the single-policy baseline.
         self.qualify_threshold = qualify_threshold
@@ -1455,6 +1480,7 @@ class PanoptesSelector(Selector):
             catalytic_invariants=set(getattr(self.metadata, "catalytic_positions", []) or []),
             pdb_path=self.pdb_path,
             random_seed=(self.seed or 0) * 1000 + round_index,
+            apply_auxiliary_objective_weights=self.ablation in ("aux-weighted", "legacy"),
         )
         self.last_batch_predictions = {}
         proposals: List[str] = []
@@ -2145,6 +2171,9 @@ def build_selector_factories(
             factories[method] = (
                 lambda seed, m=metadata, s=sequence, p=pdb_path, l=live, q=qualify:
                 PanoptesSelector(seed, s, m, l, p, call_budget=args.max_model_calls,
+                                 ablation=args.ablation,
+                                 prior_spread=args.prior_spread,
+                                 ablate_components=_parse_components(args.ablate_components),
                                  qualify_threshold=q)
             )
             detail = (
@@ -2440,6 +2469,34 @@ examples:
                         help="New variants per round (default: %(default)s).")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_ROOT),
                         help="Parent folder for run folders (default: %(default)s).")
+    parser.add_argument(
+        "--ablation",
+        choices=("none", "aux-weighted", "raw-prior", "legacy"),
+        default="none",
+        help=(
+            "Restore a pre-fix behaviour for a paired comparison. none = shipped "
+            "configuration; aux-weighted = re-apply the synthesizability and "
+            "developability multipliers to acquisition value; raw-prior = bypass the "
+            "prior fitness-scale calibration; legacy = both. The arm name in every "
+            "report carries the setting."
+        ),
+    )
+    parser.add_argument(
+        "--prior-spread", type=float, default=None,
+        help=(
+            "Calibrate the biophysical prior to this magnitude in fitness units and "
+            "measure the result. Omitted leaves the shipped default (calibration off, "
+            "raw magnitudes), which is the best configuration measured so far. 0.0 "
+            "ablates the prior entirely."
+        ),
+    )
+    parser.add_argument(
+        "--ablate-components", default="",
+        help=(
+            "Comma-separated selector components to disable, for attributing the "
+            "engine advantage: dpp, gflownet, pareto, dkl, prior. Empty disables none."
+        ),
+    )
     parser.add_argument("--provenance-mode", choices=("require", "acknowledge-unflagged"), default="require",
                         help="'require' (default) refuses to run unless measured records can be "
                              "distinguished from the published KNN-imputed ones.")

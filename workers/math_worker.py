@@ -1461,6 +1461,36 @@ def sample_policy_gradient_candidates(
 PRIOR_FITNESS_SPREAD: float = 0.25
 PRIOR_SOFTENING: float = 6.0
 
+# Whether to bound the prior to the fitness scale. DEFAULT OFF, because bounding it
+# is measured WORSE on a paired 48-seed benchmark:
+#
+#     calibrated (spread 0.25)   0.7149 best fitness / 33.31 top-1%
+#     raw (this default)         0.7462 best fitness / 45.60 top-1%
+#     diff  +0.0313 best (t=4.77), +12.29 top-1% (t=12.50), worse on 46 of 48 seeds
+#
+# The scale argument was right about the statistics and wrong about the consequence.
+# This term does not act as a prior MEAN; it acts as a weighted ranking feature whose
+# weight is its magnitude, and it carries real signal (Spearman +0.186 against
+# measured fitness). Bounding it to +/-0.25, while GP posterior means vary by more
+# than that, cut its weight to near zero and cost 12 top-1% hits per campaign.
+#
+# Kept as a knob so the right weight can be settled by sweeping PRIOR_FITNESS_SPREAD
+# against the benchmark, rather than argued from the observable range.
+PRIOR_CALIBRATION_ENABLED: bool = False
+
+# Components select_next_micro_batch can disable one at a time, so the engine's
+# measured advantage can be attributed before anyone tries to extend it.
+#   dpp       - k-DPP batch diversity; batch becomes top-n by quality score
+#   gflownet  - policy-gradient candidate injection
+#   pareto    - non-domination rank weighting of acquisition value
+#   dkl       - the two-stage deep-feature GP; falls back to a plain Matern GP
+#   prior     - the hand-built biophysical prior mean
+ABLATABLE_COMPONENTS: Set[str] = {"dpp", "gflownet", "pareto", "dkl", "prior"}
+
+
+class _AblationSkip(Exception):
+    """Raised to bypass an ablated stage that is wrapped in a broad except."""
+
 
 def calibrate_prior_to_fitness_scale(
     raw_score: float,
@@ -1474,6 +1504,8 @@ def calibrate_prior_to_fitness_scale(
     +/- spread, so the prior can tilt a posterior without asserting a fitness the
     assay could never produce.
     """
+    if not PRIOR_CALIBRATION_ENABLED:
+        return float(raw_score)
     s = PRIOR_FITNESS_SPREAD if spread is None else spread
     t = PRIOR_SOFTENING if softening is None else softening
     if s <= 0.0:
@@ -1592,6 +1624,7 @@ def select_next_micro_batch(
     fantasy_variance: float = 0.25,
     aromatic_tolerant_positions: Optional[Set[int]] = None,
     apply_auxiliary_objective_weights: bool = False,
+    ablate: Optional[Set[str]] = None,
 ) -> SelectedBatch:
     """
     Executes the Gaussian Process active learning selection (Phases 1-4):
@@ -1603,6 +1636,22 @@ def select_next_micro_batch(
       6. Evaluates hybrid Thompson sampling & Expected Improvement with batch position diversity.
     """
     invariants_set: Set[int] = set(catalytic_invariants) if catalytic_invariants is not None else set(strategy.forbidden_positions)
+
+    # Component ablation, for attributing the selector's advantage. Each name
+    # disables one mechanism and leaves the rest intact; an empty request changes
+    # nothing. Unknown names raise rather than silently measuring the unablated
+    # engine and being reported as an ablation arm.
+    ablated: Set[str] = set(ablate or ())
+    if "prior" in ablated:
+        # The hand-built prior is fitted to nothing; removing it entirely is the
+        # ablation the docs call for, distinct from merely rescaling it.
+        prior_mean_fn = None
+    unknown = ablated - ABLATABLE_COMPONENTS
+    if unknown:
+        raise ValueError(
+            f"unknown ablation component(s) {sorted(unknown)}; "
+            f"recognised: {sorted(ABLATABLE_COMPONENTS)}"
+        )
 
     # Collect all positions from the strategy clusters AND prior evidence
     active_positions_set: Set[int] = set(p for c in strategy.target_clusters for p in c.positions)
@@ -1729,13 +1778,20 @@ def select_next_micro_batch(
 
     # Step 2: Fit the two-stage deep-feature GP surrogate on residuals (Pillar 2)
     # Incorporates heteroscedastic noise modeling from experimental replicates
-    surrogate = DeepKernelLearner(input_dim=X_train.shape[1], random_state=42)
-    try:
-        surrogate.fit(X_train, y_train, sample_variance=sample_variances_arr)
-    except Exception as exc:
-        logger.warning("DKL fit failed (%s). Retrying with base GP...", exc)
+    if "dkl" in ablated:
+        # Plain Matern GP, fitted WITHOUT sample_variance: GaussianProcessRegressor
+        # does not accept that keyword, so passing it would land in the except branch
+        # below and the arm would be measuring an error path rather than an ablation.
         surrogate = build_gp_model()
         surrogate.fit(X_train, y_train)
+    else:
+        surrogate = DeepKernelLearner(input_dim=X_train.shape[1], random_state=42)
+        try:
+            surrogate.fit(X_train, y_train, sample_variance=sample_variances_arr)
+        except Exception as exc:
+            logger.warning("DKL fit failed (%s). Retrying with base GP...", exc)
+            surrogate = build_gp_model()
+            surrogate.fit(X_train, y_train)
 
     # Step 3: Generate candidate variants (combinatorial exploration + lead recombination)
     candidates = generate_candidate_variants(
@@ -1748,6 +1804,9 @@ def select_next_micro_batch(
     # Phase 3 / Pillar 3: policy-gradient multi-mutant candidate sampler
     # Enriches candidate pool by sampling discrete trajectories proportional to DKL posterior reward R(x)
     try:
+        if "gflownet" in ablated:
+            raise _AblationSkip("gflownet ablated")
+
         def gfn_reward(v: Variant) -> float:
             base_prior = (
                 prior_mean_fn(
@@ -1927,7 +1986,10 @@ def select_next_micro_batch(
     pw = pareto_weights_config or {}
     w_dev = pw.get("developability", 0.30)
     w_synth = pw.get("synthesizability", 0.15)
-    pareto_weights = 1.0 / (1.0 + 0.3 * candidate_pareto_ranks)
+    if "pareto" in ablated:
+        pareto_weights = np.ones(n_cands, dtype=np.float64)
+    else:
+        pareto_weights = 1.0 / (1.0 + 0.3 * candidate_pareto_ranks)
 
     # The synthesizability and developability proxies are hand-built and fitted to
     # nothing. Measured against TrpB fitness over 1,500 variants they are
@@ -1951,12 +2013,18 @@ def select_next_micro_batch(
 
     # Phase 1 / Pillar 1: Determinantal Point Process (k-DPP) Orthogonal Batch Diversity
     # Maximizes the determinant volume det(L_B) to guarantee mutually orthogonal biophysical coverage
-    selected_indices = greedy_dpp_sample(
-        quality_scores=quality_scores,
-        features=X_cand,
-        batch_size=batch_size,
-        sigma_feat=1.5,
-    )
+    if "dpp" in ablated:
+        # Top-n by quality score, with no diversity term. The engine's low variance
+        # is widely attributed to this stage, so removing it is the direct test.
+        order = np.argsort(quality_scores)[::-1]
+        selected_indices = [int(i) for i in order[:batch_size]]
+    else:
+        selected_indices = greedy_dpp_sample(
+            quality_scores=quality_scores,
+            features=X_cand,
+            batch_size=batch_size,
+            sigma_feat=1.5,
+        )
 
     position_counts: Dict[int, int] = {}
     for idx in selected_indices:
