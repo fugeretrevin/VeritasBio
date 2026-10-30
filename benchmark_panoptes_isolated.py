@@ -1108,13 +1108,105 @@ class _LiveCallRecorder(logging.Handler):
             self.messages.append(message[:200])
 
 
+class _AnnotationDrivenPlanner:
+    """
+    The non-live planner used by `panoptes_default`.
+
+    Why this exists instead of `workers.mock_workers.MockLLMWorker`:
+        MockLLMWorker is a scripted demo planner. For any accession matching TrpB it
+        returns the literal positions 183/184/227/228 - exactly the four saturated
+        sites of this benchmark's library - and `suggested_chemistries` naming three
+        of the four residues of the published global optimum V183A:F184I:V227K:S228G
+        (183:[A,V,C], 184:[I,V,L], 228:[G,A,S]). That is appropriate for a product
+        demo and disqualifying for a baseline: it encodes the answer this benchmark
+        is supposed to measure the discovery of.
+
+    What this does instead:
+        Derives the search space from the target's own annotations, which is how a
+        real campaign knows what its ordered library can assay. Positions come from
+        `metadata.binding_positions` (populated from the entry's annotated active
+        sites), catalytic machinery from `metadata.catalytic_positions` is forbidden,
+        and chemistries are a fixed neutral alphabet-spanning set chosen for physical
+        diversity, never for fitness on this landscape. Nothing here mentions TrpB,
+        so the same code path serves any target with annotated sites.
+    """
+
+    # A neutral, target-independent probe set spanning small/polar/charged/branched/
+    # aromatic classes. Deliberately NOT tuned to any landscape: it must not encode
+    # which residues win. GFlowNet sampling in step 3 explores beyond these.
+    NEUTRAL_CHEMISTRIES: Tuple[str, ...] = ("A", "S", "D", "K", "L", "F")
+
+    def generate_strategy(
+        self,
+        metadata: Any,
+        round_number: int = 1,
+        top_evidence: Optional[Sequence[Dict[str, Any]]] = None,
+        current_hop: int = 0,
+    ) -> Any:
+        from controller.prompts import BiophysicalHypothesis, ResidueCluster, SearchStrategy
+
+        annotated = sorted({int(p) for p in (getattr(metadata, "binding_positions", None) or [])})
+        catalytic = sorted({int(p) for p in (getattr(metadata, "catalytic_positions", None) or [])})
+        targetable = [p for p in annotated if p not in set(catalytic)]
+        if not targetable:
+            raise BenchmarkError(
+                "annotation-driven planner found no targetable annotated positions for "
+                f"{getattr(metadata, 'accession', '<unknown>')}: binding_positions={annotated}, "
+                f"catalytic_positions={catalytic}. panoptes_default cannot plan without "
+                "annotated sites; supply them in the target's metadata."
+            )
+
+        # Split the annotated sites into two coupled clusters so the production
+        # selector sees interacting groups rather than one undifferentiated block.
+        midpoint = (len(targetable) + 1) // 2
+        groups = [targetable[:midpoint], targetable[midpoint:]]
+        clusters = [
+            ResidueCluster(
+                cluster_id=f"annotated_site_group_{i + 1}",
+                positions=group,
+                rationale="Annotated active/binding-site positions reported for this target.",
+            )
+            for i, group in enumerate(groups)
+            if group
+        ]
+
+        chemistries = {str(p): list(self.NEUTRAL_CHEMISTRIES) for p in targetable}
+        hypothesis = (
+            f"Round {round_number}: combinatorial exploration of the {len(targetable)} "
+            "annotated active-site positions, preserving annotated catalytic machinery."
+        )
+        return SearchStrategy(
+            target_protein=metadata.protein_name,
+            target_accession=metadata.accession,
+            hypothesis=hypothesis,
+            target_clusters=clusters,
+            forbidden_positions=catalytic,
+            # Depth tracks the annotated site count so a combinatorially complete
+            # library is reachable, rather than being fixed to a literal.
+            max_mutation_depth=min(len(targetable), 2 if round_number == 1 else 4),
+            mechanistic_hypotheses=[
+                BiophysicalHypothesis(
+                    pocket_name="annotated_active_site",
+                    target_residues=targetable,
+                    mechanism="Combinatorial substitution across annotated active-site positions.",
+                    structural_rationale=(
+                        f"Positions {targetable} are the annotated substrate/cofactor contact "
+                        f"sites for this entry; catalytic positions {catalytic} are withheld."
+                    ),
+                    suggested_chemistries=chemistries,
+                    epistatic_coupling="Annotated co-located sites are treated as potentially coupled.",
+                )
+            ],
+        )
+
+
 class PanoptesSelector(Selector):
     """
     E/F. The real production planning + selection path.
 
     Production functions called, in production order:
         workers.rag_worker.fetch_protein_metadata      (step 1, cached, no network)
-        workers.mock_workers.MockLLMWorker.generate_strategy    (step 2, default strategy)   [E]
+        _AnnotationDrivenPlanner.generate_strategy     (step 2, annotation-derived search space) [E]
         controller.orchestrator.Orchestrator._generate_strategy (step 2, live Muse planner)  [F]
         workers.math_worker.select_next_micro_batch    (step 3, DKL + GFlowNet + Pareto + k-DPP)
         controller.orchestrator.Orchestrator._generate_reflection (step 6b, feedback)        [F]
@@ -1149,7 +1241,10 @@ class PanoptesSelector(Selector):
         self.pdb_path = pdb_path
         self.call_budget = call_budget
         self.config = {
-            "strategy_source": "live Muse (Meta API)" if use_live_muse else "MockLLMWorker default strategy",
+            "strategy_source": (
+                "live Muse (Meta API)" if use_live_muse
+                else "annotation-driven planner (metadata.binding_positions; no scripted per-target literals)"
+            ),
             "selection": "workers.math_worker.select_next_micro_batch",
             "acquisition": "hybrid_thompson (production default)",
             "reflection_feedback": bool(use_live_muse),
@@ -1169,18 +1264,24 @@ class PanoptesSelector(Selector):
             if self._orchestrator is None:
                 from controller.orchestrator import Orchestrator, OrchestratorConfig
 
-                self._orchestrator = Orchestrator(OrchestratorConfig(
-                    target_accession=PARENT_ACCESSION,
-                    use_mock_llm=False,
-                    enable_live_llm=True,
-                    enable_reflection=True,
-                    random_seed=self.seed,
-                ))
+                self._orchestrator = Orchestrator(
+                    OrchestratorConfig(
+                        target_accession=PARENT_ACCESSION,
+                        use_mock_llm=False,
+                        enable_live_llm=True,
+                        enable_reflection=True,
+                        random_seed=self.seed,
+                    ),
+                    # The four saturated sites ARE this benchmark's ordered library:
+                    # declaring them is experimental design, not a hint about which
+                    # residues win. Without it the planner proposes distal allosteric
+                    # residues that the four-site library cannot measure, and whole
+                    # rounds are discarded as not_in_eligible_universe.
+                    assayable_positions=ACTIVE_SITE_POSITIONS,
+                )
             return self._orchestrator
         if self._mock_planner is None:
-            from workers.mock_workers import MockLLMWorker
-
-            self._mock_planner = MockLLMWorker()
+            self._mock_planner = _AnnotationDrivenPlanner()
         return self._mock_planner
 
     def _strategy(self, round_index: int, revealed: RevealedState):
@@ -1969,7 +2070,8 @@ def build_selector_factories(
             )
             detail = (
                 "production path: fetch_protein_metadata -> "
-                + ("Orchestrator._generate_strategy (live Muse)" if live else "MockLLMWorker.generate_strategy")
+                + ("Orchestrator._generate_strategy (live Muse)" if live
+                   else "_AnnotationDrivenPlanner.generate_strategy (search space from annotated sites)")
                 + " -> select_next_micro_batch"
                 + (" -> Orchestrator._generate_reflection" if live else "")
                 + "; steps 4 (gatekeeper) and 5 (ESM execution) are not exercised - "
@@ -2104,6 +2206,16 @@ def execute(args: argparse.Namespace) -> int:
         "reflection. Gatekeeper authorisation and Modal ESM-2 execution are not exercised, because "
         "Orchestrator.run_stream() has no interface for substituting an experimental assay for ESM "
         "scoring in step 5.",
+        "panoptes_default plans from the target's annotated active sites "
+        "(metadata.binding_positions), not from a per-target script. It deliberately does NOT "
+        "use workers.mock_workers.MockLLMWorker, whose TrpB branch hardcodes positions "
+        "183/184/227/228 and suggests three of the four global-optimum residues - that would "
+        "encode the answer this benchmark measures the discovery of.",
+        "panoptes_muse is given this library's saturated positions as its assayable scope, "
+        "which is enforced deterministically on the planner's output. Without it the planner "
+        "proposed distal allosteric residues the four-site library cannot measure and whole "
+        "rounds were discarded as not_in_eligible_universe. Check the accepted/requested "
+        "columns in round_metrics.csv: a short batch still means proposals were rejected.",
         "Token usage is unknown: controller/orchestrator.py discards the provider's usage block.",
         "Top-1% membership is defined over the eligible set in this run; a different eligibility "
         "filter changes the threshold.",
@@ -2282,9 +2394,33 @@ examples:
     return parser
 
 
+def _load_repo_dotenv() -> None:
+    """
+    Loads REPO_ROOT/.env before any credential is read.
+
+    `controller.orchestrator` calls load_dotenv() at import time, but it is imported
+    lazily inside PanoptesSelector._planner(), which runs long after the live-Muse
+    availability gate has already consulted os.environ. Without this, a key present
+    in .env makes the gate report panoptes_muse as UNAVAILABLE and the live
+    comparison is silently skipped. Deliberate and explicit rather than relying on
+    another module's import side effect.
+    """
+    env_path = REPO_ROOT / ".env"
+    if not env_path.is_file():
+        return
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        logger.debug("python-dotenv unavailable; relying on the ambient environment")
+        return
+    load_dotenv(env_path, override=False)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    _load_repo_dotenv()
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

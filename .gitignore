@@ -244,6 +244,7 @@ ledger/users.json
 
 # Generated benchmark run folders (timestamped artifacts, regenerate on demand).
 benchmark_comparison_results/
+benchmark_e2e_results/
 
 # Local tooling scratch directories.
 .impeccable/
