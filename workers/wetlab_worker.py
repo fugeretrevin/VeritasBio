@@ -16,11 +16,12 @@ import csv
 import hashlib
 import io
 import json
+import re
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +243,51 @@ def generate_plate_layout(
     }
 
 
+# Opentrons labware load names are lowercase alphanumeric with underscores.
+_LABWARE_NAME_RE = re.compile(r"^[a-z0-9_]{3,64}$")
+
+
+def _sanitize_protocol_comment(text: str, *, max_len: int = 80) -> str:
+    """
+    Reduce free text to something safe to embed in a generated Python comment.
+
+    The output of `generate_opentrons_protocol` is executable Python that gets run
+    on a robot, so untrusted text interpolated into it is code injection, not a
+    formatting bug. A newline in a `#` comment ends the comment and everything
+    after it becomes a statement, so newlines and control characters are stripped
+    and the result is capped.
+    """
+    cleaned = "".join(
+        ch for ch in str(text)
+        # str.isprintable() is already False for newlines, CR and other
+        # control characters - exactly what must not reach a comment line.
+        if ch.isprintable()
+    )
+    cleaned = "".join(
+        ch for ch in cleaned
+        if ch.isalnum() or ch in " ._-()[]/,:+"
+    ).strip()
+    return cleaned[:max_len] or "Unnamed Target"
+
+
+def _validate_labware_name(name: str, *, field: str) -> str:
+    """
+    Validate an Opentrons labware load name against its known character set.
+
+    This value lands inside a quoted string literal in the generated script, so a
+    quote character would close the literal and allow arbitrary trailing code.
+    Rejecting outright is safer than escaping: an invalid labware name would fail
+    on the robot anyway.
+    """
+    clean = str(name).strip()
+    if not _LABWARE_NAME_RE.match(clean):
+        raise ValueError(
+            f"{field} must be a valid Opentrons labware load name "
+            f"(lowercase letters, digits and underscores, 3-64 chars); got {name!r}"
+        )
+    return clean
+
+
 def generate_opentrons_protocol(
     variant_names: List[str],
     plate_type: str = "corning_96_wellplate_360ul_flat",
@@ -253,6 +299,10 @@ def generate_opentrons_protocol(
     to automate 96-well plate mutagenesis master-mix, primer transfers,
     and anti-edge evaporation barrier setup.
     """
+    # Sanitize every value that reaches the generated script before building it.
+    plate_type = _validate_labware_name(plate_type, field="plate_type")
+    target_protein = _sanitize_protocol_comment(target_protein)
+
     now_iso = datetime.now(timezone.utc).isoformat()
     variants_repr = json.dumps(variant_names[:56 if anti_edge_barrier else 96], indent=4)
 
@@ -382,17 +432,43 @@ def generate_cryptographic_audit_certificate(
 
     audit_digest = hasher.hexdigest()
 
+    # Actually verify the tamper-evident chain rather than asserting that it passed.
+    # verify_audit_integrity re-walks every AuditLedgerBlocks row, recomputes each
+    # hash and checks the HMAC, so a tampered ledger produces a FAIL certificate
+    # instead of a clean one.
+    try:
+        chain_valid, chain_blocks, chain_message = ledger_db.verify_audit_integrity(db_path=db_path)
+    except Exception as exc:  # a ledger we cannot read is not a ledger we can certify
+        chain_valid, chain_blocks, chain_message = False, 0, f"verification error: {exc}"
+
+    # Evidence provenance: a certificate must not imply GPU-derived results when
+    # the scores came from a mock engine.
+    engines = sorted({str(e.get("compute_engine") or "unknown") for e in evidence})
+    mock_rows = sum(1 for e in evidence if int(e.get("is_mock", 1) or 0) == 1)
+
     cert_data: Dict[str, Any] = {
         "certificate_id": f"VB-AUDIT-{audit_digest[:16].upper()}",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "ledger_hash_sha256": audit_digest,
-        "standard_compliance": "FDA 21 CFR Part 11 / GAMP 5 Immutability Verified",
+        "audit_chain_verified": chain_valid,
+        "audit_chain_blocks": chain_blocks,
+        "audit_chain_message": chain_message,
+        "standard_compliance": (
+            "Tamper-evident HMAC-SHA256 Merkle chain verified"
+            if chain_valid
+            else "CHAIN VERIFICATION FAILED - record is not trustworthy"
+        ),
         "target_protein": target_protein,
         "total_budget_usd": alloc_usd,
         "total_spent_usd": spent_usd,
         "total_jobs_authorized": len([j for j in jobs if j.get("status") in ("APPROVED", "COMPLETED")]),
         "total_evidence_records": len(evidence),
-        "deterministic_verification": "PASS: All spends follow ACID ledger lock with zero unbudgeted GPU bypass.",
+        "compute_engines": engines,
+        "mock_evidence_records": mock_rows,
+        "contains_mock_evidence": mock_rows > 0,
+        "deterministic_verification": (
+            f"{'PASS' if chain_valid else 'FAIL'}: {chain_message}"
+        ),
     }
     if hyps_dump:
         cert_data["mechanistic_biophysical_rationale"] = hyps_dump

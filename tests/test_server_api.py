@@ -54,12 +54,42 @@ class TestServerAPI(unittest.TestCase):
         self.assertEqual(data.get("pdb_filename"), "8EH0.pdb")
         self.assertIn("ATOM", data.get("pdb_content", ""))
 
+    def test_campaign_stream_requires_post_authorization(self) -> None:
+        """A GET alone must not be able to start a campaign that spends money."""
+        # No ticket: the old endpoint took budget and batch size straight off the
+        # query string, so an <img> tag could start a paid run.
+        resp = self.client.get("/api/campaign/stream/not-a-real-ticket")
+        self.assertEqual(resp.status_code, 404)
+
+        prepared = self.client.post(
+            "/api/campaign/prepare-stream",
+            json={"target_accession": "P42212", "total_budget_usd": 0.50,
+                  "max_iterations": 1, "batch_size": 5},
+        )
+        self.assertEqual(prepared.status_code, 200, prepared.text)
+        ticket = prepared.json()["stream_ticket"]
+
+        # Tickets are single-use: consume it, then confirm a replay is refused.
+        with self.client.stream("GET", f"/api/campaign/stream/{ticket}") as resp:
+            self.assertEqual(resp.status_code, 200)
+            for line in resp.iter_lines():
+                if line.startswith("data:"):
+                    if json.loads(line[5:].strip()).get("step") == "complete":
+                        break
+        replay = self.client.get(f"/api/campaign/stream/{ticket}")
+        self.assertEqual(replay.status_code, 404)
+
     def test_campaign_sse_stream_endpoint(self) -> None:
         """Verifies real-time Server-Sent Events (SSE) streaming of active learning events."""
-        with self.client.stream(
-            "GET",
-            "/api/campaign/stream?target_accession=P42212&total_budget_usd=0.50&max_iterations=1&batch_size=5",
-        ) as resp:
+        prepared = self.client.post(
+            "/api/campaign/prepare-stream",
+            json={"target_accession": "P42212", "total_budget_usd": 0.50,
+                  "max_iterations": 1, "batch_size": 5},
+        )
+        self.assertEqual(prepared.status_code, 200, prepared.text)
+        ticket = prepared.json()["stream_ticket"]
+
+        with self.client.stream("GET", f"/api/campaign/stream/{ticket}") as resp:
             self.assertEqual(resp.status_code, 200)
             self.assertEqual(resp.headers.get("content-type"), "text/event-stream; charset=utf-8")
             
@@ -166,6 +196,56 @@ class TestServerAPI(unittest.TestCase):
         self.assertGreaterEqual(data["rank_0_count"], 1)
         self.assertTrue(any(pt["is_frontier"] for pt in data["chart_data"]))
 
+
+
+
+    def test_relax_structure_endpoint(self) -> None:
+        """Verifies Track C sidechain rotamer relaxation endpoint."""
+        payload = {
+            "target_protein": "P42212",
+            "mutations": ["S65T"],
+            "max_iterations": 100,
+            "harmonic_k": 50.0,
+        }
+        resp = self.client.post("/api/campaign/relax-structure", json=payload)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data.get("success"))
+        self.assertEqual(data.get("pdb_filename"), "1EMA.pdb")
+        res = data.get("result", {})
+        self.assertEqual(res.get("variant_notation"), "S65T")
+        self.assertTrue(res.get("converged"))
+        self.assertIn("ATOM", res.get("relaxed_pdb_str", ""))
+
+    def test_auth_register_and_login_endpoints(self) -> None:
+        """Verifies operator account registration and sign-in via /api/auth/register and /api/auth/login."""
+        reg_resp = self.client.post(
+            "/api/auth/register",
+            json={
+                "email": "test.operator@panoptesbio.org",
+                "password": "securepassword123",
+                "display_name": "Dr. Test Operator",
+                "organization_id": "PanoptesBio Lab",
+                "role": "lead_biologist",
+            },
+        )
+        self.assertEqual(reg_resp.status_code, 200)
+        reg_data = reg_resp.json()
+        self.assertTrue(reg_data.get("authenticated"))
+        self.assertIn("id_token", reg_data)
+        self.assertEqual(reg_data["user"]["email"], "test.operator@panoptesbio.org")
+
+        login_resp = self.client.post(
+            "/api/auth/login",
+            json={
+                "email": "test.operator@panoptesbio.org",
+                "password": "securepassword123",
+            },
+        )
+        self.assertEqual(login_resp.status_code, 200)
+        login_data = login_resp.json()
+        self.assertTrue(login_data.get("authenticated"))
+        self.assertEqual(login_data["user"]["display_name"], "Dr. Test Operator")
 
 
 if __name__ == "__main__":

@@ -1,26 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import KpiBar from './components/KpiBar';
-import CampaignStudio from './components/CampaignStudio';
-import DeNovoStudio from './components/DeNovoStudio';
-import LedgerAuditTrail from './components/LedgerAuditTrail';
-import WetlabExportStudio from './components/WetlabExportStudio';
-import ParetoFrontierStudio from './components/ParetoFrontierStudio';
+import HomeView from './components/HomeView';
+import StudioView from './components/StudioView';
+import ExperimentsView from './components/ExperimentsView';
+import HackathonView from './components/HackathonView';
 import AuthModal from './components/AuthModal';
-import { Compass, Sparkles, ShieldCheck, FlaskConical, Scale } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('campaign');
+  const [activePage, setActivePage] = useState('home'); // 'home' | 'studio' | 'experiments' | 'hackathon'
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authInitialMode, setAuthInitialMode] = useState('signup'); // 'signin' | 'signup'
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const [currentUser, setCurrentUser] = useState({
-    uid: 'usr_panoptes_001',
-    email: 'scientist@panoptesbio.com',
-    display_name: 'Dr. Lead Biologist',
-    organization_id: 'panoptesbio',
-    role: 'lead_biologist',
-    is_part11_certified: true,
+  // Real user state: starts null unless user has created an account or signed in
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('panoptes_auth_session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.uid && parsed.uid !== 'usr_panoptes_001') {
+          return parsed;
+        }
+      }
+    } catch (err) {
+      // Ignore storage read errors
+    }
+    return null;
   });
 
   const [healthData, setHealthData] = useState(null);
@@ -44,137 +50,156 @@ export default function App() {
 
   useEffect(() => {
     refreshState();
-    // Background polling every 12 seconds
     const interval = setInterval(refreshState, 12000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleOpenAuth = (mode = 'signup') => {
+    setAuthInitialMode(mode);
+    setIsAuthOpen(true);
+  };
+
+  const handleAuthenticatedUser = (userObj) => {
+    setCurrentUser(userObj);
+    try {
+      if (userObj) {
+        localStorage.setItem('panoptes_auth_session', JSON.stringify(userObj));
+      } else {
+        localStorage.removeItem('panoptes_auth_session');
+      }
+    } catch (err) {
+      // Ignore storage errors
+    }
+  };
 
   const remBudget = healthData?.budget?.remaining_usd ?? 5.0;
   const cumSpent = healthData?.budget?.cumulative_spent_usd ?? 0.0;
   const topScore = ledgerData?.top_variants?.[0]?.computed_score ?? 1.482;
 
   return (
-    <div style={{ maxWidth: '1440px', margin: '0 auto', padding: '24px 20px 48px' }}>
-      {/* Top Header */}
+    <div style={{ minHeight: '100svh', display: 'flex', flexDirection: 'column', background: 'var(--bg-dark)' }}>
+      {/* Top Header Attached Directly to Viewport Top Edge */}
       <Header
         currentUser={currentUser}
-        onOpenAuth={() => setIsAuthOpen(true)}
+        onOpenAuth={handleOpenAuth}
+        onSignOut={() => handleAuthenticatedUser(null)}
         onRefresh={refreshState}
         isRefreshing={isRefreshing}
-      />
-
-      {/* KPI Stats Bar */}
-      <KpiBar
-        remainingBudget={remBudget}
-        cumulativeSpent={cumSpent}
-        topFitness={topScore}
-        savedPct="99.5%"
-        speedup="184.3x Cheaper"
-      />
-
-      {/* Main Tab Navigation */}
-      <div
-        className="glass-panel"
-        style={{
-          display: 'flex',
-          gap: '8px',
-          padding: '6px',
-          marginBottom: '20px',
-          width: 'fit-content',
+        activePage={activePage}
+        onNavigate={(page) => {
+          setActivePage(page);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
-      >
-        <button
-          onClick={() => setActiveTab('campaign')}
-          className={`btn ${activeTab === 'campaign' ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ padding: '8px 18px', fontSize: '13px' }}
-        >
-          <Compass size={16} />
-          <span>Active Learning Campaign</span>
-        </button>
+      />
 
-        <button
-          onClick={() => setActiveTab('denovo')}
-          className={`btn ${activeTab === 'denovo' ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ padding: '8px 18px', fontSize: '13px' }}
-        >
-          <Sparkles size={16} />
-          <span>De Novo Binder Diffusion Studio</span>
-        </button>
+      {/* Main Content Container */}
+      <div style={{ maxWidth: '1400px', width: '100%', margin: '0 auto', padding: '28px 28px 64px', flex: 1 }}>
+        {/* Main Page Viewport */}
+        <main>
+          {activePage === 'home' && (
+            <HomeView
+              onNavigate={(page) => {
+                setActivePage(page);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              onOpenAuth={() => handleOpenAuth('signup')}
+            />
+          )}
 
-        <button
-          onClick={() => setActiveTab('pareto')}
-          className={`btn ${activeTab === 'pareto' ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ padding: '8px 18px', fontSize: '13px' }}
-        >
-          <Scale size={16} />
-          <span>Pareto Frontier Studio</span>
-        </button>
+          {activePage === 'studio' && (
+            <StudioView
+              onRefreshLedger={refreshState}
+              ledgerData={ledgerData}
+              currentUser={currentUser}
+              remainingBudget={remBudget}
+              cumulativeSpent={cumSpent}
+              topFitness={topScore}
+            />
+          )}
 
-        <button
-          onClick={() => setActiveTab('ledger')}
-          className={`btn ${activeTab === 'ledger' ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ padding: '8px 18px', fontSize: '13px' }}
-        >
-          <ShieldCheck size={16} />
-          <span>Ledger & Merkle Audit Trail</span>
-        </button>
+          {activePage === 'experiments' && (
+            <ExperimentsView />
+          )}
 
-        <button
-          onClick={() => setActiveTab('wetlab')}
-          className={`btn ${activeTab === 'wetlab' ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ padding: '8px 18px', fontSize: '13px' }}
+          {activePage === 'hackathon' && (
+            <HackathonView />
+          )}
+        </main>
+
+        {/* Footer */}
+        <footer
+          style={{
+            marginTop: '80px',
+            paddingTop: '24px',
+            borderTop: '1px solid var(--border-subtle)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '16px',
+            fontSize: '13px',
+            color: 'var(--text-dim)',
+          }}
         >
-          <FlaskConical size={16} />
-          <span>Physical Wet-Lab & LIMS</span>
-        </button>
+          <div>
+            PanoptesBio Platform · Deterministic Cloud-Economics Engine for Biologics
+          </div>
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              onClick={() => {
+                setActivePage('home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 'inherit' }}
+            >
+              Home
+            </button>
+            <button
+              onClick={() => {
+                setActivePage('studio');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 'inherit' }}
+            >
+              Studio
+            </button>
+            <button
+              onClick={() => {
+                setActivePage('experiments');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 'inherit' }}
+            >
+              Experiments
+            </button>
+            <button
+              onClick={() => {
+                setActivePage('hackathon');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 'inherit' }}
+            >
+              Hackathon
+            </button>
+          </div>
+        </footer>
       </div>
 
-      {/* Active Tab Viewport */}
-      <main>
-        {activeTab === 'campaign' && <CampaignStudio onRefreshLedger={refreshState} />}
-        {activeTab === 'denovo' && <DeNovoStudio onRefreshLedger={refreshState} />}
-        {activeTab === 'pareto' && <ParetoFrontierStudio onRefreshLedger={refreshState} />}
-        {activeTab === 'ledger' && <LedgerAuditTrail ledgerData={ledgerData} onRefresh={refreshState} />}
-        {activeTab === 'wetlab' && <WetlabExportStudio onRefreshLedger={refreshState} />}
-      </main>
-
-      {/* Identity / Authentication Modal */}
+      {/* Real Account Registration, Sign-In & FDA Part 11 Signature Modal */}
       <AuthModal
         isOpen={isAuthOpen}
+        initialMode={authInitialMode}
         onClose={() => setIsAuthOpen(false)}
         currentUser={currentUser}
         onSelectUser={(u) => {
-          setCurrentUser(u);
+          handleAuthenticatedUser(u);
+          setIsAuthOpen(false);
+        }}
+        onSignOut={() => {
+          handleAuthenticatedUser(null);
           setIsAuthOpen(false);
         }}
       />
-
-      {/* Modern Biopharma Footer */}
-      <footer
-        style={{
-          marginTop: '40px',
-          paddingTop: '20px',
-          borderTop: '1px solid var(--border-subtle)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '12px',
-          fontSize: '12px',
-          color: 'var(--text-dim)',
-        }}
-      >
-        <div>
-          PanoptesBio Engine · Deterministic Cloud Economics · Fail-Closed Spend Gateway
-        </div>
-        <div style={{ display: 'flex', gap: '16px' }}>
-          <span>FDA 21 CFR Part 11 Compliant</span>
-          <span>•</span>
-          <span>HMAC-SHA256 Merkle Ledger</span>
-          <span>•</span>
-          <span>Modal A10G + ESM-2 / ProteinMPNN</span>
-        </div>
-      </footer>
     </div>
   );
 }

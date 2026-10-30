@@ -139,12 +139,13 @@ def run_campaign(
     logger.info("DE NOVO BINDER CAMPAIGN RESULTS")
     logger.info("-" * 75)
     logger.info(
-        f"{'Design ID':<13} {'Len':<5} {'pLDDT':<7} {'RMSD(Å)':<9} {'Rg(Å)':<7} {'Developability':<16} {'Twist USD':<10}"
+        f"{'Design ID':<13} {'Len':<5} {'Contacts':<9} {'MinDist(Å)':<11} {'Rg(Å)':<7} {'Developability':<16} {'Twist USD':<10}"
     )
     logger.info("-" * 75)
     for d in result.designs:
         logger.info(
-            f"{d.design_id:<13} {d.length:<5} {d.predicted_plddt:<7.1f} {d.estimated_rmsd_to_target:<9.2f} "
+            f"{d.design_id:<13} {d.length:<5} {d.interface_contact_pairs:<9} "
+            f"{(f'{d.min_interface_distance_angstrom:.2f}' if d.min_interface_distance_angstrom is not None else 'n/a'):<11} "
             f"{d.radius_of_gyration:<7.2f} {d.developability_score:<16.2f} ${d.synthesis_cost_usd:<9.2f}"
         )
     logger.info("-" * 75)

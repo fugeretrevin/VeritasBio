@@ -1,44 +1,109 @@
-import React, { useState } from 'react';
-import { X, ShieldCheck, KeyRound, Check, Lock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, ShieldCheck, KeyRound, Lock, UserPlus, LogIn, LogOut, AlertCircle, CheckCircle2 } from 'lucide-react';
 
-export default function AuthModal({ isOpen, onClose, currentUser, onSelectUser }) {
-  const [email, setEmail] = useState('lead.scientist@panoptesbio.com');
+export default function AuthModal({
+  isOpen,
+  initialMode = 'signup',
+  onClose,
+  currentUser,
+  onSelectUser,
+  onSignOut,
+}) {
+  const [mode, setMode] = useState(initialMode); // 'signup' | 'signin' | 'profile'
+  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [organization, setOrganization] = useState('PanoptesBio Lab');
   const [role, setRole] = useState('lead_biologist');
+
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [actionMeaning, setActionMeaning] = useState('Approval of Modal A10G Compute Spend');
   const [generatedSig, setGeneratedSig] = useState(null);
   const [isSigning, setIsSigning] = useState(false);
 
+  useEffect(() => {
+    if (isOpen) {
+      setErrorMsg(null);
+      if (currentUser?.uid) {
+        setMode('profile');
+      } else {
+        setMode(initialMode === 'profile' ? 'signup' : initialMode);
+      }
+    }
+  }, [isOpen, initialMode, currentUser]);
+
   if (!isOpen) return null;
 
-  const handleApplyIdentity = () => {
-    const cleanUser = email.split('@')[0] || 'scientist';
-    const user = {
-      uid: `usr_${cleanUser}`,
-      email: email,
-      display_name: `Dr. ${cleanUser.replace('.', ' ').toUpperCase()}`,
-      organization_id: 'panoptesbio',
-      role: role,
-      is_part11_certified: true,
-    };
-    onSelectUser(user);
+  const handleSubmitAuth = async (e) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setIsSubmitting(true);
+
+    try {
+      const endpoint = mode === 'signup' ? '/api/auth/register' : '/api/auth/login';
+      const payload =
+        mode === 'signup'
+          ? {
+              email,
+              password,
+              display_name: displayName,
+              organization_id: organization,
+              role,
+            }
+          : {
+              email,
+              password,
+            };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Authentication failed');
+      }
+
+      const authenticatedUser = {
+        ...data.user,
+        id_token: data.id_token,
+      };
+      onSelectUser(authenticatedUser);
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleGenerateSignature = async () => {
     setIsSigning(true);
+    setErrorMsg(null);
     try {
+      const tokenToUse =
+        currentUser?.id_token ||
+        (currentUser?.uid ? `panoptes_session_${currentUser.uid}` : null);
+
       const res = await fetch('/api/auth/sign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id_token: `mock_token_${role}_${email.split('@')[0]}`,
+          id_token: tokenToUse,
           action: actionMeaning,
           meaning: 'Authenticated operator electronic signature binding action under 21 CFR Part 11 §11.200',
         }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Failed to generate signature');
+      }
       setGeneratedSig(data.signature);
     } catch (err) {
-      alert(`Signature failed: ${err.message}`);
+      setErrorMsg(err.message);
     } finally {
       setIsSigning(false);
     }
@@ -48,150 +113,340 @@ export default function AuthModal({ isOpen, onClose, currentUser, onSelectUser }
     <div
       style={{
         position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        backgroundColor: 'rgba(7, 10, 19, 0.82)',
-        backdropFilter: 'blur(8px)',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.35)',
+        backdropFilter: 'blur(6px)',
         zIndex: 1000,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         padding: '20px',
       }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
-        className="glass-panel"
         style={{
           width: '100%',
-          maxWidth: '560px',
-          padding: '28px',
+          maxWidth: '480px',
+          background: 'var(--bg-elevated)',
+          borderRadius: '14px',
+          padding: '32px',
           position: 'relative',
-          border: '1px solid var(--border-active)',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.6)',
+          border: '1px solid var(--border-subtle)',
+          boxShadow: '0 24px 48px rgba(15, 23, 42, 0.12)',
         }}
       >
         <button
           onClick={onClose}
           style={{
             position: 'absolute',
-            top: '16px',
-            right: '16px',
+            top: '20px',
+            right: '20px',
             background: 'none',
             border: 'none',
             color: 'var(--text-muted)',
             cursor: 'pointer',
           }}
+          aria-label="Close modal"
         >
           <X size={20} />
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-          <ShieldCheck size={24} color="var(--cyan-bright)" />
-          <h2 className="title-display" style={{ fontSize: '20px', margin: 0 }}>
-            PanoptesBio Cloud Identity & FDA Part 11
-          </h2>
-        </div>
-        <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-          Multi-tenant Firebase Authentication (`panoptesbio.firebaseapp.com`) & 21 CFR §11.200
-          dual-identifier electronic signatures.
-        </p>
+        {mode === 'profile' && currentUser?.uid ? (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <ShieldCheck size={22} color="#059669" />
+              <h2 className="title-display" style={{ fontSize: '21px', margin: 0, color: 'var(--text-main)' }}>
+                Operator Account
+              </h2>
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
+              Signed in to PanoptesBio Cloud Identity (`panoptesbio.firebaseapp.com`).
+            </p>
 
-        {/* Corporate Email */}
-        <div style={{ marginBottom: '14px' }}>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
-            Operator Corporate Email
-          </label>
-          <input
-            type="email"
-            className="input-field"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
-
-        {/* FDA Part 11 Role */}
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
-            FDA Part 11 Role & Privileges
-          </label>
-          <select
-            className="input-field"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-          >
-            <option value="lead_biologist">Lead Computational Biologist (Full Optimization Scope)</option>
-            <option value="lab_director">Laboratory Director (Budget Approval & CRO Sign-Off)</option>
-            <option value="compliance_officer">Compliance Officer (Merkle Audit Trail Verification)</option>
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
-          <button onClick={handleApplyIdentity} className="btn btn-primary" style={{ flex: 1 }}>
-            <Check size={16} />
-            <span>Apply Operator Identity</span>
-          </button>
-        </div>
-
-        {/* Signature Generator */}
-        <div
-          style={{
-            borderTop: '1px solid var(--border-subtle)',
-            paddingTop: '16px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-            <Lock size={16} color="var(--amber-bright)" />
-            <h4 style={{ fontSize: '13px', margin: 0, fontWeight: 600 }}>
-              Generate 21 CFR §11.200 Electronic Signature
-            </h4>
-          </div>
-
-          <div style={{ marginBottom: '12px' }}>
-            <select
-              className="input-field"
-              value={actionMeaning}
-              onChange={(e) => setActionMeaning(e.target.value)}
-            >
-              <option value="Approval of Modal A10G Compute Spend">Approval of Modal A10G Compute Spend</option>
-              <option value="Authorization of Twist cDNA Synthesis Manifest">Authorization of Twist cDNA Synthesis Manifest</option>
-              <option value="Approval of Opentrons OT-2 Neutralization Protocol">Approval of Opentrons OT-2 Neutralization Protocol</option>
-              <option value="Certification of FDA Part 11 Audit Trail Integrity">Certification of FDA Part 11 Audit Trail Integrity</option>
-            </select>
-          </div>
-
-          <button
-            onClick={handleGenerateSignature}
-            disabled={isSigning}
-            className="btn btn-secondary"
-            style={{ width: '100%', marginBottom: '12px' }}
-          >
-            <KeyRound size={14} color="var(--cyan-bright)" />
-            <span>{isSigning ? 'Computing HMAC-SHA256...' : 'Sign Electronic Proof'}</span>
-          </button>
-
-          {generatedSig && (
             <div
-              className="mono"
               style={{
-                fontSize: '12px',
-                padding: '12px',
-                borderRadius: '8px',
-                background: '#060911',
+                background: 'var(--bg-card)',
                 border: '1px solid var(--border-subtle)',
-                color: 'var(--emerald-bright)',
-                wordBreak: 'break-all',
+                borderRadius: '10px',
+                padding: '16px 18px',
+                marginBottom: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                fontSize: '13px',
               }}
             >
-              <div>Operator: {generatedSig.operator_email} ({generatedSig.role})</div>
-              <div>Timestamp: {generatedSig.signed_timestamp}</div>
-              <div style={{ marginTop: '4px', color: 'var(--cyan-bright)' }}>
-                HMAC-SHA256: {generatedSig.electronic_signature_hash}
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Name</span>
+                <strong style={{ color: 'var(--text-main)' }}>{currentUser.display_name}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Email</span>
+                <span style={{ color: 'var(--text-main)' }}>{currentUser.email}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Role</span>
+                <span className="badge badge-emerald" style={{ fontSize: '11px' }}>
+                  {currentUser.role}
+                </span>
               </div>
             </div>
-          )}
-        </div>
+
+            {/* Electronic Signature Section */}
+            <div
+              style={{
+                borderTop: '1px solid var(--border-subtle)',
+                paddingTop: '18px',
+                marginBottom: '20px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                <Lock size={15} color="var(--text-main)" />
+                <h4 style={{ fontSize: '13px', margin: 0, fontWeight: 600, color: 'var(--text-main)' }}>
+                  21 CFR §11.200 Electronic Signature
+                </h4>
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <select
+                  className="input-field"
+                  value={actionMeaning}
+                  onChange={(e) => setActionMeaning(e.target.value)}
+                >
+                  <option value="Approval of Modal A10G Compute Spend">Approval of Modal A10G Compute Spend</option>
+                  <option value="Authorization of Twist cDNA Synthesis Manifest">Authorization of Twist cDNA Synthesis Manifest</option>
+                  <option value="Approval of Opentrons OT-2 Protocol">Approval of Opentrons OT-2 Protocol</option>
+                  <option value="Certification of Audit Trail Integrity">Certification of Audit Trail Integrity</option>
+                </select>
+              </div>
+
+              <button
+                onClick={handleGenerateSignature}
+                disabled={isSigning}
+                className="btn btn-secondary"
+                style={{ width: '100%', marginBottom: '12px' }}
+              >
+                <KeyRound size={14} color="var(--cyan-bright)" />
+                <span>{isSigning ? 'Computing HMAC-SHA256...' : 'Sign Electronic Proof'}</span>
+              </button>
+
+              {generatedSig && (
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: '12px',
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    background: '#f8fafc',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-main)',
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  <div style={{ color: '#059669', fontWeight: 600, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <CheckCircle2 size={14} />
+                    <span>Signed by {generatedSig.operator_email}</span>
+                  </div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
+                    Timestamp: {generatedSig.signed_timestamp}
+                  </div>
+                  <div style={{ marginTop: '6px', color: 'var(--cyan-bright)', fontSize: '11px' }}>
+                    HMAC-SHA256: {generatedSig.electronic_signature_hash}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={onSignOut}
+              className="btn btn-secondary"
+              style={{ width: '100%', color: '#dc2626' }}
+            >
+              <LogOut size={15} />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        ) : (
+          <div>
+            <h2 className="title-display" style={{ fontSize: '24px', margin: '0 0 6px', color: 'var(--text-main)' }}>
+              {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+            </h2>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '22px' }}>
+              {mode === 'signup'
+                ? 'Register an operator identity to launch campaigns and sign synthesis manifests.'
+                : 'Sign in with your registered PanoptesBio credentials.'}
+            </p>
+
+            {/* Mode Switcher Tabs */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '6px',
+                background: 'var(--bg-card)',
+                padding: '4px',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                border: '1px solid var(--border-subtle)',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('signup');
+                  setErrorMsg(null);
+                }}
+                style={{
+                  padding: '8px',
+                  fontSize: '13px',
+                  fontWeight: mode === 'signup' ? 600 : 500,
+                  background: mode === 'signup' ? '#ffffff' : 'transparent',
+                  color: mode === 'signup' ? 'var(--text-main)' : 'var(--text-muted)',
+                  border: mode === 'signup' ? '1px solid var(--border-subtle)' : '1px solid transparent',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                }}
+              >
+                Create Account
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('signin');
+                  setErrorMsg(null);
+                }}
+                style={{
+                  padding: '8px',
+                  fontSize: '13px',
+                  fontWeight: mode === 'signin' ? 600 : 500,
+                  background: mode === 'signin' ? '#ffffff' : 'transparent',
+                  color: mode === 'signin' ? 'var(--text-main)' : 'var(--text-muted)',
+                  border: mode === 'signin' ? '1px solid var(--border-subtle)' : '1px solid transparent',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                }}
+              >
+                Sign In
+              </button>
+            </div>
+
+            {errorMsg && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  color: '#dc2626',
+                  fontSize: '13px',
+                  marginBottom: '16px',
+                }}
+              >
+                <AlertCircle size={16} />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitAuth} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {mode === 'signup' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '5px' }}>
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Dr. Elena Rostova"
+                    className="input-field"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '5px' }}>
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="you@laboratory.org"
+                  className="input-field"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '5px' }}>
+                  Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  placeholder="At least 6 characters"
+                  className="input-field"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+
+              {mode === 'signup' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '5px' }}>
+                      Organization
+                    </label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      value={organization}
+                      onChange={(e) => setOrganization(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '5px' }}>
+                      Laboratory Role
+                    </label>
+                    <select
+                      className="input-field"
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                    >
+                      <option value="lead_biologist">Lead Biologist</option>
+                      <option value="lab_director">Lab Director</option>
+                      <option value="compliance_officer">Compliance Officer</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="btn btn-primary"
+                style={{ width: '100%', padding: '12px', fontSize: '14px', marginTop: '6px' }}
+              >
+                {mode === 'signup' ? <UserPlus size={16} /> : <LogIn size={16} />}
+                <span>
+                  {isSubmitting
+                    ? 'Authenticating...'
+                    : mode === 'signup'
+                    ? 'Create Account'
+                    : 'Sign In'}
+                </span>
+              </button>
+            </form>
+          </div>
+        )}
       </div>
     </div>
   );

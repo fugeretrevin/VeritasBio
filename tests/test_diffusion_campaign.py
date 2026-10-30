@@ -72,7 +72,9 @@ class TestDiffusionCampaign(unittest.TestCase):
             num_designs=5,
             binder_length=65,
             budget_usd=0.0001,
-            target_model="rfdiffusion_proteinmpnn_a10g",  # Requires ~$0.018+
+            # Implemented engine, so this covers budget gating rather than
+            # engine availability. mock_diffusion costs $0.0005 > $0.0001 budget.
+            target_model="mock_diffusion",
             output_dir=self.out_path,
             db_path=self.db_path,
         )

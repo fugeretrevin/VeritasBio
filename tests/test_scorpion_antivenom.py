@@ -123,7 +123,10 @@ class TestScorpionAntivenom(unittest.TestCase):
             self.assertTrue(fda_cert.is_file(), "FDA Part 11 certificate must exist")
             with open(fda_cert, "r", encoding="utf-8") as f:
                 cert_data = json.load(f)
-            self.assertIn("FDA 21 CFR Part 11", cert_data.get("standard_compliance", ""))
+            # The verifiable claim is that the chain re-verified, not that the
+            # system is Part 11 compliant.
+            self.assertTrue(cert_data.get("audit_chain_verified"))
+            self.assertIn("verified", cert_data.get("standard_compliance", "").lower())
             self.assertIn("ledger_hash_sha256", cert_data)
             self.assertTrue(cert_data.get("merkle_audit_chain_valid", False))
 

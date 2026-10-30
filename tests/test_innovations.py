@@ -5,7 +5,7 @@ Tests:
     1. Codon optimization for E. coli expression and restriction site removal.
     2. Twist / IDT CSV order sheet generation.
     3. Opentrons (OT-2) 96-well automated liquid-handling protocol generation.
-    4. FDA 21 CFR Part 11 cryptographic audit certificate (SHA-256 ledger proof).
+    4. Tamper-evident HMAC-SHA256 Merkle audit certificate (chain re-verified at issue time).
     5. 3Dmol WebGL HTML generation with authentic PDB coordinates.
     6. Plotly active-learning latent landscape generation.
 """
@@ -73,7 +73,12 @@ class TestInnovations(unittest.TestCase):
             cert = generate_cryptographic_audit_certificate(db_path)
             self.assertTrue(cert["certificate_id"].startswith("VB-AUDIT-"))
             self.assertEqual(len(cert["ledger_hash_sha256"]), 64)
-            self.assertIn("FDA 21 CFR Part 11", cert["standard_compliance"])
+            # Assert the property the code can actually establish: the audit chain
+            # was re-verified at certificate time. Part 11 compliance is a property
+            # of a validated organisational system, not of this function.
+            self.assertTrue(cert["audit_chain_verified"])
+            self.assertIn("verified", cert["standard_compliance"].lower())
+            self.assertTrue(cert["deterministic_verification"].startswith("PASS"))
             self.assertEqual(cert["total_budget_usd"], 1.0)
 
     def test_3dmol_html_generation(self) -> None:

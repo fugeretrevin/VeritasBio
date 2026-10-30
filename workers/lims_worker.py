@@ -192,7 +192,17 @@ class BenchlingClient:
         db_path: Optional[Union[str, Path]] = None,
     ) -> Dict[str, Any]:
         """
-        Creates a virtual 96-well or 384-well plate in Benchling Inventory and records an audit block.
+        Build a virtual 96-well or 384-well plate record and write an audit block.
+
+        No Benchling API call is made in any mode - this method has no live path,
+        so the record is always local and `isMock` is always True.
+
+        Accepts either plate-map shape:
+          * this module's own  {"wells": {coord: {role, sample_name, volume_uL}}}
+          * `wetlab_worker.generate_plate_layout`'s
+            {"plate_map": {coord: {type, name, volume_ul}}}, or that inner dict directly.
+        Previously only the first was understood, so passing the wet-lab layout
+        silently produced an empty default plate instead of the real one.
         """
         clean_plate_name = plate_name.strip()
         if not clean_plate_name:
@@ -201,21 +211,41 @@ class BenchlingClient:
         containers: List[Dict[str, Any]] = []
         p_map = plate_map or {}
 
-        # Construct coordinate containers
-        if "wells" in p_map:
-            for well_coord, well_info in sorted(p_map["wells"].items()):
+        # Normalize whichever plate-map shape was supplied into {coord: {...}}.
+        raw_wells: Dict[str, Any] = {}
+        if isinstance(p_map.get("wells"), dict):
+            raw_wells = p_map["wells"]
+        elif isinstance(p_map.get("plate_map"), dict):
+            raw_wells = p_map["plate_map"]
+        elif p_map and all(isinstance(v, dict) for v in p_map.values()):
+            # The inner mapping was passed directly.
+            raw_wells = p_map
+
+        if raw_wells:
+            for well_coord, well_info in sorted(raw_wells.items()):
+                if not isinstance(well_info, dict):
+                    continue
+                # Accept either field vocabulary.
+                role = well_info.get("role", well_info.get("type", "experimental"))
+                sample_name = well_info.get("sample_name", well_info.get("name", ""))
+                volume = well_info.get("volume_uL", well_info.get("volume_ul", 20.0))
                 containers.append({
                     "coordinate": well_coord,
                     "barcode": f"CNT-{clean_plate_name}-{well_coord}",
-                    "volume_uL": well_info.get("volume_uL", 20.0),
-                    "role": well_info.get("role", "experimental"),
-                    "sample_name": well_info.get("sample_name", ""),
+                    "volume_uL": float(volume),
+                    "role": role,
+                    "sample_name": sample_name,
                     "concentration_ng_uL": well_info.get("concentration_ng_uL", 50.0),
                 })
         else:
-            # Default empty coordinate layout
-            rows = ["A", "B", "C", "D", "E", "F", "G", "H"]
-            cols = list(range(1, 13))
+            # Default empty layout, sized to the requested format rather than
+            # always emitting a 96-well grid.
+            if str(plate_format).strip().startswith("384"):
+                rows = [chr(ord("A") + i) for i in range(16)]
+                cols = list(range(1, 25))
+            else:
+                rows = [chr(ord("A") + i) for i in range(8)]
+                cols = list(range(1, 13))
             for r in rows:
                 for c in cols:
                     coord = f"{r}{c}"

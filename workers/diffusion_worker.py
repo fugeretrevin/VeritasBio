@@ -22,6 +22,7 @@ import io
 import json
 import logging
 import math
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
@@ -31,7 +32,7 @@ from pydantic import BaseModel, Field, field_validator
 from controller.gatekeeper import ALLOWED_TARGET_MODELS, Gatekeeper, GatekeeperDecision
 from ledger import database as ledger_db
 from workers.math_worker import analyze_biologics_developability
-from workers.spatial_filter import SpatialContactMap
+from workers.spatial_filter import SpatialContactMap, compute_interface_contact_residues
 from workers.wetlab_worker import (
     generate_cryptographic_audit_certificate,
     generate_opentrons_protocol,
@@ -45,7 +46,7 @@ try:
     import modal
 
     diffusion_app = modal.App("veritasbio-diffusion")
-except ImportError:
+except (ImportError, Exception):
     modal = None
     diffusion_app = None
 
@@ -97,8 +98,22 @@ class DeNovoBinderDesign(BaseModel):
     sequence: str = Field(..., min_length=10, description="Designed primary amino acid sequence")
     length: int = Field(..., ge=10)
     pdb_content: str = Field(..., description="Complete 3D atomic PDB coordinate file content")
-    predicted_plddt: float = Field(..., ge=0.0, le=100.0, description="Predicted local distance difference test (0-100)")
-    estimated_rmsd_to_target: float = Field(..., ge=0.0, description="Docked interface alignment RMSD (Angstroms)")
+    complex_pdb_content: Optional[str] = Field(
+        default=None,
+        description="Target (chain A) + designed binder (chain B) complex, when a target structure was supplied",
+    )
+    interface_contact_pairs: int = Field(
+        default=0, ge=0,
+        description="Measured count of binder-target residue pairs within the contact cutoff",
+    )
+    interface_binder_residues: int = Field(
+        default=0, ge=0,
+        description="Measured count of distinct binder residues at the target interface",
+    )
+    min_interface_distance_angstrom: Optional[float] = Field(
+        default=None, ge=0.0,
+        description="Measured closest binder-target heavy-atom approach, in Angstroms",
+    )
     radius_of_gyration: float = Field(..., ge=0.0, description="Backbone compactness Rg (Angstroms)")
     developability_score: float = Field(..., ge=0.0, le=1.0, description="Biologics developability score (0.0 to 1.0)")
     developability_liabilities: List[str] = Field(default_factory=list)
@@ -126,7 +141,7 @@ class DiffusionJobResult(BaseModel):
 # -----------------------------------------------------------------------------
 # Local Geometric Backbone Sampler (High-Fidelity Physics Engine)
 # -----------------------------------------------------------------------------
-class GeometricBackboneSampler:
+class ParametricHelixBundleSampler:
     """
     Parametric secondary structure backbone generator for de novo protein binders.
 
@@ -317,10 +332,76 @@ class GeometricBackboneSampler:
         return pdb_str, ca_tuples, rg
 
 
+# Engines that are priced in the Gatekeeper but have no implementation here.
+# Keep them priced so budget gating can be exercised, but never run them.
+UNIMPLEMENTED_DENOVO_ENGINES = frozenset({"rfdiffusion_proteinmpnn_a10g"})
+
+
+# -----------------------------------------------------------------------------
+# Sequence threading & complex assembly
+# -----------------------------------------------------------------------------
+AA_1_TO_3: Dict[str, str] = {
+    "A": "ALA", "R": "ARG", "N": "ASN", "D": "ASP", "C": "CYS",
+    "Q": "GLN", "E": "GLU", "G": "GLY", "H": "HIS", "I": "ILE",
+    "L": "LEU", "K": "LYS", "M": "MET", "F": "PHE", "P": "PRO",
+    "S": "SER", "T": "THR", "W": "TRP", "Y": "TYR", "V": "VAL",
+}
+
+
+def thread_sequence_into_pdb(pdb_str: str, sequence: str, chain_id: str = "B") -> str:
+    """
+    Rewrite the residue name of each ATOM record to match the designed sequence.
+
+    The backbone sampler emits every residue as GLY because inverse folding runs
+    after coordinate generation. Once a sequence exists those placeholder names
+    are wrong and would mislead any downstream structural tool, so this maps
+    residue number -> designed amino acid and rewrites the resName columns.
+    Residue numbers outside the sequence are left untouched.
+    """
+    out: List[str] = []
+    for line in pdb_str.splitlines():
+        if line.startswith(("ATOM  ", "HETATM")) and len(line) >= 26 and line[21:22] == chain_id:
+            try:
+                res_num = int(line[22:26])
+            except ValueError:
+                out.append(line)
+                continue
+            idx = res_num - 1
+            if 0 <= idx < len(sequence):
+                three = AA_1_TO_3.get(sequence[idx].upper())
+                if three:
+                    line = line[:17] + f"{three:>3}" + line[20:]
+        out.append(line)
+    return "\n".join(out) + "\n"
+
+
+def assemble_complex_pdb(target_pdb_str: str, binder_pdb_str: str) -> str:
+    """
+    Concatenate a target structure and a designed binder into one complex PDB.
+
+    The target is forced to chain A and the binder keeps chain B, so the result
+    can be passed to `compute_interface_contact_residues(binder_chains=("B",),
+    target_chains=("A",))` to measure the real binder-target interface geometry.
+    """
+    lines: List[str] = []
+    for line in target_pdb_str.splitlines():
+        if line.startswith(("ATOM  ", "HETATM")):
+            if len(line) >= 22:
+                line = line[:21] + "A" + line[22:]
+            lines.append(line)
+    lines.append("TER")
+    for line in binder_pdb_str.splitlines():
+        if line.startswith(("ATOM  ", "HETATM")):
+            lines.append(line)
+    lines.append("TER")
+    lines.append("END")
+    return "\n".join(lines) + "\n"
+
+
 # -----------------------------------------------------------------------------
 # ProteinMPNN-Inspired Sequence Inverse Folder
 # -----------------------------------------------------------------------------
-class ProteinMPNNInverseFolder:
+class HeuristicInverseFolder:
     """
     Inverse-folds amino acid sequences onto 3D backbone coordinates.
 
@@ -436,6 +517,30 @@ def generate_budgeted_de_novo_binders(
 
     gk = gatekeeper or Gatekeeper(db_path=db_path)
 
+    # Step 0: Refuse engines that are priced but not implemented, BEFORE any spend.
+    # There is no GPU code path in this module - no diffusion model, no ProteinMPNN
+    # network, no Modal dispatch. Selecting a remote engine previously charged A10G
+    # rates and silently ran the local heuristic sampler instead, so the caller paid
+    # GPU prices for CPU output and the ledger recorded it as that engine's result.
+    if req.target_model in UNIMPLEMENTED_DENOVO_ENGINES:
+        logger.warning(
+            "De novo engine %r is not implemented; refusing before authorization.",
+            req.target_model,
+        )
+        return DiffusionJobResult(
+            job_id=req.job_id,
+            approved=False,
+            status="REJECTED",
+            target_model=req.target_model,
+            num_requested=req.num_designs,
+            cost_usd=0.0,
+            rejection_reason=(
+                f"Engine {req.target_model!r} is not implemented: this module has no GPU "
+                f"code path. Use 'mock_diffusion' for the local heuristic sampler. No funds "
+                f"were authorized."
+            ),
+        )
+
     # Step 1: Fail-Closed Spend Authorization Gate
     decision: GatekeeperDecision = gk.evaluate_and_authorize_diffusion(
         payload={
@@ -466,6 +571,7 @@ def generate_budgeted_de_novo_binders(
     # Step 2: Extract Target Hotspot Coordinates if Target Structure is specified
     target_centroid: Optional[Tuple[float, float, float]] = None
     hotspot_ca_coords: List[Tuple[float, float, float]] = []
+    target_pdb_text: Optional[str] = None
 
     if req.target_pdb:
         try:
@@ -477,6 +583,7 @@ def generate_budgeted_de_novo_binders(
                     pdb_path = candidate
 
             if pdb_path.is_file():
+                target_pdb_text = pdb_path.read_text(encoding="utf-8", errors="ignore")
                 cmap = SpatialContactMap(pdb_path=pdb_path)
                 if req.hotspot_residues:
                     for h_res in req.hotspot_residues:
@@ -494,8 +601,8 @@ def generate_budgeted_de_novo_binders(
             logger.warning("Could not parse target PDB %s: %s. Using default coordinates.", req.target_pdb, exc)
 
     # Step 3: Generate 3D Backbones and Inverse-Folded Sequences
-    sampler = GeometricBackboneSampler(random_seed=42)
-    folder = ProteinMPNNInverseFolder(random_seed=42)
+    sampler = ParametricHelixBundleSampler(random_seed=42)
+    folder = HeuristicInverseFolder(random_seed=42)
 
     designs: List[DeNovoBinderDesign] = []
     evidence_records: List[Tuple[str, float]] = []
@@ -516,12 +623,50 @@ def generate_budgeted_de_novo_binders(
         # Biophysical Developability & Liability Analysis
         dev_eval = analyze_biologics_developability(sequence)
         dev_score = float(dev_eval.get("developability_score", 0.85))
-        liabilities = dev_eval.get("liabilities", [])
+        liabilities = list(dev_eval.get("clinical_liabilities", []))
 
-        # Estimated pLDDT (82.0 to 93.0) and RMSD (1.2 to 2.2 A)
-        plddt = round(85.0 + 5.0 * (dev_score - 0.70) + sampler.rng.uniform(-2.0, 3.0), 1)
-        plddt = float(np.clip(plddt, 75.0, 96.0))
-        rmsd = round(1.65 + sampler.rng.uniform(-0.35, 0.45), 2)
+        # Thread the inverse-folded sequence back into the coordinates. The sampler
+        # emits placeholder GLY residue names because folding runs after geometry.
+        pdb_str = thread_sequence_into_pdb(pdb_str, sequence, chain_id="B")
+
+        # Measure the real binder-target interface where a target structure exists.
+        # No structure predictor runs here, so no pLDDT or alignment RMSD is reported;
+        # only quantities actually computed from the coordinates are recorded.
+        complex_pdb: Optional[str] = None
+        n_contact_pairs = 0
+        n_binder_iface = 0
+        min_iface_dist: Optional[float] = None
+        if target_pdb_text:
+            try:
+                complex_pdb = assemble_complex_pdb(target_pdb_text, pdb_str)
+                with tempfile.NamedTemporaryFile(
+                    "w", suffix=".pdb", delete=False, encoding="utf-8"
+                ) as fh:
+                    fh.write(complex_pdb)
+                    complex_path = Path(fh.name)
+                try:
+                    iface = compute_interface_contact_residues(
+                        pdb_path=complex_path,
+                        binder_chains=("B",),
+                        target_chains=("A",),
+                    )
+                    pairs = iface.get("contact_pairs", []) or []
+                    n_contact_pairs = len(pairs)
+                    n_binder_iface = len(iface.get("binder_residues", []) or [])
+                    dists = [
+                        float(r["min_distance_angstrom"])
+                        for r in (iface.get("target_residues", []) or [])
+                        if r.get("min_distance_angstrom") is not None
+                    ]
+                    if dists:
+                        min_iface_dist = round(min(dists), 3)
+                finally:
+                    complex_path.unlink(missing_ok=True)
+            except Exception as exc:
+                logger.warning(
+                    "Interface measurement failed for %s: %s. Recording zero contacts.",
+                    design_id, exc,
+                )
 
         # Synthesis cost at Twist standard $0.09/bp
         synthesis_cost = round(len(sequence) * 3 * 0.09, 2)
@@ -531,8 +676,10 @@ def generate_budgeted_de_novo_binders(
             sequence=sequence,
             length=len(sequence),
             pdb_content=pdb_str,
-            predicted_plddt=plddt,
-            estimated_rmsd_to_target=rmsd,
+            complex_pdb_content=complex_pdb,
+            interface_contact_pairs=n_contact_pairs,
+            interface_binder_residues=n_binder_iface,
+            min_interface_distance_angstrom=min_iface_dist,
             radius_of_gyration=round(rg, 2),
             developability_score=dev_score,
             developability_liabilities=liabilities,
@@ -540,21 +687,43 @@ def generate_budgeted_de_novo_binders(
             synthesis_cost_usd=synthesis_cost,
         )
         designs.append(design)
-        evidence_records.append((sequence, plddt / 100.0))
+        evidence_records.append((sequence, dev_score))
 
     # Step 4: Record Evidence & Mark Job Completed in SQLite Ledger
     try:
-        ledger_db.record_evidence(job_id=req.job_id, results=evidence_records, db_path=db_path)
+        ledger_db.record_evidence(
+            job_id=req.job_id,
+            results=evidence_records,
+            db_path=db_path,
+            compute_engine="denovo_developability_cpu",
+        )
         ledger_db.mark_job_completed(job_id=req.job_id, db_path=db_path)
     except Exception as exc:
+        # Do not report COMPLETED when the evidence never landed: the job has
+        # already been charged, so a silent success would leave spend with no
+        # recorded result and no audit block.
         logger.error("Failed to commit evidence to ledger for job %s: %s", req.job_id, exc)
+        try:
+            ledger_db.mark_job_failed(job_id=req.job_id, db_path=db_path)
+        except Exception:
+            logger.exception("Could not mark job %s FAILED after evidence failure", req.job_id)
+        return DiffusionJobResult(
+            job_id=req.job_id,
+            approved=True,
+            status="FAILED",
+            target_model=req.target_model,
+            num_requested=req.num_designs,
+            designs=designs,
+            cost_usd=decision.estimated_cost,
+            rejection_reason=f"Evidence commit failed: {exc}",
+        )
 
     # Step 5: Physical Wet-Lab Synthesis & Robotics Export
     twist_input = [
         {
             "variant_sequence": d.sequence,
             "mutations": d.design_id,
-            "computed_score": d.predicted_plddt / 100.0,
+            "computed_score": d.developability_score,
         }
         for d in designs
     ]
@@ -595,3 +764,10 @@ def generate_budgeted_de_novo_binders(
         opentrons_script=opentrons_script,
         fda_certificate=fda_cert,
     )
+
+
+# Retained so existing callers keep working. These are local heuristics, not the
+# published methods their former names referenced: this module contains no diffusion
+# model and no ProteinMPNN network (no weights, no message passing, no GPU path).
+GeometricBackboneSampler = ParametricHelixBundleSampler
+ProteinMPNNInverseFolder = HeuristicInverseFolder
