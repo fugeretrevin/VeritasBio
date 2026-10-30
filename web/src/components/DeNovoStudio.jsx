@@ -1,9 +1,20 @@
-import React, { useState } from 'react';
-import { Sparkles, Download, Layers, ShieldCheck, FileSpreadsheet, Bot } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Sparkles, FileSpreadsheet, Bot, ArrowRight } from 'lucide-react';
 import Protein3DViewer from './Protein3DViewer';
 
-export default function DeNovoStudio({ onRefreshLedger }) {
-  const [targetScaffold, setTargetScaffold] = useState('SCFV_9004G_CN2');
+export default function DeNovoStudio({
+  targetAccession = 'SCFV_9004G_CN2',
+  onTargetChange,
+  currentUser,
+  onRefreshLedger,
+  onRunComplete,
+  onNavigateTab,
+}) {
+  const [targetScaffold, setTargetScaffold] = useState(
+    ['SCFV_9004G_CN2', 'HER2_TRASTUZUMAB', 'P42212'].includes(targetAccession)
+      ? targetAccession
+      : 'SCFV_9004G_CN2'
+  );
   const [numDesigns, setNumDesigns] = useState(3);
   const [binderLength, setBinderLength] = useState(65);
   const [budgetUsd, setBudgetUsd] = useState(0.50);
@@ -13,10 +24,20 @@ export default function DeNovoStudio({ onRefreshLedger }) {
   const [generationResult, setGenerationResult] = useState(null);
   const [selectedDesign, setSelectedDesign] = useState(null);
 
+  useEffect(() => {
+    if (['SCFV_9004G_CN2', 'HER2_TRASTUZUMAB', 'P42212'].includes(targetAccession)) {
+      setTargetScaffold(targetAccession);
+    }
+  }, [targetAccession]);
+
   const handleGenerate = async () => {
     setIsLoading(true);
     setErrorMsg(null);
     try {
+      const tokenToUse =
+        currentUser?.id_token ||
+        (currentUser?.uid ? `panoptes_session_${currentUser.uid}` : null);
+
       const res = await fetch('/api/diffusion/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -25,7 +46,7 @@ export default function DeNovoStudio({ onRefreshLedger }) {
           num_designs: numDesigns,
           binder_length: binderLength,
           budget_usd: budgetUsd,
-          auth_token: 'panoptes_demo_token',
+          auth_token: tokenToUse,
         }),
       });
 
@@ -38,6 +59,12 @@ export default function DeNovoStudio({ onRefreshLedger }) {
       setGenerationResult(data);
       if (data.designs && data.designs.length > 0) {
         setSelectedDesign(data.designs[0]);
+        if (onRunComplete) {
+          onRunComplete({
+            target: targetScaffold,
+            topScore: data.designs[0].interface_contact_pairs || 1.45,
+          });
+        }
       }
       if (onRefreshLedger) onRefreshLedger();
     } catch (err) {
@@ -78,41 +105,48 @@ export default function DeNovoStudio({ onRefreshLedger }) {
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 420px) 1fr', gap: '20px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '20px', alignItems: 'start' }}>
       {/* Left Control Column */}
-      <div className="glass-panel" style={{ padding: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-          <Sparkles size={20} color="var(--cyan-bright)" />
-          <h2 className="title-display" style={{ fontSize: '18px', margin: 0 }}>
-            De Novo Binder Diffusion Studio
-          </h2>
+      <div className="glass-panel" style={{ padding: '22px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Sparkles size={16} color="var(--text-main)" />
+            <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+              De Novo Binder Parameters
+            </h2>
+          </div>
+          <span className="mono" style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+            3-Helix
+          </span>
         </div>
-        <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-          Autonomous 3-helix bundle backbone diffusion (RFdiffusion) & sequence inverse folding (ProteinMPNN)
-          with zero unpaired cysteines and strict developability scoring.
-        </p>
 
         {/* Target Epitope */}
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
-            Target Epitope / Scaffold
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+            Target Epitope
           </label>
           <select
             className="input-field"
             value={targetScaffold}
-            onChange={(e) => setTargetScaffold(e.target.value)}
+            onChange={(e) => {
+              setTargetScaffold(e.target.value);
+              if (onTargetChange) onTargetChange(e.target.value);
+            }}
+            style={{ fontSize: '12.5px', padding: '8px 10px' }}
           >
-            <option value="SCFV_9004G_CN2">SCFV_9004G_CN2 (Scorpion Neurotoxin · 2YBR)</option>
-            <option value="HER2_TRASTUZUMAB">HER2_TRASTUZUMAB (HER2 Extracellular Receptor · 1N8Z)</option>
-            <option value="P42212">avGFP Surface Epitope (avGFP β-Barrel · 1EMA)</option>
+            <option value="SCFV_9004G_CN2">Scorpion Neurotoxin Cn2 (2YBR)</option>
+            <option value="HER2_TRASTUZUMAB">HER2 Extracellular Domain (1N8Z)</option>
+            <option value="P42212">avGFP β-Barrel Epitope (1EMA)</option>
           </select>
         </div>
 
         {/* Num Designs Slider */}
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-            <span>Number of Backbones</span>
-            <span className="mono" style={{ color: 'var(--cyan-bright)' }}>{numDesigns} designs</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '5px' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Backbone Candidates</span>
+            <span className="mono tabular" style={{ fontWeight: 600, color: 'var(--text-main)' }}>
+              {numDesigns} designs
+            </span>
           </div>
           <input
             type="range"
@@ -121,15 +155,17 @@ export default function DeNovoStudio({ onRefreshLedger }) {
             step="1"
             value={numDesigns}
             onChange={(e) => setNumDesigns(Number(e.target.value))}
-            style={{ width: '100%', accentColor: 'var(--cyan-bright)' }}
+            style={{ width: '100%', accentColor: 'var(--text-main)' }}
           />
         </div>
 
         {/* Binder Length Slider */}
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-            <span>Binder Length (AAs)</span>
-            <span className="mono" style={{ color: 'var(--cyan-bright)' }}>{binderLength} AAs</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '5px' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Scaffold Length</span>
+            <span className="mono tabular" style={{ fontWeight: 600, color: 'var(--text-main)' }}>
+              {binderLength} AA
+            </span>
           </div>
           <input
             type="range"
@@ -138,15 +174,17 @@ export default function DeNovoStudio({ onRefreshLedger }) {
             step="5"
             value={binderLength}
             onChange={(e) => setBinderLength(Number(e.target.value))}
-            style={{ width: '100%', accentColor: 'var(--cyan-bright)' }}
+            style={{ width: '100%', accentColor: 'var(--text-main)' }}
           />
         </div>
 
         {/* Budget Allocation */}
-        <div style={{ marginBottom: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-            <span>Spend Budget Gate ($ USD)</span>
-            <span className="mono" style={{ color: 'var(--emerald-bright)' }}>${budgetUsd.toFixed(2)}</span>
+        <div style={{ marginBottom: '18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '5px' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Spend Gate Cap</span>
+            <span className="mono tabular" style={{ fontWeight: 600, color: 'var(--text-main)' }}>
+              ${budgetUsd.toFixed(2)}
+            </span>
           </div>
           <input
             type="range"
@@ -155,20 +193,20 @@ export default function DeNovoStudio({ onRefreshLedger }) {
             step="0.05"
             value={budgetUsd}
             onChange={(e) => setBudgetUsd(Number(e.target.value))}
-            style={{ width: '100%', accentColor: 'var(--emerald-bright)' }}
+            style={{ width: '100%', accentColor: 'var(--text-main)' }}
           />
         </div>
 
         {errorMsg && (
           <div
             style={{
-              padding: '10px 14px',
+              padding: '10px 12px',
               borderRadius: '8px',
-              background: 'rgba(239, 68, 68, 0.15)',
-              border: '1px solid var(--red-alert)',
-              color: '#fca5a5',
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#dc2626',
               fontSize: '12px',
-              marginBottom: '16px',
+              marginBottom: '14px',
             }}
           >
             {errorMsg}
@@ -179,20 +217,20 @@ export default function DeNovoStudio({ onRefreshLedger }) {
           onClick={handleGenerate}
           disabled={isLoading}
           className="btn btn-primary"
-          style={{ width: '100%', padding: '12px', fontSize: '14px' }}
+          style={{ width: '100%', padding: '11px', fontSize: '13.5px' }}
         >
-          <Sparkles size={16} />
-          <span>{isLoading ? 'Generating Backbones & Inverse Folding...' : 'Generate Budgeted De Novo Binders'}</span>
+          <Sparkles size={15} />
+          <span>{isLoading ? 'Generating Binders...' : 'Generate De Novo Binders'}</span>
         </button>
 
         {generationResult && (
-          <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
-            <button onClick={handleDownloadTwist} className="btn btn-secondary" style={{ flex: 1, fontSize: '12px' }}>
-              <FileSpreadsheet size={14} color="var(--emerald-bright)" />
+          <div style={{ marginTop: '14px', display: 'flex', gap: '8px' }}>
+            <button onClick={handleDownloadTwist} className="btn btn-secondary" style={{ flex: 1, fontSize: '12px', padding: '8px' }}>
+              <FileSpreadsheet size={13} color="var(--emerald-primary)" />
               <span>Twist CSV</span>
             </button>
-            <button onClick={handleDownloadOpentrons} className="btn btn-secondary" style={{ flex: 1, fontSize: '12px' }}>
-              <Bot size={14} color="var(--cyan-bright)" />
+            <button onClick={handleDownloadOpentrons} className="btn btn-secondary" style={{ flex: 1, fontSize: '12px', padding: '8px' }}>
+              <Bot size={13} color="var(--text-main)" />
               <span>Opentrons .py</span>
             </button>
           </div>
@@ -200,25 +238,24 @@ export default function DeNovoStudio({ onRefreshLedger }) {
       </div>
 
       {/* Right 3D Visualizer & Table Column */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {/* 3D WebGL Viewer */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <Protein3DViewer
           pdbContent={selectedDesign?.pdb_content || null}
-          targetName={selectedDesign?.design_id || 'De Novo Docked Complex'}
+          targetName={selectedDesign?.design_id || `${targetScaffold} Complex`}
           hotspots={[98, 99, 100, 101, 102]}
           isComplex={true}
-          height="380px"
+          height="320px"
         />
 
         {/* Candidates Table */}
-        <div className="glass-panel" style={{ padding: '20px' }}>
+        <div className="glass-panel" style={{ padding: '18px 20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 className="title-display" style={{ fontSize: '15px', margin: 0 }}>
-              Generated Binder Candidates & Biophysical Liabilities
+            <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+              Designed Binder Candidates
             </h3>
             {generationResult?.audit_block_hash && (
-              <span className="badge badge-emerald mono" style={{ fontSize: '10px' }}>
-                Merkle Block: {generationResult.audit_block_hash.slice(0, 14)}...
+              <span className="mono" style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                Block #{generationResult.audit_block_hash.slice(0, 10)}
               </span>
             )}
           </div>
@@ -226,15 +263,14 @@ export default function DeNovoStudio({ onRefreshLedger }) {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
-                  <th style={{ textAlign: 'left', padding: '8px' }}>Design ID</th>
-                  <th style={{ textAlign: 'left', padding: '8px' }}>Length</th>
-                  <th style={{ textAlign: 'left', padding: '8px' }}>pLDDT</th>
-                  <th style={{ textAlign: 'left', padding: '8px' }}>RMSD (Å)</th>
-                  <th style={{ textAlign: 'left', padding: '8px' }}>Rg (Å)</th>
-                  <th style={{ textAlign: 'left', padding: '8px' }}>Developability</th>
-                  <th style={{ textAlign: 'left', padding: '8px' }}>Sequence Preview</th>
-                  <th style={{ textAlign: 'right', padding: '8px' }}>Action</th>
+                <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-dim)' }}>
+                  <th style={{ textAlign: 'left', padding: '7px 8px' }}>Design ID</th>
+                  <th style={{ textAlign: 'left', padding: '7px 8px' }}>Length</th>
+                  <th style={{ textAlign: 'left', padding: '7px 8px' }}>Contacts</th>
+                  <th style={{ textAlign: 'left', padding: '7px 8px' }}>Min Dist</th>
+                  <th style={{ textAlign: 'left', padding: '7px 8px' }}>Rg</th>
+                  <th style={{ textAlign: 'left', padding: '7px 8px' }}>Sequence</th>
+                  <th style={{ textAlign: 'right', padding: '7px 8px' }}>Inspect</th>
                 </tr>
               </thead>
               <tbody>
@@ -243,32 +279,36 @@ export default function DeNovoStudio({ onRefreshLedger }) {
                     <tr
                       key={design.design_id}
                       style={{
-                        borderBottom: '1px solid rgba(255,255,255,0.04)',
-                        background: selectedDesign?.design_id === design.design_id ? 'rgba(56, 189, 248, 0.08)' : 'transparent',
+                        borderBottom: '1px solid var(--border-subtle)',
+                        background:
+                          selectedDesign?.design_id === design.design_id
+                            ? 'var(--bg-elevated)'
+                            : 'transparent',
                       }}
                     >
-                      <td style={{ padding: '10px 8px', fontWeight: 600, color: 'var(--cyan-bright)' }}>
+                      <td className="mono" style={{ padding: '8px', fontWeight: 600, color: 'var(--text-main)' }}>
                         {design.design_id}
                       </td>
-                      <td style={{ padding: '10px 8px' }}>{design.length} AA</td>
-                      <td style={{ padding: '10px 8px', color: 'var(--emerald-bright)', fontWeight: 600 }}>
-                        {design.predicted_plddt.toFixed(1)}
+                      <td style={{ padding: '8px' }}>{design.length} AA</td>
+                      <td className="mono tabular" style={{ padding: '8px', color: 'var(--emerald-primary)', fontWeight: 600 }}>
+                        {design.interface_contact_pairs ?? 0}
                       </td>
-                      <td style={{ padding: '10px 8px' }}>{design.target_docking_rmsd.toFixed(2)}</td>
-                      <td style={{ padding: '10px 8px' }}>{design.radius_of_gyration.toFixed(2)}</td>
-                      <td style={{ padding: '10px 8px' }}>
-                        <span className="badge badge-emerald" style={{ fontSize: '10px' }}>
-                          0 Unpaired Cys · Clean
-                        </span>
+                      <td className="mono tabular" style={{ padding: '8px' }}>
+                        {design.min_interface_distance_angstrom != null
+                          ? `${design.min_interface_distance_angstrom.toFixed(2)} Å`
+                          : '—'}
                       </td>
-                      <td style={{ padding: '10px 8px' }} className="mono">
-                        {design.sequence.slice(0, 16)}...
+                      <td className="mono tabular" style={{ padding: '8px' }}>
+                        {design.radius_of_gyration.toFixed(2)} Å
                       </td>
-                      <td style={{ padding: '10px 8px', textAlign: 'right' }}>
+                      <td style={{ padding: '8px' }} className="mono">
+                        {design.sequence.slice(0, 18)}...
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'right' }}>
                         <button
                           onClick={() => setSelectedDesign(design)}
                           className="btn btn-secondary"
-                          style={{ padding: '4px 10px', fontSize: '12px' }}
+                          style={{ padding: '4px 10px', fontSize: '11.5px' }}
                         >
                           View 3D
                         </button>
@@ -277,8 +317,8 @@ export default function DeNovoStudio({ onRefreshLedger }) {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="8" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-dim)' }}>
-                      No designs generated yet. Click 'Generate Budgeted De Novo Binders' above to start diffusion.
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-dim)' }}>
+                      Click "Generate De Novo Binders" on the left to sample docked 3-helix bundles.
                     </td>
                   </tr>
                 )}

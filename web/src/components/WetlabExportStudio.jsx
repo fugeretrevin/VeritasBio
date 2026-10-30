@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  FlaskConical,
   Download,
   Copy,
   Check,
@@ -8,23 +7,36 @@ import {
   Bot,
   ShieldCheck,
   Layers,
-  Sparkles,
-  ExternalLink,
+  UploadCloud,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
-export default function WetlabExportStudio({ onRefreshLedger }) {
-  const [targetName, setTargetName] = useState('TRPB_TM9D8_Winners');
+export default function WetlabExportStudio({
+  targetAccession = 'TRPB_TM9D8',
+  currentUser,
+  onRefreshLedger,
+}) {
+  const [workflowMode, setWorkflowMode] = useState('outbound'); // 'outbound' | 'inbound'
   const [hostOrganism, setHostOrganism] = useState('Escherichia coli (BL21-DE3)');
   const [plateFormat, setPlateFormat] = useState('96_well');
   const [isExporting, setIsExporting] = useState(false);
   const [exportData, setExportData] = useState(null);
   const [activePreviewTab, setActivePreviewTab] = useState('twist');
   const [copied, setCopied] = useState(false);
-  const [errorMessage, setErrorMessage] = useState(null);
+
+  // Inbound Plate Ingestion State
+  const [plateUploading, setPlateUploading] = useState(false);
+  const [plateResult, setPlateResult] = useState(null);
+  const [plateError, setPlateError] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [normalizeToWt, setNormalizeToWt] = useState(true);
+  const fileInputRef = useRef(null);
+
+  const targetName = `${targetAccession}_Leads`;
 
   const fetchExports = async () => {
     setIsExporting(true);
-    setErrorMessage(null);
     try {
       const params = new URLSearchParams({
         target_name: targetName,
@@ -33,14 +45,13 @@ export default function WetlabExportStudio({ onRefreshLedger }) {
       const res = await fetch(`/api/wetlab/export?${params.toString()}`, {
         method: 'POST',
       });
-      if (!res.ok) {
-        throw new Error('Failed to generate wet-lab translation manifests');
+      if (res.ok) {
+        const data = await res.json();
+        setExportData(data);
+        if (onRefreshLedger) onRefreshLedger();
       }
-      const data = await res.json();
-      setExportData(data);
-      if (onRefreshLedger) onRefreshLedger();
     } catch (err) {
-      setErrorMessage(err.message);
+      console.error('Export error:', err);
     } finally {
       setIsExporting(false);
     }
@@ -48,7 +59,7 @@ export default function WetlabExportStudio({ onRefreshLedger }) {
 
   useEffect(() => {
     fetchExports();
-  }, [plateFormat]);
+  }, [targetAccession, plateFormat]);
 
   const handleDownloadFile = (content, filename, mimeType) => {
     if (!content) return;
@@ -63,40 +74,16 @@ export default function WetlabExportStudio({ onRefreshLedger }) {
 
   const handleDownloadAll = () => {
     if (!exportData) return;
-    handleDownloadFile(
-      exportData.twist_csv,
-      `twist_bioscience_${targetName}_orders.csv`,
-      'text/csv'
-    );
+    handleDownloadFile(exportData.twist_csv, `twist_${targetName}.csv`, 'text/csv');
     setTimeout(() => {
-      handleDownloadFile(
-        exportData.opentrons_script,
-        `opentrons_${targetName}_protocol.py`,
-        'text/x-python'
-      );
-    }, 250);
+      handleDownloadFile(exportData.opentrons_script, `opentrons_${targetName}.py`, 'text/x-python');
+    }, 200);
     setTimeout(() => {
-      handleDownloadFile(
-        exportData.fda_certificate_json,
-        `fda_part11_${targetName}_certificate.json`,
-        'application/json'
-      );
-    }, 500);
+      handleDownloadFile(exportData.fda_certificate_json, `fda_part11_${targetName}.json`, 'application/json');
+    }, 400);
     setTimeout(() => {
-      handleDownloadFile(
-        exportData.benchling_manifest,
-        `benchling_lims_${targetName}_manifest.csv`,
-        'text/csv'
-      );
-    }, 750);
-  };
-
-  const handleCopy = () => {
-    const textToCopy = getActiveContent();
-    if (!textToCopy) return;
-    navigator.clipboard.writeText(textToCopy);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+      handleDownloadFile(exportData.benchling_manifest, `benchling_${targetName}.csv`, 'text/csv');
+    }, 600);
   };
 
   const getActiveContent = () => {
@@ -117,320 +104,426 @@ export default function WetlabExportStudio({ onRefreshLedger }) {
     }
   };
 
+  const handleCopy = () => {
+    const textToCopy = getActiveContent();
+    if (!textToCopy) return;
+    navigator.clipboard.writeText(textToCopy);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handlePlateIngestion = async (fileOrText, isText = false) => {
+    setPlateUploading(true);
+    setPlateError(null);
+    setPlateResult(null);
+
+    const tokenToUse =
+      currentUser?.id_token ||
+      (currentUser?.uid ? `panoptes_session_${currentUser.uid}` : null);
+
+    try {
+      let res;
+      if (isText) {
+        res = await fetch('/api/campaign/ingest-plate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            csv_content: fileOrText,
+            target_accession: targetAccession,
+            normalize_to_wt: normalizeToWt,
+            auth_token: tokenToUse,
+          }),
+        });
+      } else {
+        const formData = new FormData();
+        formData.append('file', fileOrText);
+        formData.append('target_accession', targetAccession);
+        formData.append('normalize_to_wt', normalizeToWt ? 'true' : 'false');
+        formData.append('auth_token', tokenToUse);
+
+        res = await fetch('/api/campaign/ingest-plate', {
+          method: 'POST',
+          body: formData,
+        });
+      }
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Plate ingestion failed');
+      }
+
+      setPlateResult(data);
+      if (onRefreshLedger) onRefreshLedger();
+    } catch (err) {
+      setPlateError(err.message);
+    } finally {
+      setPlateUploading(false);
+    }
+  };
+
+  const handleLoadSamplePlate = () => {
+    const sampleCsv =
+      targetAccession === 'TRPB_TM9D8'
+        ? [
+            'Well,Sample_Type,Sample_Name,Reading',
+            'A01,evaporation_barrier,H2O,0.01',
+            'A02,evaporation_barrier,H2O,0.01',
+            'A12,evaporation_barrier,H2O,0.01',
+            'B02,control_wt,WT,1.00',
+            'B03,variant,V183A:F184A:V227A:S228A,0.74',
+            'B04,variant,F184V:S228A,1.82',
+            'B05,variant,V183I:F184V:V227I:S228A,2.15',
+            'H12,evaporation_barrier,H2O,0.01',
+          ].join('\n')
+        : [
+            'Well,Sample_Type,Sample_Name,Reading',
+            'A01,evaporation_barrier,H2O,0.01',
+            'A02,evaporation_barrier,H2O,0.01',
+            'A12,evaporation_barrier,H2O,0.01',
+            'B02,control_wt,WT,1.00',
+            'B03,variant,S65T:V68L,1.85',
+            'B04,variant,T203Y,1.40',
+            'B05,variant,F64L:S65T:T203Y,2.45',
+            'H12,evaporation_barrier,H2O,0.01',
+          ].join('\n');
+    handlePlateIngestion(sampleCsv, true);
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Top Header Card */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Clean Mode Switcher & Configuration Bar */}
       <div
         className="glass-panel"
         style={{
-          padding: '24px',
+          padding: '14px 18px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
-          gap: '16px',
-          borderLeft: '4px solid var(--cyan-bright)',
+          gap: '12px',
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <FlaskConical size={22} color="var(--cyan-bright)" />
-            <h2 className="title-display" style={{ fontSize: '20px', margin: 0 }}>
-              Physical Wet-Lab & CRO Translation Studio
-            </h2>
-          </div>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0, maxWidth: '800px' }}>
-            Bridge computational leads directly into live molecular biology: automated Twist Bioscience cDNA synthesis orders,
-            Opentrons OT-2 liquid-handling protocols, Benchling LIMS manifests, and FDA 21 CFR Part 11 cryptographic audit certificates.
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={fetchExports}
-            disabled={isExporting}
-            className="btn btn-secondary"
-            style={{ fontSize: '13px', padding: '10px 16px' }}
-          >
-            <Sparkles size={16} />
-            <span>{isExporting ? 'Compiling...' : 'Regenerate Manifests'}</span>
-          </button>
-          <button
-            onClick={handleDownloadAll}
-            disabled={!exportData || isExporting}
-            className="btn btn-primary"
-            style={{ fontSize: '13px', padding: '10px 18px' }}
-          >
-            <Download size={16} />
-            <span>Download All Artifacts</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Configuration Controls Bar */}
-      <div
-        className="glass-panel"
-        style={{
-          padding: '16px 20px',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '16px',
-          alignItems: 'center',
-        }}
-      >
-        <div>
-          <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-dim)', marginBottom: '4px' }}>
-            Target Campaign Name
-          </label>
-          <input
-            type="text"
-            className="input-field"
-            value={targetName}
-            onChange={(e) => setTargetName(e.target.value)}
-            style={{ fontSize: '12px', padding: '8px 12px' }}
-          />
-        </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-dim)', marginBottom: '4px' }}>
-            Synthesis Expression Host
-          </label>
-          <select
-            className="input-field"
-            value={hostOrganism}
-            onChange={(e) => setHostOrganism(e.target.value)}
-            style={{ fontSize: '12px', padding: '8px 12px' }}
-          >
-            <option value="Escherichia coli (BL21-DE3)">Escherichia coli (BL21-DE3 / K12)</option>
-            <option value="Chinese Hamster Ovary (CHO-K1)">Chinese Hamster Ovary (CHO-K1)</option>
-            <option value="Saccharomyces cerevisiae">Saccharomyces cerevisiae (Baker's Yeast)</option>
-            <option value="Pichia pastoris">Pichia pastoris (Komagataella phaffii)</option>
-          </select>
-        </div>
-
-        <div>
-          <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-dim)', marginBottom: '4px' }}>
-            Microplate Screening Format
-          </label>
-          <select
-            className="input-field"
-            value={plateFormat}
-            onChange={(e) => setPlateFormat(e.target.value)}
-            style={{ fontSize: '12px', padding: '8px 12px' }}
-          >
-            <option value="96_well">96-Well Plate (56 leads + 36 hydration barriers)</option>
-            <option value="384_well">384-Well Plate (308 leads + 76 hydration barriers)</option>
-          </select>
-        </div>
-      </div>
-
-      {/* 4 Cards Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-        {/* Card 1: Twist Bioscience */}
-        <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-              <FileSpreadsheet size={20} color="var(--cyan-bright)" />
-              <h3 className="title-display" style={{ fontSize: '15px', margin: 0 }}>
-                Twist Bioscience cDNA Orders
-              </h3>
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Codon-optimized gene fragments with Gibson assembly overhangs, 5' flanking primers, and non-clashing synthesis adapters.
-            </p>
-          </div>
-          <button
-            onClick={() =>
-              handleDownloadFile(
-                exportData?.twist_csv,
-                `twist_bioscience_${targetName}_orders.csv`,
-                'text/csv'
-              )
-            }
-            disabled={!exportData}
-            className="btn btn-secondary"
-            style={{ width: '100%', fontSize: '12px', gap: '8px', padding: '10px' }}
-          >
-            <Download size={14} />
-            <span>Download Twist CSV</span>
-          </button>
-        </div>
-
-        {/* Card 2: Opentrons OT-2 Robot */}
-        <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-              <Bot size={20} color="var(--emerald-bright)" />
-              <h3 className="title-display" style={{ fontSize: '15px', margin: 0 }}>
-                Opentrons OT-2 Protocol
-              </h3>
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Python liquid-handling robot script with perimeter anti-evaporation hydration barriers, 8-channel multi-pipetting, and blow-out logic.
-            </p>
-          </div>
-          <button
-            onClick={() =>
-              handleDownloadFile(
-                exportData?.opentrons_script,
-                `opentrons_${targetName}_protocol.py`,
-                'text/x-python'
-              )
-            }
-            disabled={!exportData}
-            className="btn btn-secondary"
-            style={{ width: '100%', fontSize: '12px', gap: '8px', padding: '10px' }}
-          >
-            <Download size={14} />
-            <span>Download Opentrons Script</span>
-          </button>
-        </div>
-
-        {/* Card 3: Benchling LIMS Manifest */}
-        <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-              <Layers size={20} color="#a855f7" />
-              <h3 className="title-display" style={{ fontSize: '15px', margin: 0 }}>
-                Benchling LIMS Registry
-              </h3>
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Bulk import manifest with well barcodes, coordinates, concentrations, and developability liability flags for enterprise inventory.
-            </p>
-          </div>
-          <button
-            onClick={() =>
-              handleDownloadFile(
-                exportData?.benchling_manifest,
-                `benchling_lims_${targetName}_manifest.csv`,
-                'text/csv'
-              )
-            }
-            disabled={!exportData}
-            className="btn btn-secondary"
-            style={{ width: '100%', fontSize: '12px', gap: '8px', padding: '10px' }}
-          >
-            <Download size={14} />
-            <span>Download Benchling CSV</span>
-          </button>
-        </div>
-
-        {/* Card 4: FDA 21 CFR Part 11 Audit Certificate */}
-        <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-              <ShieldCheck size={20} color="#f59e0b" />
-              <h3 className="title-display" style={{ fontSize: '15px', margin: 0 }}>
-                FDA 21 CFR Part 11 Certificate
-              </h3>
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Cryptographically signed JSON certificate containing dual-identifier electronic signatures, HMAC-SHA256 Merkle proofs, and timestamps.
-            </p>
-          </div>
-          <button
-            onClick={() =>
-              handleDownloadFile(
-                exportData?.fda_certificate_json,
-                `fda_part11_${targetName}_certificate.json`,
-                'application/json'
-              )
-            }
-            disabled={!exportData}
-            className="btn btn-secondary"
-            style={{ width: '100%', fontSize: '12px', gap: '8px', padding: '10px' }}
-          >
-            <Download size={14} />
-            <span>Download FDA Certificate</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Live Preview Window */}
-      <div className="glass-panel" style={{ padding: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-          {/* Sub Tabs */}
-          <div style={{ display: 'flex', gap: '8px', background: 'rgba(15, 23, 42, 0.6)', padding: '4px', borderRadius: '8px' }}>
-            <button
-              onClick={() => setActivePreviewTab('twist')}
-              className={`btn ${activePreviewTab === 'twist' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ padding: '6px 14px', fontSize: '12px' }}
-            >
-              Twist CSV
-            </button>
-            <button
-              onClick={() => setActivePreviewTab('opentrons')}
-              className={`btn ${activePreviewTab === 'opentrons' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ padding: '6px 14px', fontSize: '12px' }}
-            >
-              Opentrons Python
-            </button>
-            <button
-              onClick={() => setActivePreviewTab('benchling')}
-              className={`btn ${activePreviewTab === 'benchling' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ padding: '6px 14px', fontSize: '12px' }}
-            >
-              Benchling LIMS
-            </button>
-            <button
-              onClick={() => setActivePreviewTab('fda')}
-              className={`btn ${activePreviewTab === 'fda' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ padding: '6px 14px', fontSize: '12px' }}
-            >
-              FDA Certificate JSON
-            </button>
-            <button
-              onClick={() => setActivePreviewTab('plate')}
-              className={`btn ${activePreviewTab === 'plate' ? 'btn-primary' : 'btn-secondary'}`}
-              style={{ padding: '6px 14px', fontSize: '12px' }}
-            >
-              Plate Map CSV
-            </button>
-          </div>
-
-          <button
-            onClick={handleCopy}
-            disabled={!exportData}
-            className="btn btn-secondary"
-            style={{ fontSize: '12px', padding: '6px 14px', gap: '6px' }}
-          >
-            {copied ? <Check size={14} color="var(--emerald-bright)" /> : <Copy size={14} />}
-            <span>{copied ? 'Copied to Clipboard' : 'Copy File Content'}</span>
-          </button>
-        </div>
-
-        {/* Text Viewport */}
         <div
           style={{
-            background: '#070a13',
-            border: '1px solid rgba(255,255,255,0.08)',
+            display: 'inline-flex',
+            gap: '4px',
+            padding: '4px',
             borderRadius: '8px',
-            padding: '16px',
-            maxHeight: '440px',
-            overflowY: 'auto',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '12px',
-            lineHeight: '1.6',
-            color: '#e2e8f0',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-all',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-subtle)',
           }}
         >
-          {isExporting ? (
-            <div style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '40px' }}>
-              Compiling physical synthesis sequences & robotic trajectories...
+          <button
+            type="button"
+            onClick={() => setWorkflowMode('outbound')}
+            className={`btn ${workflowMode === 'outbound' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ padding: '6px 14px', fontSize: '12.5px', border: 'none' }}
+          >
+            Outbound Synthesis & Robot Orders
+          </button>
+          <button
+            type="button"
+            onClick={() => setWorkflowMode('inbound')}
+            className={`btn ${workflowMode === 'inbound' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ padding: '6px 14px', fontSize: '12.5px', border: 'none' }}
+          >
+            Inbound Plate Reader CSV
+          </button>
+        </div>
+
+        {workflowMode === 'outbound' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <select
+              className="input-field"
+              value={hostOrganism}
+              onChange={(e) => setHostOrganism(e.target.value)}
+              style={{ width: 'auto', fontSize: '12px', padding: '6px 10px' }}
+            >
+              <option value="Escherichia coli (BL21-DE3)">Host: E. coli (BL21-DE3)</option>
+              <option value="Chinese Hamster Ovary (CHO-K1)">Host: CHO-K1 Mammalian</option>
+              <option value="Saccharomyces cerevisiae">Host: S. cerevisiae</option>
+            </select>
+
+            <select
+              className="input-field"
+              value={plateFormat}
+              onChange={(e) => setPlateFormat(e.target.value)}
+              style={{ width: 'auto', fontSize: '12px', padding: '6px 10px' }}
+            >
+              <option value="96_well">96-Well Format</option>
+              <option value="384_well">384-Well Format</option>
+            </select>
+
+            <button
+              onClick={handleDownloadAll}
+              disabled={!exportData || isExporting}
+              className="btn btn-primary"
+              style={{ fontSize: '12.5px', padding: '7px 14px' }}
+            >
+              <Download size={14} />
+              <span>Download All 4 Files</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {workflowMode === 'outbound' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '16px', alignItems: 'start' }}>
+          {/* Left: Compact Artifact Selector List */}
+          <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {[
+              {
+                id: 'twist',
+                title: 'Twist Bioscience cDNA CSV',
+                sub: 'Codon-optimized fragments + adapters',
+                icon: FileSpreadsheet,
+                file: `twist_${targetName}.csv`,
+                mime: 'text/csv',
+                content: exportData?.twist_csv,
+              },
+              {
+                id: 'opentrons',
+                title: 'Opentrons OT-2 Python',
+                sub: 'Perimeter hydration barrier + pipetting',
+                icon: Bot,
+                file: `opentrons_${targetName}.py`,
+                mime: 'text/x-python',
+                content: exportData?.opentrons_script,
+              },
+              {
+                id: 'benchling',
+                title: 'Benchling LIMS Registry',
+                sub: 'Well barcodes & liability flags',
+                icon: Layers,
+                file: `benchling_${targetName}.csv`,
+                mime: 'text/csv',
+                content: exportData?.benchling_manifest,
+              },
+              {
+                id: 'fda',
+                title: 'FDA 21 CFR Part 11 Proof',
+                sub: 'HMAC-SHA256 Merkle audit JSON',
+                icon: ShieldCheck,
+                file: `fda_part11_${targetName}.json`,
+                mime: 'application/json',
+                content: exportData?.fda_certificate_json,
+              },
+            ].map((item) => {
+              const Icon = item.icon;
+              const isSelected = activePreviewTab === item.id;
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => setActivePreviewTab(item.id)}
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    background: isSelected ? 'var(--bg-elevated)' : 'transparent',
+                    border: isSelected ? '1px solid var(--text-main)' : '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '10px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Icon size={16} color={isSelected ? '#0d9488' : 'var(--text-muted)'} />
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>{item.title}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{item.sub}</div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadFile(item.content, item.file, item.mime);
+                    }}
+                    className="btn btn-secondary"
+                    style={{ padding: '5px 8px', fontSize: '11px' }}
+                    title={`Download ${item.file}`}
+                  >
+                    <Download size={13} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Right: Live Code / CSV Inspector */}
+          <div className="glass-panel" style={{ padding: '18px 20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <span className="mono" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>
+                Preview · {activePreviewTab.toUpperCase()} ({targetName})
+              </span>
+              <button
+                onClick={handleCopy}
+                disabled={!exportData}
+                className="btn btn-secondary"
+                style={{ fontSize: '11.5px', padding: '5px 12px', gap: '6px' }}
+              >
+                {copied ? <Check size={13} color="#0d9488" /> : <Copy size={13} />}
+                <span>{copied ? 'Copied' : 'Copy Content'}</span>
+              </button>
             </div>
-          ) : getActiveContent() ? (
-            getActiveContent()
-          ) : (
-            <div style={{ color: 'var(--text-dim)', textAlign: 'center', padding: '40px' }}>
-              No manifest data available. Click "Regenerate Manifests" above.
+
+            <div
+              style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '8px',
+                padding: '16px',
+                height: '330px',
+                overflowY: 'auto',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12px',
+                lineHeight: '1.6',
+                color: 'var(--text-main)',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+              }}
+            >
+              {isExporting ? 'Compiling manifests...' : getActiveContent() || 'No manifest loaded.'}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Inbound Microplate Reader CSV Ingestion View */
+        <div className="glass-panel" style={{ padding: '28px', maxWidth: '760px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 4px', color: 'var(--text-main)' }}>
+                Ingest 96 / 384-Well Microplate Reader Data
+              </h3>
+              <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0 }}>
+                Upload experimental optical density or fluorescence CSV returns to condition the next active learning round.
+              </p>
+            </div>
+
+            <button
+              onClick={handleLoadSamplePlate}
+              disabled={plateUploading}
+              className="btn btn-secondary"
+              style={{ padding: '7px 12px', fontSize: '12px' }}
+            >
+              <span>Load Sample 96-Well Plate</span>
+            </button>
+          </div>
+
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              if (e.dataTransfer.files?.length > 0) {
+                handlePlateIngestion(e.dataTransfer.files[0], false);
+              }
+            }}
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              border: `1.5px dashed ${isDragging ? '#0d9488' : 'var(--border-subtle)'}`,
+              borderRadius: '10px',
+              padding: '32px 20px',
+              textAlign: 'center',
+              cursor: 'pointer',
+              background: 'var(--bg-elevated)',
+              marginBottom: '16px',
+            }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.txt"
+              onChange={(e) => {
+                if (e.target.files?.length > 0) {
+                  handlePlateIngestion(e.target.files[0], false);
+                }
+              }}
+              style={{ display: 'none' }}
+            />
+            <UploadCloud size={28} color="#0d9488" style={{ margin: '0 auto 8px' }} />
+            <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+              {plateUploading ? 'Ingesting microplate data...' : 'Drop plate reader CSV here or click to browse'}
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'var(--text-dim)' }}>
+              Automatically strips perimeter hydration barrier wells (Row A/H, Col 1/12) and normalizes to Wild-Type control
+            </div>
+          </div>
+
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer', marginBottom: '12px' }}>
+            <input
+              type="checkbox"
+              checked={normalizeToWt}
+              onChange={(e) => setNormalizeToWt(e.target.checked)}
+              style={{ accentColor: '#0d9488' }}
+            />
+            <span style={{ color: 'var(--text-muted)' }}>Normalize readings to Wild-Type control well (B02)</span>
+          </label>
+
+          {plateError && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 14px',
+                borderRadius: '8px',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#dc2626',
+                fontSize: '12px',
+                marginTop: '8px',
+              }}
+            >
+              <AlertCircle size={15} />
+              <span>{plateError}</span>
+            </div>
+          )}
+
+          {plateResult && (
+            <div
+              style={{
+                marginTop: '12px',
+                padding: '16px',
+                borderRadius: '8px',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-subtle)',
+                fontSize: '12.5px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0d9488', fontWeight: 600, marginBottom: '10px' }}>
+                <CheckCircle2 size={16} />
+                <span>Microplate Ingested · Evidence Committed to SQLite Ledger</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                <div>
+                  <span style={{ color: 'var(--text-dim)', display: 'block', fontSize: '11px' }}>Variants Recorded</span>
+                  <strong className="mono tabular">{plateResult.variants_ingested}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-dim)', display: 'block', fontSize: '11px' }}>Barriers Ignored</span>
+                  <strong className="mono tabular">{plateResult.barrier_wells_ignored} wells</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-dim)', display: 'block', fontSize: '11px' }}>WT Baseline</span>
+                  <strong className="mono tabular">{plateResult.wt_baseline_score ?? 1.0}</strong>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-dim)', display: 'block', fontSize: '11px' }}>Top Hit</span>
+                  <strong className="mono tabular" style={{ color: '#0d9488' }}>
+                    {plateResult.top_variant} (+{Number(plateResult.top_fitness_discovered).toFixed(3)})
+                  </strong>
+                </div>
+              </div>
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
-

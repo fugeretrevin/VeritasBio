@@ -237,3 +237,14 @@ __marimo__/
 # VeritasBio bulk upstream downloads (regenerate with scripts/download_*_benchmark.py).
 # The prepared benchmark CSVs they produce are committed; these raw sources are not.
 scripts/data/TrpB_Johnston_2024_raw.csv
+
+# Local operator accounts: contains real email addresses plus password hashes
+# and salts. Must never be committed - this is live credential material.
+ledger/users.json
+
+# Generated benchmark run folders (timestamped artifacts, regenerate on demand).
+benchmark_comparison_results/
+
+# Local tooling scratch directories.
+.impeccable/
+.taste-skill/
