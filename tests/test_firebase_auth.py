@@ -15,11 +15,14 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from controller.auth import (
+    SELF_REGISTRATION_ROLE,
     AuthenticatedUser,
     AuthenticationError,
     create_part11_electronic_signature,
+    register_user_account,
     verify_firebase_id_token,
 )
 from controller.firebase_config import FirebaseConfig, get_firebase_config
@@ -134,6 +137,88 @@ class TestFirebaseAuth(unittest.TestCase):
         with self.assertRaises(AuthenticationError):
             verify_firebase_id_token("mock_token_fake", allow_mock=False)
 
+    def test_registration_cannot_self_assign_privileged_role(self) -> None:
+        """
+        Registration is unauthenticated, so a caller-supplied privileged role must be
+        refused. Previously `role` was accepted from the request body and whitelisted
+        against lab_director and compliance_officer, so anyone who could reach
+        POST /api/auth/register could grant themselves spend or audit authority.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store = Path(tmp_dir) / "users.json"
+            with patch("controller.auth.USERS_STORE_PATH", store):
+                for privileged in ("lab_director", "compliance_officer"):
+                    with self.assertRaises(AuthenticationError):
+                        register_user_account(
+                            email=f"escalate_{privileged}@panoptesbio.com",
+                            password="correct horse battery",
+                            display_name="Escalation Attempt",
+                            role=privileged,
+                        )
+                # No account was persisted by any refused attempt.
+                self.assertFalse(store.is_file())
+
+                # The permitted role still works and is the lowest-privilege one.
+                user, _token = register_user_account(
+                    email="scientist@panoptesbio.com",
+                    password="correct horse battery",
+                    display_name="Scientist",
+                )
+                self.assertEqual(user.role, SELF_REGISTRATION_ROLE)
+                self.assertEqual(user.role, "lead_biologist")
+
+    def test_registered_account_is_not_part11_certified_by_default(self) -> None:
+        """
+        A self-registered account must not be able to mint electronic signatures.
+        Certification is an external administrative act, not a property an account
+        grants itself by signing up.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store = Path(tmp_dir) / "users.json"
+            with patch("controller.auth.USERS_STORE_PATH", store):
+                user, _token = register_user_account(
+                    email="newgrad@panoptesbio.com",
+                    password="correct horse battery",
+                    display_name="New Grad",
+                )
+            self.assertFalse(user.is_part11_certified)
+            with self.assertRaises(AuthenticationError):
+                create_part11_electronic_signature(
+                    user=user,
+                    action="Approval of Modal A10G Compute Spend",
+                    meaning="Attempted spend authorisation from an uncertified identity",
+                )
+
+    def test_registration_duplicate_email_is_not_a_password_oracle(self) -> None:
+        """
+        Re-registering an existing email must fail identically whether or not the
+        supplied password is correct. Returning a session on a password match would
+        turn registration into an oracle for enumerating valid credentials.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store = Path(tmp_dir) / "users.json"
+            with patch("controller.auth.USERS_STORE_PATH", store):
+                register_user_account(
+                    email="incumbent@panoptesbio.com",
+                    password="the real password",
+                    display_name="Incumbent",
+                )
+                errors = []
+                for attempt in ("the real password", "a wrong password"):
+                    with self.assertRaises(AuthenticationError) as ctx:
+                        register_user_account(
+                            email="incumbent@panoptesbio.com",
+                            password=attempt,
+                            display_name="Impostor",
+                        )
+                    errors.append(str(ctx.exception))
+                self.assertEqual(errors[0], errors[1])
+
+    def test_authenticated_user_is_uncertified_unless_stated(self) -> None:
+        """The model default must fail closed: omitting certification cannot grant it."""
+        user = AuthenticatedUser(uid="usr_x", email="x@panoptesbio.com")
+        self.assertFalse(user.is_part11_certified)
+
     def test_part11_electronic_signature(self) -> None:
         """Verifies that electronic signatures satisfy FDA 21 CFR §11.200 dual-component binding."""
         user = AuthenticatedUser(
@@ -142,6 +227,9 @@ class TestFirebaseAuth(unittest.TestCase):
             display_name="Dr. Director",
             organization_id="panoptesbio",
             role="lab_director",
+            # Explicit: certification is now an external administrative act and no
+            # longer defaults on, so a signing identity must opt in deliberately.
+            is_part11_certified=True,
         )
         sig = create_part11_electronic_signature(
             user=user,

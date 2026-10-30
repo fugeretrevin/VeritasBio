@@ -12,7 +12,10 @@ Verifies:
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -218,34 +221,68 @@ class TestServerAPI(unittest.TestCase):
         self.assertIn("ATOM", res.get("relaxed_pdb_str", ""))
 
     def test_auth_register_and_login_endpoints(self) -> None:
-        """Verifies operator account registration and sign-in via /api/auth/register and /api/auth/login."""
-        reg_resp = self.client.post(
-            "/api/auth/register",
-            json={
-                "email": "test.operator@panoptesbio.org",
-                "password": "securepassword123",
-                "display_name": "Dr. Test Operator",
-                "organization_id": "PanoptesBio Lab",
-                "role": "lead_biologist",
-            },
-        )
-        self.assertEqual(reg_resp.status_code, 200)
-        reg_data = reg_resp.json()
-        self.assertTrue(reg_data.get("authenticated"))
-        self.assertIn("id_token", reg_data)
-        self.assertEqual(reg_data["user"]["email"], "test.operator@panoptesbio.org")
+        """
+        Verifies operator account registration and sign-in via /api/auth/register and
+        /api/auth/login.
 
-        login_resp = self.client.post(
-            "/api/auth/login",
-            json={
-                "email": "test.operator@panoptesbio.org",
-                "password": "securepassword123",
-            },
-        )
-        self.assertEqual(login_resp.status_code, 200)
-        login_data = login_resp.json()
-        self.assertTrue(login_data.get("authenticated"))
-        self.assertEqual(login_data["user"]["display_name"], "Dr. Test Operator")
+        The account store is redirected to a temporary file: these routes persist real
+        credential material (emails, PBKDF2 hashes and salts), so the suite must not
+        write into ledger/users.json. Isolation also keeps the test idempotent, since
+        re-registering an existing email is now correctly refused.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch("controller.auth.USERS_STORE_PATH", Path(tmp_dir) / "users.json"):
+                reg_resp = self.client.post(
+                    "/api/auth/register",
+                    json={
+                        "email": "test.operator@panoptesbio.org",
+                        "password": "securepassword123",
+                        "display_name": "Dr. Test Operator",
+                        "organization_id": "PanoptesBio Lab",
+                    },
+                )
+                self.assertEqual(reg_resp.status_code, 200)
+                reg_data = reg_resp.json()
+                self.assertTrue(reg_data.get("authenticated"))
+                self.assertIn("id_token", reg_data)
+                self.assertEqual(reg_data["user"]["email"], "test.operator@panoptesbio.org")
+                # Self-service registration mints the lowest-privilege role and cannot sign.
+                self.assertEqual(reg_data["user"]["role"], "lead_biologist")
+                self.assertFalse(reg_data["user"]["is_part11_certified"])
+
+                login_resp = self.client.post(
+                    "/api/auth/login",
+                    json={
+                        "email": "test.operator@panoptesbio.org",
+                        "password": "securepassword123",
+                    },
+                )
+                self.assertEqual(login_resp.status_code, 200)
+                login_data = login_resp.json()
+                self.assertTrue(login_data.get("authenticated"))
+                self.assertEqual(login_data["user"]["display_name"], "Dr. Test Operator")
+
+    def test_auth_register_ignores_client_supplied_role(self) -> None:
+        """
+        A privileged role in the request body must not reach the account record.
+        `role` is no longer part of RegisterUserRequest, so pydantic drops it and the
+        account is minted as lead_biologist rather than 400-ing on the refusal path.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch("controller.auth.USERS_STORE_PATH", Path(tmp_dir) / "users.json"):
+                resp = self.client.post(
+                    "/api/auth/register",
+                    json={
+                        "email": "climber@panoptesbio.org",
+                        "password": "securepassword123",
+                        "display_name": "Role Climber",
+                        "role": "lab_director",
+                    },
+                )
+                self.assertEqual(resp.status_code, 200)
+                user = resp.json()["user"]
+                self.assertEqual(user["role"], "lead_biologist")
+                self.assertFalse(user["is_part11_certified"])
 
 
 if __name__ == "__main__":

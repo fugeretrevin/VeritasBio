@@ -103,11 +103,12 @@ class VerifyTokenRequest(BaseModel):
 
 
 class RegisterUserRequest(BaseModel):
+    # No `role` field: registration is unauthenticated, so the role must not be
+    # client-influenced. register_user_account() mints the lowest-privilege role.
     email: str
     password: str
     display_name: str = ""
     organization_id: str = "panoptesbio"
-    role: str = "lead_biologist"
 
 
 class LoginUserRequest(BaseModel):
@@ -294,7 +295,6 @@ def register_account(req: RegisterUserRequest) -> Dict[str, Any]:
             password=req.password,
             display_name=req.display_name,
             organization_id=req.organization_id,
-            role=req.role,
         )
         return {
             "authenticated": True,

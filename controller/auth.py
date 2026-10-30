@@ -44,6 +44,26 @@ def mock_auth_enabled() -> bool:
 
 USERS_STORE_PATH = Path(__file__).resolve().parent.parent / "ledger" / "users.json"
 
+# The complete role vocabulary. `lab_director` carries spend authority and
+# `compliance_officer` carries audit authority, so neither may ever be asserted by
+# the party being authorised: self-service registration can only ever mint the
+# lowest-privilege role, and the privileged two are provisioned out of band.
+VALID_ROLES = ("lead_biologist", "lab_director", "compliance_officer")
+SELF_REGISTRATION_ROLE = "lead_biologist"
+
+# Part 11 certification authorises minting electronic signatures, so it is not a
+# property an account can grant itself by signing up. Certification is an external
+# administrative act, recorded here as an explicit email allowlist. Unset means no
+# self-service account is certified, which is the correct default.
+PART11_CERTIFIED_EMAILS_ENV = "VERITAS_PART11_CERTIFIED_EMAILS"
+
+
+def _is_part11_certified(email: str) -> bool:
+    """True only for emails explicitly listed in the Part 11 certification allowlist."""
+    raw = os.getenv(PART11_CERTIFIED_EMAILS_ENV, "")
+    certified = {entry.strip().lower() for entry in raw.split(",") if entry.strip()}
+    return email.strip().lower() in certified
+
 
 def _load_users_store() -> Dict[str, Dict[str, Any]]:
     """Loads persisted user accounts from ledger/users.json."""
@@ -90,9 +110,21 @@ def register_user_account(
         raise AuthenticationError("Password must be at least 6 characters.")
     clean_name = display_name.strip() or clean_email.split("@")[0]
 
+    # Registration is self-service and therefore unauthenticated: honouring a
+    # caller-supplied privileged role here would let anyone who can reach the API
+    # grant themselves spend or audit authority. Refuse loudly rather than silently
+    # downgrade, so a misconfigured client is visible instead of quietly demoted.
+    if role != SELF_REGISTRATION_ROLE:
+        raise AuthenticationError(
+            f"Self-service registration can only create '{SELF_REGISTRATION_ROLE}' accounts. "
+            "Privileged roles must be provisioned by an administrator."
+        )
+
     users = _load_users_store()
     if clean_email in users:
-        if hmac.compare_digest(_hash_password(password, users[clean_email].get("password_salt", "")), users[clean_email].get("password_hash", "")): return authenticate_user_account(clean_email, password)
+        # Deliberately identical whether or not the supplied password matches the
+        # existing account. Returning a session on a correct password would make
+        # registration a password oracle for enumerating valid credentials.
         raise AuthenticationError("An account with this email already exists. Please sign in.")
 
     salt = hashlib.sha256(f"{clean_email}:{time.time()}".encode("utf-8")).hexdigest()[:24]
@@ -104,7 +136,7 @@ def register_user_account(
         "email": clean_email,
         "display_name": clean_name,
         "organization_id": organization_id.strip() or "panoptesbio",
-        "role": role if role in ("lead_biologist", "lab_director", "compliance_officer") else "lead_biologist",
+        "role": SELF_REGISTRATION_ROLE,
         "password_salt": salt,
         "password_hash": pw_hash,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -118,7 +150,7 @@ def register_user_account(
         display_name=record["display_name"],
         organization_id=record["organization_id"],
         role=record["role"],
-        is_part11_certified=True,
+        is_part11_certified=_is_part11_certified(clean_email),
     )
     token = f"panoptes_session_{uid}"
     return user, token
@@ -145,8 +177,8 @@ def authenticate_user_account(email: str, password: str) -> Tuple["Authenticated
         email=record["email"],
         display_name=record["display_name"],
         organization_id=record.get("organization_id", "panoptesbio"),
-        role=record.get("role", "lead_biologist"),
-        is_part11_certified=True,
+        role=record.get("role", SELF_REGISTRATION_ROLE) if record.get("role") in VALID_ROLES else SELF_REGISTRATION_ROLE,
+        is_part11_certified=_is_part11_certified(clean_email),
     )
     token = f"panoptes_session_{user.uid}"
     return user, token
@@ -202,7 +234,8 @@ class AuthenticatedUser(BaseModel):
     display_name: str = Field(default="PanoptesBio Scientist", description="User display name")
     organization_id: str = Field(default="panoptesbio", description="Multi-tenant organization identifier")
     role: str = Field(default="lead_biologist", description="Role: lead_biologist, lab_director, compliance_officer")
-    is_part11_certified: bool = Field(default=True, description="Certified for FDA 21 CFR Part 11 electronic signing")
+    # Fail closed: certification authorises signing, so omitting it must never grant it.
+    is_part11_certified: bool = Field(default=False, description="Certified for FDA 21 CFR Part 11 electronic signing")
     auth_time: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(),
         description="ISO 8601 UTC authentication timestamp"
