@@ -28,7 +28,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Union
 
 import requests
 from requests.adapters import HTTPAdapter, Retry
@@ -61,7 +61,7 @@ from controller.prompts import (
     parse_strategy_response,
 )
 from ledger import database as ledger_db
-from workers.esm_worker import score_variants, score_variants_cascade
+from workers.esm_worker import score_variants_cascade, score_variants_with_provenance
 from workers.math_worker import (
     SelectedBatch,
     extract_mutations_from_sequence,
@@ -100,6 +100,24 @@ class OrchestratorConfig(BaseModel):
     db_path: Optional[str] = Field(default=None, description="Path to ledger SQLite file")
     use_mock_llm: bool = Field(default=True, description="Default True to prevent accidental credit burning")
     enable_live_llm: bool = Field(default=False, description="Explicit opt-in required to invoke live Meta API")
+    require_live_llm: bool = Field(
+        default=False,
+        description=(
+            "Fail the run instead of falling back to MockLLMWorker when a live Meta API "
+            "call fails. Set True for end-to-end measurement runs: otherwise a live-LLM "
+            "campaign whose every round silently fell back to the mock planner is "
+            "indistinguishable from a genuine one, and its numbers mean nothing."
+        ),
+    )
+    allow_mock_scoring_fallback: bool = Field(
+        default=True,
+        description=(
+            "Explicit opt-in to synthetic scores when Modal is unavailable. Kept True so "
+            "offline demo runs still work; the substitution is no longer silent because the "
+            "engine that ran is recorded in Evidence.compute_engine and sealed into the audit "
+            "block. Set False to make a campaign fail rather than produce mock evidence."
+        ),
+    )
     enable_regret_stopping: bool = Field(default=True, description="Enable Bayesian regret early stopping when pool EI converges")
     regret_stopping_threshold: float = Field(default=0.005, description="Pool EI threshold below which convergence is flagged")
     regret_patience: int = Field(default=2, description="Consecutive rounds with EI below threshold before terminating")
@@ -175,6 +193,10 @@ class OrchestratorConfig(BaseModel):
         default=False,
         description="Pause orchestrator execution after generating plate layout to wait for empirical wet-lab plate reader ingestion",
     )
+    enable_sidechain_relaxation: bool = Field(
+        default=True,
+        description="Enable Track C CPU sidechain rotamer relaxation to resolve false-negative steric clashes",
+    )
 
     def get_plate_candidate_capacity(self) -> int:
         """Returns the number of candidate variant wells available in the chosen plate format."""
@@ -191,8 +213,9 @@ def _apply_structural_filter(
     enabled: bool,
     reference_sequence: str,
     allowed_active_positions: Optional[Set[int]] = None,
+    enable_relaxation: bool = True,
 ) -> SelectedBatch:
-    """Safely applies structural heuristic filtering while maintaining aligned metadata arrays."""
+    """Safely applies structural heuristic filtering with Track C sidechain relaxation."""
     if not enabled:
         return selected_batch
 
@@ -209,6 +232,31 @@ def _apply_structural_filter(
         return selected_batch
 
     viable_set = set(viable_notations)
+
+    # Track C: Sidechain Rotamer & Local Energy Relaxation for steric clash false negatives
+    if enable_relaxation and pdb_path and Path(pdb_path).is_file():
+        from workers.relaxation_worker import relax_variant_structure
+        for pruned_not, reason in pruned_items:
+            if any(k in reason.lower() for k in ("steric clash", "mutual expansion", "volume delta", "packing")):
+                try:
+                    relax_res = relax_variant_structure(
+                        pdb_path=pdb_path,
+                        mutations=[pruned_not],
+                        max_iterations=150,
+                        harmonic_k=50.0,
+                    )
+                    if relax_res.final_min_distance_angstrom >= 1.85 and relax_res.converged:
+                        viable_set.add(pruned_not)
+                        logger.info(
+                            "Track C: Rescued steric clash variant %s via sidechain relaxation (d_min: %.2f A -> %.2f A in %.1fms)",
+                            pruned_not,
+                            relax_res.initial_min_distance_angstrom,
+                            relax_res.final_min_distance_angstrom,
+                            relax_res.runtime_ms,
+                        )
+                except Exception as exc:
+                    logger.warning("Track C: Sidechain relaxation failed for %s: %s", pruned_not, exc)
+
     keep_indices = [
         index for index, variant in enumerate(selected_batch.variants)
         if variant.notation in viable_set
@@ -283,6 +331,13 @@ class Orchestrator:
         self.db_path: Optional[Path] = Path(self.config.db_path) if self.config.db_path else None
         self.gatekeeper = Gatekeeper(db_path=self.db_path)
         self.mock_llm = MockLLMWorker()
+        # Which planner produced the current round, and the per-round history. These
+        # make a campaign auditable after the fact: a run whose live LLM calls all
+        # failed over to the mock planner reads identically to a genuine live run
+        # without them.
+        self.strategy_engine: Optional[str] = None
+        self.strategy_engine_is_mock: Optional[bool] = None
+        self.strategy_engines_used: List[str] = []
         self.last_metadata: Optional[ProteinMetadata] = None
         self.last_reflection: Optional[ReflectionDiagnosis] = None
         self.last_wetlab_artifacts: Optional[Dict[str, Any]] = None
@@ -366,6 +421,11 @@ class Orchestrator:
         live_opt_in = self.config.enable_live_llm or (os.getenv("ENABLE_LIVE_LLM", "").lower() in ("true", "1"))
         api_key = os.getenv("LLAMA_API_KEY") or os.getenv("META_API_KEY")
 
+        # Reset per round: provenance must describe THIS round, not carry over the
+        # previous one, or a single successful round would label the whole campaign live.
+        self.strategy_engine = None
+        self.strategy_engine_is_mock = None
+
         # Strict credit protection: Only call live API if explicitly opted in and mock is not forced
         if live_opt_in and not self.config.use_mock_llm and api_key:
             try:
@@ -385,14 +445,33 @@ class Orchestrator:
                         f"and enable multi-point coupling (max_mutation_depth 4)."
                     )
                 raw_json = self._call_llama_api(sys_prompt, user_prompt)
-                return parse_strategy_response(raw_json, sequence_length=metadata.length)
+                strategy = parse_strategy_response(raw_json, sequence_length=metadata.length)
+                self.strategy_engine = model_name
+                self.strategy_engine_is_mock = False
+                return strategy
             except Exception as exc:
+                if self.config.require_live_llm:
+                    # Fail loudly: the caller asked for a measured live-LLM run.
+                    raise RuntimeError(
+                        f"Live Meta API call failed in round {round_number} and "
+                        f"require_live_llm=True, so the mock planner was not substituted: {exc}"
+                    ) from exc
                 logger.warning(
                     "Meta Model API call failed (%s). Falling back to MockLLMWorker for Round %d.",
                     exc, round_number,
                 )
+                self.strategy_engine = "mock_llm_fallback_api_failure"
+                self.strategy_engine_is_mock = True
 
         # Default fallback: Mock worker (zero credit burn)
+        if self.config.require_live_llm and self.strategy_engine is None:
+            raise RuntimeError(
+                "require_live_llm=True but the live planner was never attempted. "
+                "Set use_mock_llm=False, enable_live_llm=True and provide LLAMA_API_KEY."
+            )
+        if self.strategy_engine is None:
+            self.strategy_engine = "mock_llm"
+            self.strategy_engine_is_mock = True
         strategy = self.mock_llm.generate_strategy(
             metadata,
             round_number=round_number,
@@ -538,14 +617,38 @@ class Orchestrator:
 
             strategy = self._generate_strategy(metadata, round_num, top_evidence_sorted, current_hop=current_hop)
 
+            # Name the planner that actually ran, so a campaign whose live calls
+            # failed over to the mock planner is visible in the stream and the audit
+            # chain rather than looking identical to a genuine live run.
+            planner = getattr(self, "strategy_engine", "mock_llm")
+            planner_is_mock = bool(getattr(self, "strategy_engine_is_mock", True))
+            self.strategy_engines_used.append(planner)
+            ledger_db.record_audit_event(
+                action_type="STRATEGY_PLANNED",
+                payload={
+                    "job_id": job_id,
+                    "round": round_num,
+                    "planner_engine": planner,
+                    "planner_is_mock": planner_is_mock,
+                    "hypothesis": str(strategy.hypothesis)[:300],
+                },
+                db_path=self.db_path,
+            )
+
+            strategy_payload = strategy.model_dump()
+            strategy_payload["planner_engine"] = planner
+            strategy_payload["planner_is_mock"] = planner_is_mock
+
             yield OrchestratorEvent(
                 iteration=round_num,
                 step="strategy_complete",
-                message=f"Round {round_num}: Strategy defined: {strategy.hypothesis}",
+                message=(
+                    f"Round {round_num}: Strategy defined by {planner}: {strategy.hypothesis}"
+                ),
                 remaining_budget_usd=rem_usd,
                 cumulative_spent_usd=spent_usd,
                 current_job_id=job_id,
-                decision=strategy.model_dump(),
+                decision=strategy_payload,
             )
 
             # -----------------------------------------------------------------
@@ -639,6 +742,7 @@ class Orchestrator:
                     enabled=self.config.enable_structural_filter,
                     reference_sequence=wt_sequence,
                     allowed_active_positions=set(metadata.binding_positions),
+                    enable_relaxation=self.config.enable_sidechain_relaxation,
                 )
                 logger.info(
                     "3D Structural Filter screened %d variants in Round %d (%d retained)",
@@ -858,8 +962,9 @@ class Orchestrator:
                         variant_sequences=decision.mutated_sequences or [],
                         target_model=effective_target_model,
                         top_k_ratio=self.config.cascade_top_k_ratio,
-                        use_mock_fallback=True,
+                        use_mock_fallback=self.config.allow_mock_scoring_fallback,
                     )
+                    compute_engine = str(cascade_res.get("compute_engine") or effective_target_model)
                     promoted_idx_set = set(cascade_res.get("promoted_indices", []))
                     results_pairs = []
                     for seq, score in zip(cascade_res.get("promoted_sequences", []), cascade_res.get("tier2_scores", [])):
@@ -869,13 +974,14 @@ class Orchestrator:
                         if idx not in promoted_idx_set and idx < len(t1_scores):
                             results_pairs.append((seq, t1_scores[idx]))
                 else:
-                    scores = score_variants(
+                    outcome = score_variants_with_provenance(
                         wt_sequence=wt_sequence,
                         variant_sequences=decision.mutated_sequences or [],
                         target_model=self.config.target_model,
-                        use_mock_fallback=True,
+                        use_mock_fallback=self.config.allow_mock_scoring_fallback,
                     )
-                    results_pairs = list(zip(decision.mutated_sequences or [], scores))
+                    compute_engine = outcome.engine
+                    results_pairs = list(zip(decision.mutated_sequences or [], outcome.scores))
             except Exception as exc:
                 logger.error("Execution failed for job %s: %s", job_id, exc)
                 ledger_db.mark_job_failed(job_id, db_path=self.db_path)
@@ -893,7 +999,9 @@ class Orchestrator:
             # -----------------------------------------------------------------
             # Step 6: Evidence Update (Active Learning Logging)
             # -----------------------------------------------------------------
-            ledger_db.record_evidence(job_id, results_pairs, db_path=self.db_path)
+            ledger_db.record_evidence(
+                job_id, results_pairs, db_path=self.db_path, compute_engine=compute_engine
+            )
             ledger_db.mark_job_completed(job_id, db_path=self.db_path)
 
             all_evidence = ledger_db.get_evidence(db_path=self.db_path)
@@ -1117,14 +1225,20 @@ class Orchestrator:
                             cumulative_spent_usd=self.config.total_budget_usd - ledger_db.get_remaining_budget(self.config.budget_id, self.db_path),
                             current_job_id=refine_job_id,
                         )
-                        refine_scores = score_variants(
+                        refine_outcome = score_variants_with_provenance(
                             wt_sequence=wt_sequence,
                             variant_sequences=refine_decision.mutated_sequences or [],
                             target_model=refine_model,
-                            use_mock_fallback=True,
+                            use_mock_fallback=self.config.allow_mock_scoring_fallback,
                         )
+                        refine_scores = refine_outcome.scores
                         refine_pairs = list(zip(refine_decision.mutated_sequences or [], refine_scores))
-                        ledger_db.record_evidence(refine_job_id, refine_pairs, db_path=self.db_path)
+                        ledger_db.record_evidence(
+                            refine_job_id,
+                            refine_pairs,
+                            db_path=self.db_path,
+                            compute_engine=refine_outcome.engine,
+                        )
                         ledger_db.mark_job_completed(refine_job_id, db_path=self.db_path)
 
                         best_refine_score = max(refine_scores) if refine_scores else -1e9

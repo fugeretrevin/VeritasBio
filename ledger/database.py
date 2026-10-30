@@ -54,8 +54,18 @@ STATUS_APPROVED = "APPROVED"
 STATUS_REJECTED = "REJECTED"
 STATUS_COMPLETED = "COMPLETED"
 STATUS_FAILED = "FAILED"
+STATUS_STAGED_FOR_WETLAB = "STAGED_FOR_WETLAB"
+STATUS_IN_FLIGHT_SYNTHESIS = "IN_FLIGHT_SYNTHESIS"
 JOB_STATUSES = frozenset(
-    {STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED, STATUS_COMPLETED, STATUS_FAILED}
+    {
+        STATUS_PENDING,
+        STATUS_APPROVED,
+        STATUS_REJECTED,
+        STATUS_COMPLETED,
+        STATUS_FAILED,
+        STATUS_STAGED_FOR_WETLAB,
+        STATUS_IN_FLIGHT_SYNTHESIS,
+    }
 )
 
 HMAC_AUDIT_SECRET: bytes = os.environ.get(
@@ -213,13 +223,100 @@ def _append_audit_block_tx(
 # -----------------------------------------------------------------------------
 # Initialization
 # -----------------------------------------------------------------------------
+def _migrate_evidence_provenance_tx(conn: sqlite3.Connection) -> None:
+    """
+    Add the Evidence provenance columns to a ledger created before they existed.
+
+    `CREATE TABLE IF NOT EXISTS` will not alter an existing table, so a ledger
+    written by an earlier version keeps the old 5-column Evidence shape. Rows
+    already present get the conservative defaults ('unknown' / is_mock = 1):
+    their true origin was never recorded, so they must not read as verified.
+    Idempotent — safe to run on every init.
+    """
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(Evidence);")}
+    if not existing:
+        return
+    if "compute_engine" not in existing:
+        conn.execute(
+            "ALTER TABLE Evidence ADD COLUMN compute_engine TEXT NOT NULL DEFAULT 'unknown';"
+        )
+        logger.info("Migrated Evidence: added compute_engine column")
+    if "is_mock" not in existing:
+        conn.execute("ALTER TABLE Evidence ADD COLUMN is_mock INTEGER NOT NULL DEFAULT 1;")
+        logger.info("Migrated Evidence: added is_mock column")
+
+
+def _migrate_audit_action_types_tx(conn: sqlite3.Connection) -> None:
+    """
+    Widen the AuditLedgerBlocks.action_type CHECK constraint on an older ledger.
+
+    SQLite cannot ALTER a CHECK constraint, so a ledger created before a new block
+    type existed will reject it. The table is rebuilt with the current constraint and
+    every row copied verbatim - including block_hash, prev_block_hash and signature -
+    so the hash chain is preserved exactly and `verify_audit_integrity` still passes.
+    Nothing is recomputed; this changes only the constraint, never the data.
+
+    Idempotent: returns immediately when the constraint already permits the type.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'AuditLedgerBlocks';"
+    ).fetchone()
+    if row is None or not row["sql"]:
+        return  # fresh database; schema.sql will create it with the current constraint
+    if "STRATEGY_PLANNED" in row["sql"]:
+        return  # already current
+
+    before = conn.execute("SELECT COUNT(*) AS n FROM AuditLedgerBlocks;").fetchone()["n"]
+    logger.info("Migrating AuditLedgerBlocks constraint (%d existing blocks preserved)", before)
+
+    conn.executescript(
+        """
+        PRAGMA legacy_alter_table = OFF;
+        ALTER TABLE AuditLedgerBlocks RENAME TO _AuditLedgerBlocks_old;
+        """
+    )
+    # schema.sql (executed right after this in init_db) recreates the table with the
+    # current constraint; copy the old rows back and drop the temporary table.
+    conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+    # Copy by introspected column intersection rather than a hardcoded list, so the
+    # migration cannot drift from the schema (the audit timestamp column is named
+    # `timestamp`, and guessing it wrong fails the whole init).
+    old_cols = [r["name"] for r in conn.execute("PRAGMA table_info(_AuditLedgerBlocks_old);")]
+    new_cols = [r["name"] for r in conn.execute("PRAGMA table_info(AuditLedgerBlocks);")]
+    shared = [c for c in new_cols if c in old_cols]
+    required = {"block_index", "action_type", "payload_json", "prev_block_hash", "block_hash"}
+    missing = required - set(shared)
+    if missing:
+        raise LedgerError(
+            f"Audit migration cannot proceed: columns {sorted(missing)} absent from the "
+            f"existing table. Refusing to rebuild and risk the hash chain."
+        )
+    col_list = ", ".join(shared)
+    conn.execute(
+        f"INSERT INTO AuditLedgerBlocks ({col_list}) "
+        f"SELECT {col_list} FROM _AuditLedgerBlocks_old ORDER BY block_index;"
+    )
+    conn.execute("DROP TABLE _AuditLedgerBlocks_old;")
+    after = conn.execute("SELECT COUNT(*) AS n FROM AuditLedgerBlocks;").fetchone()["n"]
+    if after != before:
+        raise LedgerError(
+            f"Audit migration lost blocks: {before} before, {after} after. Refusing to continue."
+        )
+    logger.info("AuditLedgerBlocks constraint migrated; %d blocks intact", after)
+
+
 def init_db(db_path: Optional[DbPath] = None) -> Path:
     """Create the ledger file (if needed) and apply schema.sql. Idempotent."""
     path = Path(db_path) if db_path else DEFAULT_DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
     with _connect(path) as conn:
+        # Widen the audit action_type constraint BEFORE applying schema.sql: the
+        # migration rebuilds the table and re-applies the schema itself, so running it
+        # first keeps a single code path for both fresh and pre-existing ledgers.
+        _migrate_audit_action_types_tx(conn)
         conn.executescript(schema_sql)
+        _migrate_evidence_provenance_tx(conn)
         with _transaction(conn):
             # Ensure FDA 21 CFR Part 11 Genesis Block is present
             row = conn.execute("SELECT COUNT(*) as cnt FROM AuditLedgerBlocks;").fetchone()
@@ -477,34 +574,59 @@ def list_jobs(
 # -----------------------------------------------------------------------------
 # Evidence
 # -----------------------------------------------------------------------------
+def infer_is_mock(compute_engine: str) -> bool:
+    """
+    Decide whether a compute_engine label denotes synthetic (non-GPU) output.
+
+    Fail-closed: anything not recognised as a real inference engine is treated as
+    mock. An undeclared or unfamiliar origin must never read as verified science.
+    """
+    label = (compute_engine or "").strip().lower()
+    return not (label.startswith("esm2_") or label == "esm_cascade")
+
+
 def record_evidence(
     job_id: str,
     results: Iterable[Tuple[str, float]],
     db_path: Optional[DbPath] = None,
+    compute_engine: str = "unknown",
+    is_mock: Optional[bool] = None,
 ) -> int:
     """
     Atomically append (variant_sequence, computed_score) results for an APPROVED job.
 
     All-or-nothing: if any row is invalid or the job is not APPROVED, nothing is
     written and an exception is raised. Returns the number of rows inserted.
+
+    `compute_engine` records which engine actually produced these scores (e.g.
+    'esm2_650m', 'mock_esm', 'mock_esm_fallback_unconfigured'). `is_mock` is
+    derived from it via `infer_is_mock` unless passed explicitly. Both are stored
+    on every row and sealed into the EVIDENCE_BATCH_RECORDED audit block, so the
+    Part 11 chain distinguishes real inference from synthetic output.
     """
     if not _is_non_empty_str(job_id):
         raise ValueError("job_id must be a non-empty string")
+    if not _is_non_empty_str(compute_engine):
+        raise ValueError("compute_engine must be a non-empty string")
 
-    rows: List[Tuple[str, str, float]] = []
+    engine = compute_engine.strip()
+    mock_flag = infer_is_mock(engine) if is_mock is None else bool(is_mock)
+
+    rows: List[Tuple[str, str, float, str, int]] = []
     for sequence, score in results:
         if not _is_non_empty_str(sequence):
             raise ValueError("variant_sequence must be a non-empty string")
         if not _is_finite_number(score):
             raise ValueError(f"computed_score must be finite, got {score!r}")
-        rows.append((job_id, sequence, float(score)))
+        rows.append((job_id, sequence, float(score), engine, int(mock_flag)))
     if not rows:
         raise ValueError("results must contain at least one (sequence, score) pair")
 
     with _connect(db_path) as conn, _transaction(conn):
         try:
             conn.executemany(
-                "INSERT INTO Evidence (job_id, variant_sequence, computed_score) VALUES (?, ?, ?);",
+                "INSERT INTO Evidence (job_id, variant_sequence, computed_score, "
+                "compute_engine, is_mock) VALUES (?, ?, ?, ?, ?);",
                 rows,
             )
             # Append cryptographic audit block for the recorded evidence batch
@@ -515,6 +637,8 @@ def record_evidence(
                     "job_id": job_id,
                     "variant_count": len(rows),
                     "sample_variants": [r[1] for r in rows[:5]],
+                    "compute_engine": engine,
+                    "is_mock": bool(mock_flag),
                 },
             )
         except sqlite3.DatabaseError as exc:
@@ -535,6 +659,178 @@ def get_evidence(
                 "SELECT * FROM Evidence WHERE job_id = ? ORDER BY evidence_id;", (job_id,)
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+# -----------------------------------------------------------------------------
+# Asynchronous Kriging-Believer Staging & Physical Reconciliation (SPEC-001 Seam 4)
+# -----------------------------------------------------------------------------
+def stage_speculative_evidence(
+    job_id: str,
+    fantasy_results: Iterable[Tuple[str, float]],
+    db_path: Optional[DbPath] = None,
+) -> int:
+    """
+    Stages provisional Kriging-believer fantasy observations for an APPROVED job and
+    transitions its status to STAGED_FOR_WETLAB while preserving the FDA Part 11 Merkle chain.
+    """
+    if not _is_non_empty_str(job_id):
+        raise ValueError("job_id must be a non-empty string")
+
+    rows: List[Tuple[str, str, float, int]] = []
+    for sequence, fantasy_score in fantasy_results:
+        if not _is_non_empty_str(sequence):
+            raise ValueError("variant_sequence must be a non-empty string")
+        if not _is_finite_number(fantasy_score):
+            raise ValueError(f"fantasy_score must be finite, got {fantasy_score!r}")
+        rows.append((job_id, sequence, float(fantasy_score), 1))
+    if not rows:
+        raise ValueError("fantasy_results must contain at least one (sequence, fantasy_score) pair")
+
+    with _connect(db_path) as conn, _transaction(conn):
+        cur = conn.execute(
+            "UPDATE Jobs SET status = ? WHERE job_id = ? AND status = ?;",
+            (STATUS_STAGED_FOR_WETLAB, job_id, STATUS_APPROVED),
+        )
+        if cur.rowcount != 1:
+            raise LedgerError(f"Job {job_id!r} must be APPROVED before staging speculative evidence")
+
+        conn.executemany(
+            "INSERT INTO SpeculativeEvidence (job_id, variant_sequence, fantasy_score, is_provisional) "
+            "VALUES (?, ?, ?, ?);",
+            rows,
+        )
+        _append_audit_block_tx(
+            conn,
+            action_type="SPECULATIVE_BATCH_STAGED",
+            payload={
+                "job_id": job_id,
+                "new_status": STATUS_STAGED_FOR_WETLAB,
+                "provisional_count": len(rows),
+                "sample_variants": [r[1] for r in rows[:5]],
+            },
+        )
+    return len(rows)
+
+
+def mark_job_in_flight(
+    job_id: str,
+    provider: str = "strateos",
+    external_run_id: Optional[str] = None,
+    db_path: Optional[DbPath] = None,
+    simulated: bool = True,
+) -> None:
+    """
+    Transitions an APPROVED or STAGED_FOR_WETLAB job to IN_FLIGHT_SYNTHESIS upon
+    cloud-lab protocol dispatch.
+
+    `simulated` records whether the dispatch actually reached a remote provider.
+    It defaults to True and is sealed into the audit block, so a locally minted
+    run identifier can never be mistaken for a real cloud-lab run.
+    """
+    if not _is_non_empty_str(job_id):
+        raise ValueError("job_id must be a non-empty string")
+    with _connect(db_path) as conn, _transaction(conn):
+        cur = conn.execute(
+            "UPDATE Jobs SET status = ? WHERE job_id = ? AND status IN (?, ?);",
+            (STATUS_IN_FLIGHT_SYNTHESIS, job_id, STATUS_APPROVED, STATUS_STAGED_FOR_WETLAB),
+        )
+        if cur.rowcount != 1:
+            raise LedgerError(f"Job {job_id!r} is not in APPROVED or STAGED_FOR_WETLAB state")
+        _append_audit_block_tx(
+            conn,
+            action_type="IN_FLIGHT_DISPATCHED",
+            payload={
+                "job_id": job_id,
+                "new_status": STATUS_IN_FLIGHT_SYNTHESIS,
+                "provider": provider,
+                "external_run_id": external_run_id or "",
+                "simulated": bool(simulated),
+            },
+        )
+
+
+def get_speculative_evidence(
+    job_id: Optional[str] = None,
+    active_only: bool = True,
+    db_path: Optional[DbPath] = None,
+) -> List[Dict[str, Any]]:
+    """Return speculative Kriging-believer rows, optionally filtered by job_id and active provisional state."""
+    with _connect(db_path) as conn:
+        clauses: List[str] = []
+        params: List[Any] = []
+        if job_id is not None:
+            clauses.append("job_id = ?")
+            params.append(job_id)
+        if active_only:
+            clauses.append("is_provisional = 1")
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = conn.execute(
+            f"SELECT * FROM SpeculativeEvidence {where_sql} ORDER BY speculative_id;",
+            tuple(params),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def commit_physical_evidence_and_reconcile(
+    job_id: str,
+    observed_results: Iterable[Tuple[str, float]],
+    db_path: Optional[DbPath] = None,
+) -> int:
+    """
+    Atomically retires provisional Kriging-believer rows (`is_provisional = 0`),
+    records verified physical Evidence rows, transitions the job to COMPLETED,
+    and appends immutable FDA 21 CFR Part 11 Merkle blocks.
+    """
+    if not _is_non_empty_str(job_id):
+        raise ValueError("job_id must be a non-empty string")
+
+    rows: List[Tuple[str, str, float]] = []
+    for sequence, score in observed_results:
+        if not _is_non_empty_str(sequence):
+            raise ValueError("variant_sequence must be a non-empty string")
+        if not _is_finite_number(score):
+            raise ValueError(f"computed_score must be finite, got {score!r}")
+        rows.append((job_id, sequence, float(score)))
+    if not rows:
+        raise ValueError("observed_results must contain at least one (sequence, score) pair")
+
+    with _connect(db_path) as conn, _transaction(conn):
+        conn.execute(
+            "UPDATE SpeculativeEvidence SET is_provisional = 0 WHERE job_id = ?;",
+            (job_id,),
+        )
+        conn.executemany(
+            "INSERT INTO Evidence (job_id, variant_sequence, computed_score) VALUES (?, ?, ?);",
+            rows,
+        )
+        cur = conn.execute(
+            "UPDATE Jobs SET status = ? WHERE job_id = ? AND status IN (?, ?, ?);",
+            (
+                STATUS_COMPLETED,
+                job_id,
+                STATUS_APPROVED,
+                STATUS_STAGED_FOR_WETLAB,
+                STATUS_IN_FLIGHT_SYNTHESIS,
+            ),
+        )
+        if cur.rowcount != 1:
+            raise LedgerError(f"Job {job_id!r} cannot be reconciled (invalid status or missing job)")
+
+        _append_audit_block_tx(
+            conn,
+            action_type="PHYSICAL_EVIDENCE_RECONCILED",
+            payload={
+                "job_id": job_id,
+                "reconciled_count": len(rows),
+                "sample_variants": [r[1] for r in rows[:5]],
+            },
+        )
+        _append_audit_block_tx(
+            conn,
+            action_type="JOB_COMPLETED",
+            payload={"job_id": job_id, "new_status": STATUS_COMPLETED},
+        )
+    return len(rows)
 
 
 # -----------------------------------------------------------------------------
@@ -565,6 +861,26 @@ def record_lims_sync_audit(
     }
     with _connect(db_path) as conn, _transaction(conn):
         return _append_audit_block_tx(conn, action_type="LIMS_SYNC", payload=payload)
+
+
+def record_audit_event(
+    action_type: str,
+    payload: Dict[str, Any],
+    db_path: Optional[DbPath] = None,
+) -> Dict[str, Any]:
+    """
+    Seal an arbitrary event into the hash-linked audit chain.
+
+    A generic appender so callers recording "what actually ran" - which planner
+    produced a strategy, which engine scored a batch - do not need a bespoke
+    function each. `action_type` is the block label; `payload` is sealed verbatim.
+    """
+    if not _is_non_empty_str(action_type):
+        raise ValueError("action_type must be a non-empty string")
+    if not isinstance(payload, dict):
+        raise ValueError("payload must be a dict")
+    with _connect(db_path) as conn, _transaction(conn):
+        return _append_audit_block_tx(conn, action_type=action_type, payload=payload)
 
 
 def list_audit_blocks(db_path: Optional[DbPath] = None) -> List[Dict[str, Any]]:
