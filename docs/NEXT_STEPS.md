@@ -115,6 +115,53 @@ better", and only one of the two is currently supported.
 Two deletions are also now shippable on their own merits: `dpp` and `dkl` both improve
 top-1% yield significantly and removing them simplifies the system.
 ### 3.2 Candidate generation — "enumerate, don't rank"
+
+> **ROOT CAUSE IDENTIFIED 2026-10-31.** `max_mutation_depth` is an **inert
+> parameter** for candidate generation. `generate_candidate_variants` references it
+> four times, but every combinatorial construct in the function is
+> `itertools.combinations(..., 2)` — there is no depth-3 or depth-4 enumeration
+> anywhere in it. The parameter gates *whether* pairs are produced
+> (`max_mutation_depth >= 2`) and never produces anything deeper.
+>
+> Measured directly on TrpB with the annotation-driven planner's own strategy:
+>
+> | configuration | candidates | pool depths |
+> |---|---|---|
+> | `max_mutation_depth = 2` | 960 | {1, 2} |
+> | `max_mutation_depth = 4` | **960** | **{1, 2}** |
+>
+> 960 = 72 singles (4 positions × 18 residues) + 888 doubles, reproducing the pool
+> composition in `docs/PIPELINE_FOR_BIO_REVIEW.md` §7A exactly. Depth ≥3 can therefore
+> arrive only via `recombine_lead_variants` or the policy-gradient sampler, which is
+> what §7A inferred from the trace; this confirms it at the code level and adds the
+> reason.
+>
+> Two other strategy fields were tested at the same time and are also inert:
+>
+> * The planner's `NEUTRAL_CHEMISTRIES = (A, S, D, K, L, F)` preference changes the
+>   pool **not at all** — identical 18 distinct residues per position, identical
+>   counts, with and without it. It is a reordering preference plus a +0.12 scoring
+>   bonus over a 19-residue alphabet, and the reordering does not bite because the
+>   candidate cap (2,500) never binds on a 960-candidate pool.
+> * `epistatic_coupling` was already found provably inert
+>   (`docs/PIPELINE_FOR_BIO_REVIEW.md` §6.2).
+>
+> **Two hypotheses are withdrawn by this measurement**, both of which were about to be
+> tested at an hour of compute each:
+>
+> * *"The planner's position restriction is the hidden advantage."* It cannot be. The
+>   benchmark universe **is** the 4-site library, so `random`, `ridge` and the engine
+>   all search the same positions by construction. The restriction gives no edge over
+>   arms that share the universe.
+> * *"The 6-residue chemistry set blocks the tail."* It does not. The optimum needs
+>   `I184` and `G228`, neither of which is in the preferred six, and both are present
+>   in the pool (35 and 34 candidates). The gateway double `V227K:S228G` is in the pool
+>   too.
+>
+> **So the fix for this section is specific**: make the generator enumerate depth 3
+> when asked, rather than relying on lead recombination and a sampler to reach it. The
+> parameter that appears to request it already exists, is already set to 4 from round 2
+> onward, and is ignored.
 The pool is singles and pairs; the ≥0.70 tier is 97% triples and quadruples. Verified
 by attrition trace:
 
