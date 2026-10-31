@@ -37,9 +37,12 @@ wet-lab campaigns. The second is the subject of the 2^5 joint ablation
 ### 1.1 Protocol deviation that must accompany every external claim
 
 The protocol is **25 shared initial observations, then 4 rounds of 25, for 125 unique
-measurements**. This is an **adapted** protocol. It is **not** ALDE's published 96-variant
-batch schedule. Any comparison against ALDE numbers — ours or the published ones — must
-carry that sentence. A result quoted without it is a misquotation.
+measurements**. This is an **adapted** protocol. It is **not** ALDE's published schedule,
+which is 96 initial plus 4 rounds of 96 = **480 measurements** averaged over 70
+initializations — so this protocol runs at **26% of ALDE's demonstrated budget** at roughly a
+quarter of its batch size. Any comparison against ALDE numbers — ours or the published ones —
+must carry both sentences. A result quoted without them is a misquotation. §7.6 registers this
+as a named threat to the baseline comparison and specifies the mitigation.
 
 ### 1.2 Established facts carried in (not to be re-derived)
 
@@ -332,9 +335,19 @@ final test level is outstanding.
 
 ---
 
-## 6. Pre-registered primary hypothesis
+## 6. Pre-registered hypotheses
 
-### 6.1 The hypothesis
+Two, testing different things on different designs:
+
+- **H1 (§6.1–6.6)** — *generalization.* Does the advantage track shallow-shell richness
+  **across protein families**? Unit: protein, n = 4. Power marginal by construction (§6.4).
+- **H2 (§6.7)** — *mechanism.* Is shallow-shell richness what drives the advantage **within
+  one protein**? Unit: seed, n = 48. Adequately powered.
+
+§6.8 fixes the order in which they are interpreted and states that neither substitutes for
+the other.
+
+### 6.1 H1 — the cross-protein hypothesis
 
 > **H1.** VeritasBio's reliability policy outperforms strong baselines on landscapes whose
 > near-wild-type shell is enriched in top-tier hits, and underperforms on landscapes where
@@ -478,6 +491,18 @@ advance: *at the current corpus size the primary test is underpowered by constru
 non-significant result is uninformative about H1.* The per-landscape version is not a repair
 for that; it is the same four proteins counted seven times.
 
+**H1's power is marginal by construction, and here is the demonstration.** The test needs a
+perfect ordering of four items, and the covariate's own top three are separated by margins
+that move on bookkeeping: adopting the depth-0 convention of §6.3 — excluding **one**
+wild-type row from a denominator — swapped landscape ranks 1 and 2, CreiLOV 1.875x against
+eqFP611 blue 1.854x, where before the fix it had been 1.880x against 1.876x in the other
+order. A 0.02x margin moved on a single row. The per-protein ordering survived that change,
+which is why it and not the landscape ordering is the primary unit, but the episode sets a
+realistic expectation: **H1 will most likely be recorded as unresolved.** It is kept because
+an unresolved pre-registered test is still worth more than a post-hoc explanation, not
+because it is expected to decide anything. The mechanism itself is tested by H2 (§6.7), which
+is where the power actually is.
+
 **Alpha.** 0.05, one-sided, for the single primary test. Predicted direction: positive.
 
 **Falsification.** H1 is treated as disconfirmed if any of the following holds:
@@ -549,7 +574,8 @@ the test sharper than n = 3 families usually allows:
   with depth, 30.8% at depth 1, 0.08% at depth 8; red: *zero* hits at depth 0–3, peaking at
   1.63% at depth 8). It is the cleanest available within-protein manipulation of the
   covariate, and it is not independent cross-protein evidence. Both statements are true at
-  once.
+  once — which is why it is now a pre-registered hypothesis of its own, **H2 (§6.7)**, tested
+  separately from H1 and licensing a mechanism claim rather than a generalization claim.
 - **CR9114 and CR6261 are affinity-maturation landscapes where hit rate rises monotonically
   with depth** (CR6261 H9: 0% up to depth 5, 22.9% at depth 9, 40.0% at depth 10). They are
   structurally the opposite of TrpB and are the hardest case for a shallow exploiter.
@@ -592,6 +618,154 @@ counted as evidence for it**. They appear in §6.5 as anchors so the independent
 read against a known scale, not as two of the test's observations. The test is run on the
 independent families only.
 
+### 6.7 H2 — the within-protein mechanism test
+
+> **H2.** On a single protein and a single library, the reliability policy's advantage over
+> ridge is larger on the readout whose shallow shell is hit-enriched than on the readout whose
+> shallow shell is depleted.
+
+H2 tests the **mechanism**. H1 tests **generalization**. They are different hypotheses with
+different designs and different power, and neither substitutes for the other (§6.8).
+
+#### 6.7.1 Design — why this is the cleaner causal comparison
+
+The primary instance is **eqFP611 blue against eqFP611 red**.
+
+| held constant | varies |
+|---|---|
+| protein (eqFP611 / mTagBFP2) | shallow-shell enrichment: **1.854x (blue) against 0.634x (red)**, a 2.9x ratio |
+| the genotype set — the identical 8,192 sequences, row for row | the depth at which hits sit: blue's mean hit depth 3.96, red's 7.11 |
+| library design, 13 sites, binary alphabet, 100% saturation | |
+| assay platform and publication (Poelwijk et al. 2019) | |
+| tier (1%), tier size (82 hits), base rate (1.0010%) | |
+| diversity ceiling geometry (d≥2: 38 blue, 28 red) | |
+| censoring (both effectively uncensored, 0.012% at each extreme) | |
+
+The cross-protein comparison of H1 varies protein, fold, library width, alphabet, saturation,
+tier, censoring and ceiling geometry **all at once**, and then asks which of them explains a
+difference. This comparison varies the covariate and holds the rest fixed. It is a better
+causal design by a wide margin, and it was already in this document as a remark (§6.5) rather
+than a test. That was an error of nerve, corrected here.
+
+What it is **not**: evidence of cross-protein generalization. One protein cannot speak to
+transfer across families. §6.7.5 states that limit without hedging.
+
+#### 6.7.2 Power
+
+Paired by seed over **48 seeds**, against n = 4 proteins for H1. That is the whole point.
+
+#### 6.7.3 The statistic
+
+A difference of differences, with the seed as the unit of independence throughout:
+
+```
+for each seed s:
+    D_s = [ Y_s(reliability, blue) − Y_s(ridge, blue) ]
+        − [ Y_s(reliability, red)  − Y_s(ridge, red)  ]
+```
+
+on the primary endpoint (diversity-adjusted yield at d ≥ 2) at the 125-measurement budget.
+Inference on `{D_s}` is a paired t-test over seeds, df = 47, plus a **cluster bootstrap over
+whole seeds** (B = 10,000, percentile interval) and a Wilcoxon signed-rank, exactly as §11
+requires of everything else. No within-seed sub-unit is pooled. The same contrast is reported
+at all five budgets and on the raw secondary endpoint; the 125-measurement primary-endpoint
+cell is the pre-specified test.
+
+Seeds are shared across the two readouts: seed s draws **the same 25 initial genotypes** on
+blue and on red, which is possible because the genotype set is identical. That makes `D_s` a
+within-seed, within-genotype-set contrast and removes initial-sample variation from it
+entirely. Alpha 0.05, one-sided, predicted direction positive.
+
+#### 6.7.4 The prediction, which is nearly a point prediction
+
+`D_s` is predicted to be **positive**: reliability's edge over ridge is larger on blue.
+
+The red half is sharper than a direction. Red has **zero top-1% hits at depths 0, 1, 2 and
+3** — all 82 of its hits sit at depth 4 and deeper, peaking at 1.63% at depth 8. Reliability
+selects at mean depth ~2.6. So:
+
+> **On eqFP611 red, the reliability arm is predicted to find essentially nothing** — a
+> diversity-adjusted yield at or near zero, and near-zero at every budget, because the region
+> it samples contains no qualifying variants at all.
+
+That is close to a point prediction and it is cheap to falsify: if reliability returns a
+healthy yield on red, the mechanism story is wrong regardless of what blue does. Conversely,
+blue's shell is the richest at depth ≤ 2 in the entire independent corpus (14.27x, 13 hits in
+91 variants), so if the mechanism holds, blue is where reliability has its best chance on any
+independent landscape.
+
+Note the honest tension with H1: blue's floor(S/2) enrichment of 1.854x is still well below
+GB1's 3.32x, so H1 predicts reliability loses to ridge on blue in absolute terms. H2 predicts
+only that it loses *less* on blue than on red. **Both can hold at once**, and if they do, the
+reportable statement is "the mechanism is confirmed and the policy still loses everywhere",
+which is a coherent and uncomfortable result, not a contradiction.
+
+#### 6.7.5 Replication instance, and falsification
+
+**Replication: CR6261 H1 against CR6261 H9** (0.210x against 0.000x). Same structure — one
+protein, one 11-site library, two antigens, two readouts of the same genotypes. Pre-registered
+as a replication of H2 with the same statistic.
+
+It is the **weaker instance** and that is stated in advance, not discovered later: both
+enrichments sit near zero, so the contrast is small (0.21x against 0.00x, against blue-red's
+1.854x against 0.634x); the d ≥ 2 ceilings are only 18 and 21, so the endpoint saturates
+(§9.3); and the two antigens' genotype sets are **not** identical (1,887 rows against 1,842),
+so the shared-initial-sample construction of §6.7.3 applies only to the genotypes present in
+both. The size of that intersection has not been computed and is not asserted here; it must be
+computed and recorded before the contrast is run, and the contrast is computed on the
+intersection with its size stated in the table. A null on this instance is weak evidence
+against H2; a reversal is not.
+
+**H2 is disconfirmed if any of the following holds:**
+
+1. no blue-minus-red difference — the 95% seed-cluster CI on `mean(D_s)` contains zero at the
+   125-measurement budget;
+2. a difference in the **wrong direction** — reliability's edge is larger on red;
+3. reliability returns a materially non-zero diversity-adjusted yield on **red**, against the
+   near-point prediction of §6.7.4, while the blue-red difference nonetheless appears — that
+   would mean the difference is real but not caused by shallow-shell depletion;
+4. the CR6261 replication reverses (not merely nulls).
+
+**The limit, stated plainly.** A positive H2 establishes that **shallow-shell richness drives
+the advantage within one protein**. It says **nothing on its own** about transfer across
+protein families. It cannot be quoted as cross-protein evidence, it cannot be aggregated with
+H1, and a sentence that cites H2 for generalization is a misreport. H2's own training data
+problem is also recorded: the covariate was derived from TrpB and GB1 (§6.6), so eqFP611 is
+legitimately held out for H2, but the blue-red contrast was *noticed* while characterising the
+corpus for this document — the covariate values in §6.5 were computed from labels before any
+arm ran, which is what makes H2 prospective, and no arm performance on eqFP611 had been
+examined when H2 was written.
+
+### 6.8 Interpretation order: H1 and H2 answer different questions
+
+Fixed in advance so the result cannot be re-framed afterwards.
+
+| | H1 (§6.1–6.6) | H2 (§6.7) |
+|---|---|---|
+| question | does the advantage transfer across protein families? | is shallow-shell richness what drives the advantage? |
+| design | 4 proteins, everything varies | 1 protein, 1 genotype set, only the covariate varies |
+| unit, n | protein, n = 4 | seed, n = 48 |
+| power | marginal by construction; min attainable p = 0.042 | adequate |
+| what it licenses | a generalization claim | a mechanism claim |
+
+**Neither substitutes for the other.** H2 cannot rescue a failed H1 and H1 cannot rescue a
+failed H2. Reported in this order: H2 first, because it is the better-powered test of the
+narrower question; then H1, with its power limitation restated; then the per-protein effects
+of §12.2, which stand on their own regardless of either hypothesis.
+
+**The most likely outcome is pre-named: H2 confirmed, H1 unresolved.** That combination is
+**mechanism supported, generalization undetermined**, and it is a legitimate and reportable
+result. It is not a failure and must not be narrated as one; nor may it be narrated as a
+generalization success. The sentence it licenses is: *within one protein and one library, the
+policy's advantage tracks shallow-shell richness as predicted; whether that transfers across
+protein families is undetermined at n = 4 proteins, and the per-protein effects are as
+tabulated.*
+
+The symmetric warning: **H1 confirmed with H2 falsified** would mean the across-protein
+ordering tracks the covariate while the within-protein manipulation does not — which would
+point to a confound correlated with the covariate rather than to the covariate itself, and
+must be reported that way rather than as support for the mechanism.
+
 ---
 
 ## 7. Arms
@@ -609,6 +783,7 @@ observations drawn from the same eligible universe.
 | A5 | VeritasBio **reliability** | the shipped default configuration (`panoptes_default`) |
 | A6 | VeritasBio **frontier** | qualify-then-optimize (`panoptes_qualify_then_optimize`) |
 | A7 | VeritasBio **lightweight** | one predefined low-cost configuration, fixed in §7.1 before any run |
+| A8 | **MULTI-evolve fixed depth schedule** | the published singles → all-pairs → extrapolate schedule, re-implemented to this protocol's budget — see §7.5 |
 
 Ridge (A2) is the designated reference baseline for every effect size, because it is the
 simplest arm that is competitive and because the development results show it beating the
@@ -677,6 +852,14 @@ A single difference cannot be attributed to the first while the second is unmeas
 > exist.** Per-target, per-arm tables may be produced and circulated in the interim, each
 > carrying the words "pool-restricted; mode effect not yet separated from target effect".
 
+**H2 (§6.7) is the one exception, and for a reason, not as a convenience.** Its statistic is a
+difference of differences within a single library: blue and red run under the identical
+pool-restricted mode, on the identical 8,192 genotypes, with the identical per-seed initial
+sample. Whatever the mode effect is, it enters both halves of `D_s` and cancels. H2 is
+therefore valid before the anchor runs land — which is a further reason it, and not H1, is
+reported first (§6.8). The same cancellation does **not** apply to any cross-target contrast,
+because there the mode and the target move together.
+
 **Anchors.** Those runs are in progress on held-out seeds 48–95, same 25 + 4×25 protocol. The
 GFlowNet-enabled held-out figures they will be differenced against, raw top-1% hits, are
 fixed here so the comparison cannot be re-baselined afterwards:
@@ -698,6 +881,68 @@ Note what the GB1 column already shows: reliability 15.02 against frontier 37.21
 VeritasBio modes are not close to each other on GB1 even before the mode effect is measured,
 which is a further reason the two arms are reported separately throughout and never merged
 into "the engine".
+
+### 7.5 A8 — the published fixed depth schedule, added now rather than later
+
+**MULTI-evolve** (Tran et al., *Science* 2026, DOI
+[10.1126/science.aea1820](https://doi.org/10.1126/science.aea1820); code at
+`github.com/ArcInstitute/MULTI-evolve`) is a **published, hand-designed fixed depth schedule**:
+identify ~15–20 single beneficial substitutions, measure **all pairwise combinations** of
+them, train on singles plus doubles, and predict combinations out to **depth 7**, testing as
+few as 9 predicted multi-mutants.
+
+It is, in effect, the simpler fixed-depth heuristic that kill criterion §13.5 item 4 already
+names — published, in Science, with wet-lab results, in the past year. The honest thing is to
+put it in the arm grid **before** the adaptive version is measured, not after it has won. A
+fixed schedule that matches depth-adaptive allocation would kill the adaptive version under
+§13.5.4, and that comparison should be available the first time the question is asked.
+
+Registered constraints on A8, so the comparison is not quietly rigged in either direction:
+
+1. **It is a re-implementation to this protocol's budget, not the published method.** The
+   published schedule assumes a singles screen plus ~100–200 pairwise measurements; this
+   protocol's whole budget is 125. The adaptation is: spend round 1 on singles ranked by the
+   revealed initial sample, round 2 on pairwise combinations of the best singles found, and
+   rounds 3–4 on surrogate-predicted deeper combinations. The exact rule is fixed in the run
+   manifest on first use and may not change afterwards, under the same lock as A7 (§7.1).
+2. **This is not a reproduction of MULTI-evolve's published results** and must never be
+   described as one. It is a budget-matched fixed depth schedule in the spirit of the
+   published one. Any table carrying A8 says so.
+3. **Where the library forbids the schedule, the cell is absent, not substituted** (§7.2).
+   Pool-restricted binary libraries may not contain the required pairwise combinations of the
+   chosen singles; where the enumerated pool lacks them, the shortfall is recorded.
+4. A8 is a **baseline**, not a VeritasBio arm. It enters the "effects versus the stronger
+   baselines" row of §12.2 item 2 alongside random forest, ALDE and A7.
+
+### 7.6 Named threat to the baseline comparison: ALDE is run far below its own budget
+
+ALDE as published uses a random batch of **96** then **4 rounds of 96** = **480**
+measurements, averaged over 70 random initializations, on GB1 and TrpB. This protocol's 125
+measurements are **26% of that demonstrated budget**, and the batch size is 25 rather than 96.
+
+Three consequences, registered as a threat rather than defended:
+
+1. **ALDE's deep surrogates run far below any training size it demonstrates.** A DKL or DNN
+   ensemble fitted on 25, 50 or 75 revealed measurements is outside the regime the paper
+   evidences. A poor ALDE result at these budgets is at least partly a statement about the
+   budget, not only about the method.
+2. **ALDE publishes no budget sensitivity analysis.** Its reported trajectories hold batch
+   size fixed at 96 throughout, so they answer "performance at a smaller *cumulative* budget",
+   not "performance at a smaller *batch size*". Nothing in the paper licenses extrapolation
+   to a 25-wide batch.
+3. Therefore **the ALDE comparison must not be the sentence that carries the claim.** ALDE is
+   a reference baseline (§7); ridge (A2) is the designated reference for every effect size,
+   and that is deliberate.
+
+**Mitigation, pre-specified.** The full arm grid is **also** run at ALDE's own
+**96 + 4×96 = 480** schedule on **TrpB and GB1**. Both are development data (§4.1), so this
+costs nothing in held-out evidence, and it is the only way to say whether an ALDE deficit at
+125 is the method or the budget. Both schedules are reported side by side wherever ALDE
+appears. Any external ALDE comparison carries §1.1's protocol-deviation sentence and, where
+the 125-measurement schedule is quoted, the 26%-of-demonstrated-budget figure as well.
+
+This threat applies in reduced form to every arm with a deep surrogate, including the
+VeritasBio arms, and that is noted rather than treated as an ALDE-specific excuse.
 
 ---
 
@@ -985,7 +1230,7 @@ pool within-seed sub-units as independent.
 
 ### 11.3 Multiplicity
 
-The full grid is 7 arms × 5 budgets × 9-plus endpoints × 7 landscapes. Treating that as one
+The full grid is 8 arms × 5 budgets × 9-plus endpoints × 7 landscapes. Treating that as one
 family would guarantee both false positives and, with Bonferroni, no power at all. The
 pre-specified split:
 
@@ -996,6 +1241,13 @@ pre-specified split:
   Both are shown; neither is chosen afterwards.
 - **The H1 test** (§6.4) is a single pre-specified test with its own alpha of 0.05,
   one-sided, outside the primary family.
+- **The H2 test** (§6.7) is a second single pre-specified test, also alpha 0.05 one-sided,
+  also outside the primary family: one contrast, `mean(D_s)` on the primary endpoint at the
+  125-measurement budget, on the eqFP611 blue-red instance. The CR6261 replication and the
+  other four budgets are reported alongside it and are **not** additional confirmatory tests;
+  they are labelled as replication and sensitivity. H1 and H2 are not corrected against each
+  other: they test different hypotheses on different designs, each gets one pre-specified
+  test, and both results are reported whatever they show (§6.8).
 - **Everything else is exploratory.** All other arm pairs, all secondary endpoints, all
   subgroup and sensitivity analyses are reported with unadjusted CIs and **no significance
   claims**. "Exploratory" appears in the table caption, not in a footnote.
@@ -1019,8 +1271,10 @@ how a practitioner would read it. It rewards trivial wins and conceals severe lo
 1. **The full effect versus ridge for every independent protein** — mean per-seed contrast,
    95% seed-cluster CI, n_seeds, at every budget, on the primary and the raw endpoint. Every
    protein appears whether it helps the case or not.
-2. **Effects versus the stronger baselines** — random forest, ALDE where compatible (§7.2),
-   and the lightweight configuration A7. An improvement over random alone is not a result.
+2. **Effects versus the stronger baselines** — random forest, ALDE where compatible (§7.2,
+   with the budget threat of §7.6 attached), the lightweight configuration A7, and the
+   published fixed depth schedule A8 (§7.5). An improvement over random alone is not a result,
+   and an improvement that A8 also achieves is not a result for the engine.
 3. **The fraction of independent proteins improving**, with the count and the denominator
    written out (for example "2 of 4 proteins; 3 families"), never as a bare percentage.
 4. **The distribution and magnitude of regressions** — every regression, its size, its CI,
@@ -1155,9 +1409,11 @@ and are not softer than it.
 3. It fails to help **specifically on the poor-shallow-shell landscapes** its mechanism
    predicts it should help — this is the mechanism-specific kill condition, and it fires even
    if average performance improved (§13.2).
-4. A **simpler fixed-depth heuristic matches it** — for example, a fixed allocation to depth
-   3–4, or simply selecting at the depth where hits have so far been found, with no adaptive
-   estimator at all.
+4. A **simpler fixed-depth heuristic matches it** — a fixed allocation to depth 3–4, simply
+   selecting at the depth where hits have so far been found with no adaptive estimator at all,
+   or **arm A8, the published MULTI-evolve singles → all-pairs → extrapolate schedule
+   (§7.5)**. A8 is in the grid from the start precisely so this criterion can fire on the
+   first measurement rather than after the adaptive version has been declared a win.
 5. It needs hidden outcome information to choose its schedule.
 
 ### 13.6 The uncomfortable alternative, named in advance
@@ -1238,11 +1494,17 @@ of order.
 5. Run the development-level plumbing cross-check on GB1 (§4.3).
 6. Run all arms on all targets, both budget schedules, 48 seeds. Capture §10 rows.
 7. **Measure the pool-restricted TrpB and GB1 anchors** (§7.4) and report the mode effect. In
-   progress on seeds 48–95. Steps 8 and 9 are blocked until this exists.
-8. Analyse per §11, report per §12, with no changes to §§2, 6, 8, 9, 11 or 12.
-9. Only then consider §13.
+   progress on seeds 48–95. Steps 9 and 10 are blocked until this exists.
+8. **Test H2** (§6.7). Not blocked by step 7 — the mode effect cancels in its
+   difference-of-differences (§7.4) — so it can be reported as soon as step 6 covers eqFP611.
+9. Run the arm grid at ALDE's own **96 + 4×96** schedule on TrpB and GB1 (§7.6). Development
+   data, so this costs nothing held-out.
+10. Analyse per §11, report per §12 in the order fixed by §6.8, with no changes to §§2, 6, 8,
+    9, 11 or 12.
+11. Only then consider §13.
 
-Steps 6 and 7 are independent of each other and may run concurrently.
+Steps 6, 7 and 9 are independent of each other and may run concurrently. Step 8 needs only
+step 6's eqFP611 cells.
 
 ---
 
@@ -1255,7 +1517,10 @@ Steps 6 and 7 are independent of each other and may run concurrently.
 | O-3 | **ALDE compatibility on this corpus is unprobed.** The binary per-site alphabets and the 121-/1,053-residue genotype representations are not the saturated-site encoding its published code assumes. | Likely absent cells, to be documented per §7.2 rather than substituted. |
 | O-4 | ~~TrpB's shallow-shell figures were not recomputed here.~~ **Resolved on 2026-10-31.** TrpB has now been reproduced by a **second, independent implementation** — a parallel agent's own genotype canonicalisation and shell profiler, run against the real landscape files — giving shallow 168/2,242 = **7.4933%**, deep 1,432/157,757 = **0.9077%**, per-depth 15.79% / 7.20% / 2.33% / 0.608% at depths 1–4 and a depth-4 maximum of 1.0000. The same implementation gives GB1 shallow 72/2,167 = **3.3226%**, deep 1,422/147,193 = **0.9661%**, depth-4 maximum 8.7620. `freeze_cross_protein_corpus.py stats` reproduces GB1's figures **exactly** under the §6.3 depth-0 convention. Both anchors now come from agreeing implementations; the earlier 2,168 / 3.3210% was the depth-0 convention difference and nothing else. | none |
 | O-5 | **The upstream corpus has seven recorded discrepancies or inconsistencies** (§3.6, D-1 to D-7), two of them unexplained one-row differences and one — SpCas9, 948 claimed against 597 usable — a factor of 1.6. | The clean file wins where they disagree; D-5 means RhlA's provenance is unestablished. |
-| O-6 | **The H1 test is underpowered at the present corpus size** (§6.4): with n = 4 proteins the smallest attainable exact one-sided p is 0.042, so only a perfect ordering can reach alpha. Three of the seven landscape-level enrichments are also a near-tie (§6.5). | A non-significant result is uninformative. Expanding to the reserve proteins (§6.5) is the only fix, and it has its own caveats. |
+| O-6 | **H1's power is marginal by construction and it will probably be recorded as unresolved** (§6.4). With n = 4 proteins the smallest attainable exact one-sided p is 0.042, so only a perfect ordering reaches alpha; the covariate's top three landscape values are a near-tie; and the demonstration is that excluding one wild-type row from a denominator swapped ranks 1 and 2 on a 0.02x margin. H1 is additionally ranking the *magnitudes of four losses*, since every independent value sits below GB1's 3.32x. | H1 is kept but is no longer the only formal test of the mechanism: **H2 (§6.7)** tests the mechanism at n = 48 seeds on a design where only the covariate moves. Expanding to the reserve proteins (§6.5) would take H1 to n = 7. |
+| O-9 | **A8 is a budget-matched re-implementation, not MULTI-evolve** (§7.5). The published schedule assumes a singles screen plus ~100–200 pairwise measurements; this protocol's entire budget is 125. The adaptation rule is fixed on first use but has not been written or tested. | A8 results are evidence about a fixed depth schedule at a 125-measurement budget, never a reproduction of the published result. |
+| O-10 | **ALDE runs at 26% of its own demonstrated budget here** (§7.6): 125 against 96 + 4×96 = 480, and at batch 25 rather than 96. ALDE publishes no batch-size sensitivity analysis, so a deficit at these budgets is partly a statement about the budget. | ALDE must not carry the claim; ridge is the reference baseline. Mitigation is the 480-measurement development runs on TrpB and GB1, which have not been run. |
+| O-11 | **The CR6261 H1/H9 genotype intersection has not been computed** (§6.7.5). H2's replication instance needs it, because the two antigens have 1,887 and 1,842 rows and the shared-initial-sample construction applies only to genotypes present in both. | Compute and record before running the replication contrast. |
 | O-7 | **The size of the mode effect is still unknown** (§7.3). The mitigation — running reliability and frontier pool-restricted on TrpB and GB1 — is **now in progress on held-out seeds 48–95**, against the fixed GFlowNet-enabled anchors of §7.4 (TrpB 45.21 / 40.50, GB1 15.02 / 37.21). | Until those runs land, the aggregate, the H1 test and the gate decision are all blocked by §7.4. |
 | O-8 | **No wet-lab validation of anything here.** Every figure is a retrospective simulation over a fully-measured library. | Nothing in this study is evidence about a real campaign. |
 
@@ -1272,6 +1537,9 @@ written after cross-protein results have been examined must say so in its first 
 | 2026-10-31 | §6.3 | fixed the depth-0 convention: the wild type is retained in the eligible universe and the tier, excluded from both shells. All shell figures recomputed under it; landscape-level ranks 1 and 2 swapped (CreiLOV now above eqFP611 blue), the per-protein ordering unchanged | two implementations had disagreed by one row on GB1 (2,167 vs 2,168), the cause being a literal `WT` row; convention drift between implementations is what the freeze exists to prevent |
 | 2026-10-31 | §16 O-4 | closed: TrpB's shell figures reproduced by a second independent implementation; both development anchors now agree | the gap flagged at the initial freeze was closed by parallel work, not by this document |
 | 2026-10-31 | §7.4 | added: the cross-protein aggregate, the H1 test and the gate decision are blocked until the pool-restricted TrpB/GB1 anchor runs exist, and the mode effect must be attributed separately from the target effect | the §7.3 confound needed an enforceable precondition, not just a note; the anchor runs are now in progress on seeds 48–95 |
+| 2026-10-31 | §6.7, §6.8, §6.4, §11.3 | added **H2**, the within-protein mechanism hypothesis (eqFP611 blue against red, difference of differences paired over 48 seeds, with CR6261 H1/H9 as a weaker replication), a fixed interpretation order for H1 against H2, and the statement that H1's power is marginal by construction with the rank-1/2 flip as its demonstration | H1 needs a perfect ordering of four items whose top three move on one-row conventions, so it will probably be unresolved either way; the within-protein contrast was already identified as the cleanest covariate manipulation in the corpus and was a remark rather than a test. H2 is exempt from the §7.4 block because the mode effect cancels in its difference of differences |
+| 2026-10-31 | §7, §7.5, §13.5, §12.2 | added arm **A8**, the published MULTI-evolve fixed depth schedule (Tran et al., Science 2026, 10.1126/science.aea1820), budget-matched to this protocol, with the registered caveat that it is not a reproduction of the published result | §13.5 item 4 kills depth-adaptive allocation if a simpler fixed-depth heuristic matches it, and the strongest such heuristic is already published; it belongs in the grid before the adaptive version is measured, not after it wins |
+| 2026-10-31 | §7.6 | added the named threat that ALDE runs at 26% of its own demonstrated budget (125 against 96 + 4×96 = 480, batch 25 rather than 96, no published batch-size sensitivity), with the mitigation of also running the grid at 96 + 4×96 on TrpB and GB1 | both are development data, so the mitigation costs nothing held-out, and without it an ALDE deficit cannot be attributed to the method rather than the budget |
 
 No cross-protein arm had been run and no cross-protein performance figure had been examined
 when this table was written.
