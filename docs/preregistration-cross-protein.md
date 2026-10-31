@@ -554,6 +554,12 @@ The per-protein rows the primary test uses, from the means of the above:
 Four proteins, a strict ordering, no ties — and, unlike the landscape-level ordering, one
 that is **unchanged** by the depth-0 convention.
 
+**Required alongside this ordering, every time it is reported: each target's library site
+count.** Width runs 4–16 across the corpus and covaries with the enrichment ordering, so an
+H1 result could reflect either. Whether the policy's depth bias scales with width is
+unmeasured and is resolved from the §10.1 read-out before this ordering is interpreted
+(§16 O-12).
+
 **The prediction this forces, stated plainly.** Every independent enrichment measured
 (≤ 1.88x) sits **below GB1's 3.32x**, where reliability already lost to ridge by 22.49 raw
 top-1% hits. H1 therefore predicts that **the current reliability configuration will lose to
@@ -676,29 +682,65 @@ blue and on red, which is possible because the genotype set is identical. That m
 within-seed, within-genotype-set contrast and removes initial-sample variation from it
 entirely. Alpha 0.05, one-sided, predicted direction positive.
 
-#### 6.7.4 The prediction, which is nearly a point prediction
+#### 6.7.4 Two predictions of unequal strength
 
-`D_s` is predicted to be **positive**: reliability's edge over ridge is larger on blue.
+They are separated here because they do not rest on the same premises, and conflating them
+would let one fail and be recorded as though the other had.
 
-The red half is sharper than a direction. Red has **zero top-1% hits at depths 0, 1, 2 and
-3** — all 82 of its hits sit at depth 4 and deeper, peaking at 1.63% at depth 8. Reliability
-selects at mean depth ~2.6. So:
+**P1 — the directional prediction. This is H2's primary claim and it is robust.**
 
-> **On eqFP611 red, the reliability arm is predicted to find essentially nothing** — a
-> diversity-adjusted yield at or near zero, and near-zero at every budget, because the region
-> it samples contains no qualifying variants at all.
+> `D_s` is **positive**: reliability's edge over ridge is larger on blue than on red.
 
-That is close to a point prediction and it is cheap to falsify: if reliability returns a
-healthy yield on red, the mechanism story is wrong regardless of what blue does. Conversely,
-blue's shell is the richest at depth ≤ 2 in the entire independent corpus (14.27x, 13 hits in
-91 variants), so if the mechanism holds, blue is where reliability has its best chance on any
-independent landscape.
+P1 holds for **any** selection depth that sits below red's hit mass. Red has **zero top-1%
+hits at depths 0, 1, 2 and 3** and all 82 of its hits at depth 4 and deeper; blue's hit rate
+falls monotonically from depth 1. So any policy biased shallower than red's hit mass does
+relatively better on blue, whatever that bias turns out to be numerically. P1 does not depend
+on resolving the question in P2 and is scored independently of it.
+
+Blue's shell is also the richest at depth ≤ 2 in the entire independent corpus — 14.27x, 13
+hits in 91 variants — so if the mechanism holds, blue is where reliability has its best chance
+on any independent landscape.
+
+**P2 — the point prediction. Contingent, and labelled so.**
+
+> **Conditional on the policy's depth bias being absolute rather than proportional to library
+> width:** on eqFP611 red the reliability arm finds **essentially nothing** — a
+> diversity-adjusted yield at or near zero at every budget, because the region it samples
+> contains no qualifying variants at all.
+
+The premise that cannot be assumed: *"reliability selects at mean depth ~2.6"* was measured on
+**four-site** libraries (TrpB 2.63, GB1 2.56). eqFP611 has **thirteen** binary sites. Nothing
+measured so far establishes which of two readings transfers:
+
+| reading | selection depth on a 13-site library | where red's hits are | P2 |
+|---|---|---|---|
+| **absolute** — the bias is ~2.6 mutations | ~2.6 (20% of sites) | zero hits at depth ≤ 3 | holds: near-zero yield |
+| **proportional** — the bias is ~65% of sites (2.6/4) | ~8.5 (65% of sites) | **peak hit rate, 1.63% at depth 8** | fails: red may do well |
+
+The two readings make **opposite** predictions about red, and the proportional reading puts the
+policy exactly on red's hit mass. The question is genuinely open: our only evidence is two
+libraries of **identical width**, which cannot distinguish an absolute constant from a
+proportion. No prior is asserted here beyond that.
+
+**Interpretation rule, fixed in advance.** A healthy diversity-adjusted yield on red
+**falsifies P2**. It does **not** by itself falsify H2 if the measured mean selected depth on
+eqFP611 turns out to be proportional rather than absolute — that outcome is a statement about
+how the depth bias scales with library width, not about whether shallow-shell richness drives
+the advantage. In that case P2 is recorded as falsified, the width-scaling finding is reported
+as such (§16 O-12), and H2 is scored on P1 alone. The reverse is also fixed: if the measured
+selection depth is absolute (~2.6 on a 13-site library) and red nonetheless yields well, that
+**is** a refutation of the mechanism, because the policy sampled a region containing no hits
+and found hits anyway, which cannot happen.
+
+**P2 is resolved from measurement, not from assumption.** §10 requires mean selected depth to
+be recorded per round per target, in both absolute and fractional terms, and §10.1 requires it
+to be read out **before** P2 is scored.
 
 Note the honest tension with H1: blue's floor(S/2) enrichment of 1.854x is still well below
-GB1's 3.32x, so H1 predicts reliability loses to ridge on blue in absolute terms. H2 predicts
-only that it loses *less* on blue than on red. **Both can hold at once**, and if they do, the
-reportable statement is "the mechanism is confirmed and the policy still loses everywhere",
-which is a coherent and uncomfortable result, not a contradiction.
+GB1's 3.32x, so H1 predicts reliability loses to ridge on blue in absolute terms. H2's P1
+predicts only that it loses *less* on blue than on red. **Both can hold at once**, and if they
+do, the reportable statement is "the mechanism is confirmed and the policy still loses
+everywhere", which is a coherent and uncomfortable result, not a contradiction.
 
 #### 6.7.5 Replication instance, and falsification
 
@@ -716,14 +758,23 @@ computed and recorded before the contrast is run, and the contrast is computed o
 intersection with its size stated in the table. A null on this instance is weak evidence
 against H2; a reversal is not.
 
-**H2 is disconfirmed if any of the following holds:**
+**H2 is disconfirmed if any of the following holds.** All four are conditions on P1, which is
+H2's claim; P2's failure is scored separately per §6.7.4 and is not on this list.
 
 1. no blue-minus-red difference — the 95% seed-cluster CI on `mean(D_s)` contains zero at the
    125-measurement budget;
 2. a difference in the **wrong direction** — reliability's edge is larger on red;
-3. reliability returns a materially non-zero diversity-adjusted yield on **red**, against the
-   near-point prediction of §6.7.4, while the blue-red difference nonetheless appears — that
-   would mean the difference is real but not caused by shallow-shell depletion;
+3. reliability returns a materially non-zero diversity-adjusted yield on **red** *and* the
+   measured mean selected depth on eqFP611 is **absolute** (near 2.6 of 13 sites, i.e. below
+   red's hit mass), while a blue-red difference nonetheless appears. That combination is
+   incoherent under the mechanism — the policy would have sampled a region containing no
+   qualifying variants and found them anyway — so it means the difference is real but not
+   caused by shallow-shell depletion. **If instead the measured selection depth is
+   proportional (near 8.5 of 13), a healthy red yield is not a disconfirmation of H2 at all**;
+   it falsifies P2 only, and the width-scaling result is reported in its own right (§16 O-12).
+   An earlier draft of this clause said a healthy red yield "kills the mechanism regardless of
+   what blue does" — that was too strong, and it would have let a width-transfer effect be
+   misrecorded as a refutation of the mechanism;
 4. the CR6261 replication reverses (not merely nulls).
 
 **The limit, stated plainly.** A positive H2 establishes that **shallow-shell richness drives
@@ -1194,6 +1245,35 @@ parallel, which this protocol depends on:
 Rows are written for every arm, including the baselines, because the baselines' selection
 depth (3.48–3.60) is the comparison that makes the reliability arm's 2.6 meaningful.
 
+### 10.1 Mean selected depth is a reported quantity, in two units
+
+Library width varies from **4 to 16 sites** across this corpus. A depth bias measured on
+four-site libraries cannot be assumed to transfer as an absolute number rather than as a
+proportion of sites, and the two readings diverge sharply as libraries widen (§6.7.4 P2). So
+the question is settled by measurement:
+
+> **For every arm, every target and every round, mean selected depth is reported twice: as an
+> absolute depth, and as a fraction of that library's site count.** The same two figures are
+> reported for mean *proposed* depth and for the depth distribution, not only its mean.
+
+Pre-specified read-out, done **before** P2 is scored and before any cross-protein comparison
+is interpreted:
+
+1. Regress the reliability arm's mean selected absolute depth on library site count across all
+   targets. A slope near zero supports the **absolute** reading; a slope near 0.65 — the
+   development value, 2.6 of 4 sites — supports the **proportional** reading. Report the slope
+   with its seed-clustered interval and the per-target values, not just the fit.
+2. State the verdict, or state that the data does not separate the two readings, before
+   scoring P2.
+3. The same read-out is produced for every other arm, because the baselines' depth behaviour
+   (3.48–3.60 on four-site libraries, i.e. 0.87–0.90 of sites) is subject to exactly the same
+   question and is the comparison that gives the reliability figure meaning.
+
+This costs no extra compute: the rows are already required above, and the analysis is a
+regression over values the runs will have produced anyway. It is written down because an
+unmeasured premise that quietly becomes an assumption is how §6.7.4 nearly acquired a point
+prediction resting on nothing.
+
 ---
 
 ## 11. Statistical analysis
@@ -1521,6 +1601,7 @@ step 6's eqFP611 cells.
 | O-9 | **A8 is a budget-matched re-implementation, not MULTI-evolve** (§7.5). The published schedule assumes a singles screen plus ~100–200 pairwise measurements; this protocol's entire budget is 125. The adaptation rule is fixed on first use but has not been written or tested. | A8 results are evidence about a fixed depth schedule at a 125-measurement budget, never a reproduction of the published result. |
 | O-10 | **ALDE runs at 26% of its own demonstrated budget here** (§7.6): 125 against 96 + 4×96 = 480, and at batch 25 rather than 96. ALDE publishes no batch-size sensitivity analysis, so a deficit at these budgets is partly a statement about the budget. | ALDE must not carry the claim; ridge is the reference baseline. Mitigation is the 480-measurement development runs on TrpB and GB1, which have not been run. |
 | O-11 | **The CR6261 H1/H9 genotype intersection has not been computed** (§6.7.5). H2's replication instance needs it, because the two antigens have 1,887 and 1,842 rows and the shared-initial-sample construction applies only to genotypes present in both. | Compute and record before running the replication contrast. |
+| O-12 | **Whether the policy's selection depth scales with library width is unmeasured, and it bears on H1 at least as much as on H2.** The depth bias (reliability 2.63 / 2.56; baselines 3.48–3.60) was measured on **two libraries of identical four-site width**, which cannot distinguish an absolute constant from a proportion of sites. Library width here runs **4 to 16**. If the bias is **absolute**, the policy gets effectively shallower as libraries widen — 2.6 of 4 sites is 65% of positions, 2.6 of 16 is 16% — so performance should **degrade monotonically with site count**, which is a confound entangled with every cross-protein comparison in this document, H1 included: the covariate (shallow-shell enrichment) and site count both vary across the independent targets, and the H1 ordering could reflect either. If the bias is **proportional**, then on wide libraries the policy is not a shallow exploiter at all and H1's mechanism story does not apply to any library wider than four sites. Either answer changes the interpretation. | **Testable from the §10 rows at no extra compute**, by the read-out pre-specified in §10.1, and it must be done before P2 (§6.7.4) is scored and before the H1 ordering is interpreted. Site count must also be reported alongside enrichment in every H1 table so the two cannot be silently conflated. |
 | O-7 | **The size of the mode effect is still unknown** (§7.3). The mitigation — running reliability and frontier pool-restricted on TrpB and GB1 — is **now in progress on held-out seeds 48–95**, against the fixed GFlowNet-enabled anchors of §7.4 (TrpB 45.21 / 40.50, GB1 15.02 / 37.21). | Until those runs land, the aggregate, the H1 test and the gate decision are all blocked by §7.4. |
 | O-8 | **No wet-lab validation of anything here.** Every figure is a retrospective simulation over a fully-measured library. | Nothing in this study is evidence about a real campaign. |
 
@@ -1539,6 +1620,8 @@ written after cross-protein results have been examined must say so in its first 
 | 2026-10-31 | §7.4 | added: the cross-protein aggregate, the H1 test and the gate decision are blocked until the pool-restricted TrpB/GB1 anchor runs exist, and the mode effect must be attributed separately from the target effect | the §7.3 confound needed an enforceable precondition, not just a note; the anchor runs are now in progress on seeds 48–95 |
 | 2026-10-31 | §6.7, §6.8, §6.4, §11.3 | added **H2**, the within-protein mechanism hypothesis (eqFP611 blue against red, difference of differences paired over 48 seeds, with CR6261 H1/H9 as a weaker replication), a fixed interpretation order for H1 against H2, and the statement that H1's power is marginal by construction with the rank-1/2 flip as its demonstration | H1 needs a perfect ordering of four items whose top three move on one-row conventions, so it will probably be unresolved either way; the within-protein contrast was already identified as the cleanest covariate manipulation in the corpus and was a remark rather than a test. H2 is exempt from the §7.4 block because the mode effect cancels in its difference of differences |
 | 2026-10-31 | §7, §7.5, §13.5, §12.2 | added arm **A8**, the published MULTI-evolve fixed depth schedule (Tran et al., Science 2026, 10.1126/science.aea1820), budget-matched to this protocol, with the registered caveat that it is not a reproduction of the published result | §13.5 item 4 kills depth-adaptive allocation if a simpler fixed-depth heuristic matches it, and the strongest such heuristic is already published; it belongs in the grid before the adaptive version is measured, not after it wins |
+| 2026-10-31 | §6.7.4, §6.7.5, §6.5, §10.1 | split H2's prediction into **P1** (directional, robust, H2's actual claim) and **P2** (the near-point prediction on red, now explicitly **conditional** on the depth bias being absolute rather than proportional to library width); softened the falsification clause that had made a healthy red yield fatal to the mechanism regardless of blue; required mean selected depth to be reported in both absolute and fractional units for every arm and target, with a pre-specified read-out that settles absolute-versus-proportional before P2 is scored; required site count alongside the H1 enrichment ordering | the premise "the policy selects at mean depth ~2.6" was measured only on two **four-site** libraries. eqFP611 has thirteen. Absolute (~2.6, 20% of sites) and proportional (~8.5, 65% of sites) readings make **opposite** predictions about red, whose hits peak at depth 8, and nothing measured distinguishes them. As written, a width-transfer effect would have been misrecorded as a refutation of the mechanism |
+| 2026-10-31 | §16 O-12 | added: whether selection depth scales with library width is unmeasured, testable from the §10 rows at no extra compute, and a confound for **H1** as much as for H2 — width runs 4–16 and covaries with the enrichment ordering | if the bias is absolute the policy gets effectively shallower as libraries widen and should degrade monotonically with site count; if proportional, it is not a shallow exploiter on any library wider than four sites and H1's mechanism story does not apply there. Either answer changes the interpretation |
 | 2026-10-31 | §7.6 | added the named threat that ALDE runs at 26% of its own demonstrated budget (125 against 96 + 4×96 = 480, batch 25 rather than 96, no published batch-size sensitivity), with the mitigation of also running the grid at 96 + 4×96 on TrpB and GB1 | both are development data, so the mitigation costs nothing held-out, and without it an ALDE deficit cannot be attributed to the method rather than the budget |
 
 No cross-protein arm had been run and no cross-protein performance figure had been examined
