@@ -42,10 +42,11 @@ than trusted.
 from __future__ import annotations
 
 import csv
+import logging
 import random
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 # The existing trace schema. Pinned so a change is a deliberate, reviewed act.
 LEGACY_SELECTION_TRACE_COLUMNS: Tuple[str, ...] = (
@@ -59,6 +60,8 @@ LEGACY_SELECTION_TRACE_COLUMNS: Tuple[str, ...] = (
     "reason",
     "revealed_fitness",
 )
+
+logger = logging.getLogger("veritas.diagnostics.trace")
 
 STATUS_SELECTED = "selected"
 STATUS_RANKED = "ranked"
@@ -100,7 +103,18 @@ class CandidateTraceRecord:
       predicted_fitness       surrogate posterior mean mu(x)
       posterior_uncertainty   surrogate posterior sigma(x)
       prior_contribution      the biophysical / structural prior m(x) for THIS
-                              candidate, including its mechanistic bonus
+                              candidate: the calibrated total the optimizer consumed,
+                              including its mechanistic bonus
+      prior_structural        the structural-surrogate term alone, on the RAW
+                              pre-calibration scale. Reported separately because the
+                              calibration is a tanh, so the calibrated total cannot be
+                              decomposed after the fact
+      prior_raw_total         raw electrostatics + catalytic penalty + structural,
+                              pre-calibration, so `prior_structural` has a denominator
+      prior_structural_available
+                              False when no structure was supplied or it could not be
+                              scored - the difference between "the structural term was
+                              zero" and "there was no structural term"
       acquisition_score       EI, or EI + the Thompson term under hybrid acquisition
       pareto_rank             multi-objective non-dominated rank (0 = non-dominated)
       pareto_contribution     the multiplier that rank applied to acquisition value
@@ -120,6 +134,9 @@ class CandidateTraceRecord:
     predicted_fitness: float
     posterior_uncertainty: float
     prior_contribution: float
+    prior_structural: float
+    prior_raw_total: float
+    prior_structural_available: bool
     acquisition_score: float
     pareto_rank: int
     pareto_contribution: float
@@ -147,17 +164,30 @@ class BoundedCandidateTrace:
     diagnostics and the two can be merged independently.
     """
 
-    __slots__ = ("_campaign", "_budget", "_coverage", "_records", "_rounds_recorded")
+    __slots__ = (
+        "_campaign",
+        "_budget",
+        "_coverage",
+        "_pool_sink",
+        "_records",
+        "_rounds_recorded",
+    )
 
     def __init__(
         self,
         campaign: str = "",
         budget: Optional[TraceBudget] = None,
         coverage: Optional[Any] = None,
+        pool_sink: Optional[Callable[[int, Sequence[str]], None]] = None,
     ) -> None:
         self._campaign = str(campaign)
         self._budget = budget or TraceBudget()
         self._coverage = coverage
+        # The UNBOUNDED pool of identifiers, for coverage accounting. A set insert per
+        # candidate, no rows: this is what separates "the generator is narrow" from
+        # "acquisition keeps picking the same shallow candidates from a broad pool",
+        # and the bounded rows below cannot answer that.
+        self._pool_sink = pool_sink
         self._records: list[CandidateTraceRecord] = []
         self._rounds_recorded = 0
 
@@ -172,6 +202,37 @@ class BoundedCandidateTrace:
     @property
     def rounds_recorded(self) -> int:
         return self._rounds_recorded
+
+    def note_pool(
+        self,
+        candidates: Sequence[str],
+        *,
+        round_index: Optional[int] = None,
+        source: str = "",
+    ) -> None:
+        """
+        Records a ballot for COVERAGE ONLY, with no per-candidate rows.
+
+        For a generator that does not go through the scored pipeline and so has no
+        mu(x)/sigma(x)/acquisition value to report - a greedy Hamming-1 neighbour
+        enumeration, a conditional scan. Without this, such a stage is invisible to
+        coverage and its arm's ballot is silently under-counted, which is exactly the
+        error that made a committed-picks-only coverage number look like evidence
+        about generation.
+        """
+        if not candidates:
+            return
+        index = self._rounds_recorded + 1 if round_index is None else int(round_index)
+        ids = [str(c) for c in candidates]
+        if source:
+            logger.debug("ballot from %s: %d candidate(s)", source, len(ids))
+        if self._coverage is not None:
+            self._coverage.record_round(
+                campaign=self._campaign, round_index=index, proposed=ids, selected=[]
+            )
+        if self._pool_sink is not None:
+            self._pool_sink(index, ids)
+        self._rounds_recorded += 1
 
     def record_round(
         self,
@@ -188,6 +249,9 @@ class BoundedCandidateTrace:
         quality_score: Sequence[float],
         selected_indices: Sequence[int],
         rejection_reasons: Optional[Mapping[int, str]] = None,
+        prior_structural: Optional[Sequence[Optional[float]]] = None,
+        prior_raw_total: Optional[Sequence[Optional[float]]] = None,
+        prior_structural_available: Optional[Sequence[bool]] = None,
     ) -> None:
         """
         Records one scored candidate pool, down to the budget.
@@ -213,6 +277,13 @@ class BoundedCandidateTrace:
             "pareto_contribution": pareto_contribution,
             "quality_score": quality_score,
         }
+        for name, optional in (
+            ("prior_structural", prior_structural),
+            ("prior_raw_total", prior_raw_total),
+            ("prior_structural_available", prior_structural_available),
+        ):
+            if optional is not None:
+                columns[name] = optional
         ragged = {name: len(values) for name, values in columns.items() if len(values) != n}
         if ragged:
             raise ValueError(
@@ -233,6 +304,8 @@ class BoundedCandidateTrace:
                 proposed=list(candidates),
                 selected=[candidates[i] for i in selected],
             )
+        if self._pool_sink is not None:
+            self._pool_sink(int(round_index), [str(c) for c in candidates])
 
         order = sorted(range(n), key=lambda i: (-float(quality_score[i]), i))
         rank_of = {index: position + 1 for position, index in enumerate(order)}
@@ -273,6 +346,21 @@ class BoundedCandidateTrace:
                     predicted_fitness=float(predicted_fitness[index]),
                     posterior_uncertainty=float(posterior_uncertainty[index]),
                     prior_contribution=float(prior_contribution[index]),
+                    prior_structural=(
+                        0.0
+                        if prior_structural is None or prior_structural[index] is None
+                        else float(prior_structural[index])
+                    ),
+                    prior_raw_total=(
+                        0.0
+                        if prior_raw_total is None or prior_raw_total[index] is None
+                        else float(prior_raw_total[index])
+                    ),
+                    prior_structural_available=(
+                        False
+                        if prior_structural_available is None
+                        else bool(prior_structural_available[index])
+                    ),
                     acquisition_score=float(acquisition_score[index]),
                     pareto_rank=int(pareto_rank[index]),
                     pareto_contribution=float(pareto_contribution[index]),

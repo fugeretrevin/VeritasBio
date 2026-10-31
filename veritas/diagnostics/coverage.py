@@ -80,6 +80,10 @@ class RoundCoverage:
     selected_total: int
     cumulative_selected_distinct: int
     cumulative_selected_share: float
+    # The continuous depth trajectory, so a depth threshold can be revised from a
+    # written artifact instead of from a re-run.
+    cumulative_mean_proposed_depth: float
+    cumulative_mean_selected_depth: float
     proposed_depth_histogram: Mapping[int, int]
     selected_depth_histogram: Mapping[int, int]
 
@@ -187,7 +191,7 @@ class CoverageAccumulator:
         "_library",
         "_eligible",
         "_universe_depth_histogram",
-        "_depth_cache",
+        "_genotype_cache",
         "_campaigns",
         "_round_proposed",
         "_round_selected",
@@ -208,16 +212,25 @@ class CoverageAccumulator:
         if not isinstance(library, LibrarySpec):
             raise TypeError(f"library must be a LibrarySpec, got {type(library).__name__}")
         self._library = library
-        self._depth_cache: Dict[str, int] = {}
-        self._eligible: Set[str] = set()
+        self._genotype_cache: Dict[str, str] = {}
+        # Identity is the CANONICAL GENOTYPE, not the notation string. The production
+        # selector emits `Variant.notation` in whatever order its mutation list happens
+        # to be in, so 'V227K:V183A' and 'V183A:V227K' are the same candidate and must
+        # not be counted twice - and a pool notation has to be comparable with the
+        # benchmark's position-ordered variant ids. The value is a representative id, so
+        # a retrospective fitness lookup still has something to key on.
+        self._eligible: Dict[str, str] = {}
         histogram: Dict[int, int] = {}
         for variant_id in eligible_ids:
             self._require_identifier(variant_id, "eligible_ids")
-            self._eligible.add(variant_id)
             try:
-                depth = self._depth(variant_id)
+                genotype = self._genotype(variant_id)
             except GenotypeParseError:
                 continue
+            if genotype in self._eligible:
+                continue
+            self._eligible[genotype] = variant_id
+            depth = self._library.depth_of_genotype(genotype)
             histogram[depth] = histogram.get(depth, 0) + 1
         self._universe_depth_histogram: Dict[int, int] = (
             dict(universe_depth_histogram) if universe_depth_histogram is not None else histogram
@@ -243,11 +256,11 @@ class CoverageAccumulator:
                 "veritas.diagnostics.retrospective."
             )
 
-    def _depth(self, variant_id: str) -> int:
-        cached = self._depth_cache.get(variant_id)
+    def _genotype(self, variant_id: str) -> str:
+        cached = self._genotype_cache.get(variant_id)
         if cached is None:
-            cached = self._library.mutation_depth(variant_id)
-            self._depth_cache[variant_id] = cached
+            cached = self._library.canonical_genotype(variant_id)
+            self._genotype_cache[variant_id] = cached
         return cached
 
     @property
@@ -296,8 +309,9 @@ class CoverageAccumulator:
             self._require_identifier(variant_id, "proposed")
             proposed_count += 1
             offered.add(variant_id)
-            if self._accept(variant_id):
-                proposed_set.add(variant_id)
+            genotype = self._accept(variant_id)
+            if genotype is not None:
+                proposed_set.add(genotype)
 
         for variant_id in selected or ():
             self._require_identifier(variant_id, "selected")
@@ -307,9 +321,10 @@ class CoverageAccumulator:
             # reconstruction still reports a truthful proposal total.
             if variant_id not in offered:
                 proposed_count += 1
-            if self._accept(variant_id):
-                selected_set.add(variant_id)
-                proposed_set.add(variant_id)
+            genotype = self._accept(variant_id)
+            if genotype is not None:
+                selected_set.add(genotype)
+                proposed_set.add(genotype)
 
         self._round_proposed_total[round_index] = (
             self._round_proposed_total.get(round_index, 0) + proposed_count
@@ -319,38 +334,53 @@ class CoverageAccumulator:
         )
         self._campaigns.add(campaign)
 
-    def _accept(self, variant_id: str) -> bool:
-        """Validates a proposal, counting (not raising on) the two ways it can be unusable."""
+    def _accept(self, variant_id: str) -> Optional[str]:
+        """
+        Resolves a proposal to its canonical genotype, or None.
+
+        Counts (never raises on) the two ways a proposal can be unusable: it does not
+        parse onto the library, or it is not in the eligible universe. Both are
+        reported in the sealed report rather than silently dropped.
+        """
         try:
-            self._depth(variant_id)
+            genotype = self._genotype(variant_id)
         except GenotypeParseError:
             self._unparseable += 1
-            return False
-        if self._eligible and variant_id not in self._eligible:
-            self._off_universe += 1
-            return False
-        return True
+            return None
+        if self._eligible:
+            if genotype not in self._eligible:
+                self._off_universe += 1
+                return None
+        else:
+            # No eligible universe was supplied: accept everything and keep the first
+            # identifier seen for each genotype as its representative.
+            self._eligible.setdefault(genotype, variant_id)
+        return genotype
 
     # -- sealing ---------------------------------------------------------------------
+    def _representatives(self, genotypes: Iterable[str]) -> frozenset:
+        return frozenset(self._eligible.get(g, g) for g in genotypes)
+
     @property
     def reachable_ids(self) -> frozenset:
         """
-        Every distinct candidate generation ever proposed - the arm's reachable set.
+        Every distinct candidate generation ever proposed - the arm's reachable set,
+        as canonical variant identifiers (one per distinct genotype).
 
         Identifiers only. This is what `veritas.diagnostics.retrospective` scores
         against the truth table, after sealing.
         """
         union: Set[str] = set()
-        for ids in self._round_proposed.values():
-            union |= ids
-        return frozenset(union)
+        for genotypes in self._round_proposed.values():
+            union |= genotypes
+        return self._representatives(union)
 
     @property
     def selected_ids(self) -> frozenset:
         union: Set[str] = set()
-        for ids in self._round_selected.values():
-            union |= ids
-        return frozenset(union)
+        for genotypes in self._round_selected.values():
+            union |= genotypes
+        return self._representatives(union)
 
     def seal(self) -> CoverageReport:
         """Freezes the accumulator and returns its outcome-free report."""
@@ -376,6 +406,8 @@ class CoverageAccumulator:
                     selected_total=self._round_selected_total.get(round_index, 0),
                     cumulative_selected_distinct=len(cumulative_selected),
                     cumulative_selected_share=len(cumulative_selected) / size,
+                    cumulative_mean_proposed_depth=self._mean_depth(cumulative_proposed),
+                    cumulative_mean_selected_depth=self._mean_depth(cumulative_selected),
                     proposed_depth_histogram=self._histogram(proposed),
                     selected_depth_histogram=self._histogram(selected),
                 )
@@ -404,15 +436,15 @@ class CoverageAccumulator:
             off_universe_proposals=self._off_universe,
         )
 
-    def _histogram(self, ids: Iterable[str]) -> Dict[int, int]:
+    def _histogram(self, genotypes: Iterable[str]) -> Dict[int, int]:
         histogram: Dict[int, int] = {}
-        for variant_id in ids:
-            depth = self._depth(variant_id)
+        for genotype in genotypes:
+            depth = self._library.depth_of_genotype(genotype)
             histogram[depth] = histogram.get(depth, 0) + 1
         return dict(sorted(histogram.items()))
 
-    def _mean_depth(self, ids: Iterable[str]) -> float:
-        depths = [self._depth(v) for v in ids]
+    def _mean_depth(self, genotypes: Iterable[str]) -> float:
+        depths = [self._library.depth_of_genotype(g) for g in genotypes]
         return (sum(depths) / len(depths)) if depths else 0.0
 
 

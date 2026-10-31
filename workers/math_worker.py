@@ -1515,6 +1515,60 @@ def calibrate_prior_to_fitness_scale(
     return float(s * math.tanh(raw_score / t))
 
 
+class PriorBreakdown(BaseModel):
+    """
+    The per-candidate decomposition of the zero-shot prior mean m(x).
+
+    Reported on the RAW heuristic scale, because `calibrate_prior_to_fitness_scale` is
+    a tanh: the calibrated total is NOT the sum of calibrated components, so a
+    decomposition only means anything before calibration. `raw_total` is exactly
+    `electrostatics + catalytic_penalty + structural_surrogate`, and `calibrated` is
+    what the optimizer actually consumes - the same float
+    `compute_biological_prior` has always returned.
+
+    Exists so the structural term can be attributed per candidate at scoring time,
+    which the selection trace needs and which the folded scalar cannot provide.
+    """
+
+    electrostatics: float = Field(
+        0.0, description="Salt-bridge bonus / like-charge penalty for proximal mutation pairs"
+    )
+    catalytic_penalty: float = Field(
+        0.0, description="Penalty for mutating a caller-declared catalytic invariant"
+    )
+    structural_surrogate: float = Field(
+        0.0, description="3D C-alpha coordination / packing term; 0.0 when no structure is available"
+    )
+    structural_available: bool = Field(
+        False, description="False when no pdb_path was given or the structure could not be scored"
+    )
+    raw_total: float = Field(0.0, description="Sum of the raw components, pre-calibration")
+    calibrated: float = Field(0.0, description="The value the optimizer consumes")
+
+
+def compute_biological_prior_breakdown(
+    variant: Variant,
+    catalytic_invariants: Optional[Set[int]] = None,
+    pdb_path: Optional[Any] = None,
+    aromatic_tolerant_positions: Optional[Set[int]] = None,
+) -> PriorBreakdown:
+    """
+    `compute_biological_prior`, with its components kept separate.
+
+    This is the implementation; `compute_biological_prior` is a thin wrapper that
+    returns `.calibrated`, so its float signature and every one of its existing
+    callers are untouched. No extra computation: the structural term was already
+    evaluated once per candidate inside the prior.
+    """
+    breakdown = _compute_prior_components(
+        variant,
+        catalytic_invariants=catalytic_invariants,
+        pdb_path=pdb_path,
+        aromatic_tolerant_positions=aromatic_tolerant_positions,
+    )
+    return breakdown
+
+
 def compute_biological_prior(
     variant: Variant,
     catalytic_invariants: Optional[Set[int]] = None,
@@ -1543,11 +1597,36 @@ def compute_biological_prior(
     residues that must not change, and `aromatic_tolerant_positions` for sites
     where an aromatic substitution is tolerated (e.g. the avGFP fluorophore ring
     at position 66, which accepts Y/H/W as a spectral shift).
-    """
-    if not variant.mutations:
-        return 0.0
 
-    score = 0.0
+    Returns the single calibrated float it always has. `compute_biological_prior_breakdown`
+    returns the same number with its components separated, for per-candidate attribution.
+    """
+    return _compute_prior_components(
+        variant,
+        catalytic_invariants=catalytic_invariants,
+        pdb_path=pdb_path,
+        aromatic_tolerant_positions=aromatic_tolerant_positions,
+    ).calibrated
+
+
+def _compute_prior_components(
+    variant: Variant,
+    catalytic_invariants: Optional[Set[int]] = None,
+    pdb_path: Optional[Any] = None,
+    aromatic_tolerant_positions: Optional[Set[int]] = None,
+) -> PriorBreakdown:
+    """The prior's one implementation. See `compute_biological_prior` for the contract."""
+    if not variant.mutations:
+        return PriorBreakdown(
+            electrostatics=0.0,
+            catalytic_penalty=0.0,
+            structural_surrogate=0.0,
+            structural_available=False,
+            raw_total=0.0,
+            calibrated=0.0,
+        )
+
+    electrostatics = 0.0
 
     # Universal biophysical pair physics: salt bridges & electrostatic repulsion
     if len(variant.mutations) >= 2:
@@ -1560,39 +1639,43 @@ def compute_biological_prior(
             if seq_sep <= 10:
                 # Salt bridge: basic + acidic
                 if (m1.mut_aa in basic_aas and m2.mut_aa in acidic_aas) or (m1.mut_aa in acidic_aas and m2.mut_aa in basic_aas):
-                    score += 0.25
+                    electrostatics += 0.25
                 # Electrostatic clash: like charges in close proximity
                 elif (m1.mut_aa in basic_aas and m2.mut_aa in basic_aas) or (m1.mut_aa in acidic_aas and m2.mut_aa in acidic_aas):
-                    score -= 0.30
+                    electrostatics -= 0.30
 
     # Catalytic invariant penalties. Which positions are invariant comes from the
     # caller, so this stays target-agnostic. Positions 66 and 67 previously carried
     # unconditional avGFP chromophore penalties of -4.5 and -4.8 that fired on every
     # protein; for TrpB, GB1 or trastuzumab those residues are arbitrary.
+    catalytic_penalty = 0.0
     invariants = set(catalytic_invariants or ())
     aromatic_ok = set(aromatic_tolerant_positions or ())
     for m in variant.mutations:
         if m.position in invariants:
             if m.position in aromatic_ok and m.mut_aa in ("Y", "H", "W"):
                 continue  # aromatic substitution tolerated at this site
-            score -= 4.5
+            catalytic_penalty -= 4.5
 
     # 3. Gap C: Fast Zero-Cost Structural Surrogate Term (3D coordination & packing density)
+    structural = 0.0
+    structural_available = False
     if pdb_path:
         try:
             from workers.spatial_filter import compute_structural_surrogate_score
-            struct_score = compute_structural_surrogate_score(
+            structural = float(compute_structural_surrogate_score(
                 variant.notation,
                 pdb_path=pdb_path,
                 catalytic_invariants=catalytic_invariants,
-            )
-            score += struct_score
+            ))
+            structural_available = True
         except Exception as exc:
             # Was `pass`. A missing or unparseable structure silently removed the whole
             # structural component from candidate scoring, so a misconfigured run looked
             # identical to a working one while scoring on strictly less information.
             # Warned once per cause: this runs per candidate, so logging every failure
             # would flood the log over a 160k-variant pool and bury the signal.
+            structural = 0.0
             _warn_once(
                 f"structural_surrogate:{type(exc).__name__}",
                 "structural scoring unavailable (%s: %s); candidates are being scored "
@@ -1600,9 +1683,18 @@ def compute_biological_prior(
                 type(exc).__name__, exc,
             )
 
+    raw_total = electrostatics + catalytic_penalty + structural
     # Bounded to the observable fitness range before it becomes a GP prior mean.
-    # `score` above remains the raw heuristic, which stays useful as a diagnostic.
-    return calibrate_prior_to_fitness_scale(score)
+    # The raw components above stay useful as a diagnostic; because the calibration is
+    # a tanh, they are reported raw and only the total is calibrated.
+    return PriorBreakdown(
+        electrostatics=electrostatics,
+        catalytic_penalty=catalytic_penalty,
+        structural_surrogate=structural,
+        structural_available=structural_available,
+        raw_total=raw_total,
+        calibrated=calibrate_prior_to_fitness_scale(raw_total),
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -1945,8 +2037,33 @@ def select_next_micro_batch(
     res_means, stds = surrogate.predict(X_cand, return_std=True)
 
     # Reconstruct full predicted fitness: mu(x) = m(x) + mu_res(x)
-    cand_priors = np.array(
-        [
+    #
+    # When the prior is this module's own, the decomposed form is evaluated instead of
+    # the folded scalar. Same arithmetic, same cost - the structural surrogate was
+    # already computed once per candidate inside the prior - but the components survive
+    # for per-candidate attribution in the selection trace. They would otherwise be
+    # unrecoverable: the calibration is a tanh, so the returned float cannot be split.
+    cand_prior_breakdowns: List[Optional[PriorBreakdown]] = [None] * len(novel_candidates)
+    if prior_mean_fn is None:
+        prior_values = [0.0] * len(novel_candidates)
+    elif prior_mean_fn is compute_biological_prior:
+        prior_values = []
+        for index, c in enumerate(novel_candidates):
+            breakdown = _compute_prior_components(
+                c,
+                catalytic_invariants=invariants_set,
+                pdb_path=pdb_path,
+                aromatic_tolerant_positions=aromatic_tolerant_positions,
+            )
+            cand_prior_breakdowns[index] = breakdown
+            prior_values.append(
+                breakdown.calibrated
+                + compute_mechanistic_cot_bonus(
+                    c, getattr(strategy, "mechanistic_hypotheses", None)
+                )
+            )
+    else:
+        prior_values = [
             (
                 prior_mean_fn(
                     c,
@@ -1963,9 +2080,8 @@ def select_next_micro_batch(
             )
             + compute_mechanistic_cot_bonus(c, getattr(strategy, "mechanistic_hypotheses", None))
             for c in novel_candidates
-        ] if prior_mean_fn else [0.0] * len(novel_candidates),
-        dtype=np.float64,
-    )
+        ]
+    cand_priors = np.array(prior_values, dtype=np.float64)
     gp_means = res_means + cand_priors
     if assay_adapter.is_fitted:
         means = assay_adapter.predict(X_cand, zero_shot_scores=gp_means)
@@ -2108,6 +2224,20 @@ def select_next_micro_batch(
                 predicted_fitness=[float(v) for v in means],
                 posterior_uncertainty=[float(v) for v in stds],
                 prior_contribution=[float(v) for v in cand_priors],
+                # Raw, pre-calibration components, so the structural term can be
+                # attributed per candidate. None where the prior is ablated or a
+                # caller-supplied function whose internals this module cannot decompose.
+                prior_structural=[
+                    None if b is None else b.structural_surrogate
+                    for b in cand_prior_breakdowns
+                ],
+                prior_raw_total=[
+                    None if b is None else b.raw_total for b in cand_prior_breakdowns
+                ],
+                prior_structural_available=[
+                    False if b is None else b.structural_available
+                    for b in cand_prior_breakdowns
+                ],
                 acquisition_score=[float(v) for v in acquisition_scores],
                 pareto_rank=[int(v) for v in candidate_pareto_ranks],
                 pareto_contribution=[float(v) for v in pareto_weights],

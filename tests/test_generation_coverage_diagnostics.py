@@ -280,6 +280,42 @@ class TestCoverageAccounting(unittest.TestCase):
                 campaign="s0", round_index=1, proposed=[], selected=[{"id": "x", "y": 1.0}]
             )
 
+    def test_identity_is_the_canonical_genotype_not_the_notation_string(self) -> None:
+        """
+        The production selector emits `Variant.notation` in whatever order its mutation
+        list happens to be in, so 'V227K:V183A' and 'V183A:V227K' are ONE candidate.
+        Counting them twice would inflate coverage for exactly the arms under suspicion.
+        """
+        self.accumulator.record_round(
+            campaign="s0",
+            round_index=1,
+            proposed=["V183A:F184I:V227K:S228G", "S228G:V227K:F184I:V183A"],
+            selected=["V227K:S228G:V183A:F184I"],
+        )
+        report = self.accumulator.seal()
+        self.assertEqual(report.union_proposed_distinct, 1)
+        self.assertEqual(report.union_selected_distinct, 1)
+        self.assertEqual(dict(report.union_proposed_depth_histogram), {4: 1})
+
+    def test_a_non_canonical_notation_still_matches_the_eligible_universe(self) -> None:
+        self.accumulator.record_round(
+            campaign="s0", round_index=1, proposed=["V227K:F184I:V183A"], selected=[]
+        )
+        report = self.accumulator.seal()
+        self.assertEqual(report.union_proposed_distinct, 1)   # == _notation("AIKS")
+        self.assertEqual(report.off_universe_proposals, 0)
+
+    def test_a_proposal_outside_the_eligible_universe_is_counted_not_included(self) -> None:
+        self.accumulator.record_round(
+            campaign="s0",
+            round_index=1,
+            proposed=[_notation("AFVS"), "V183W:F184W:V227W:S228W"],
+            selected=[],
+        )
+        report = self.accumulator.seal()
+        self.assertEqual(report.union_proposed_distinct, 1)
+        self.assertEqual(report.off_universe_proposals, 1)
+
     def test_unknown_variant_is_counted_but_flagged(self) -> None:
         self.accumulator.record_round(
             campaign="s0", round_index=1, proposed=[_notation("AFVS"), "V183A:F184Z"], selected=[]
@@ -646,6 +682,28 @@ class TestBoundedCandidateTrace(unittest.TestCase):
         self.assertEqual(report.union_selected_distinct, 3)
         self.assertLess(len(trace.records), 30)
 
+    def test_note_pool_records_a_ballot_for_coverage_without_rows(self) -> None:
+        """
+        A generator with no acquisition value to report - a greedy Hamming-1 scan -
+        must still reach coverage, or its arm's ballot is under-counted in exactly the
+        way that made a committed-picks-only number look like evidence about generation.
+        """
+        accumulator = CoverageAccumulator(library=TRPB, eligible_ids=_ids_at_depth(4, 500))
+        trace = BoundedCandidateTrace(campaign="s", coverage=accumulator)
+        trace.note_pool(_ids_at_depth(4, 60), round_index=3, source="frontier_hamming1")
+        report = accumulator.seal()
+        self.assertEqual(report.union_proposed_distinct, 60)
+        self.assertEqual(report.union_selected_distinct, 0)
+        self.assertEqual(trace.records, ())        # coverage only, no per-candidate rows
+        self.assertEqual(report.rounds[0].round_index, 3)
+
+    def test_note_pool_on_an_empty_ballot_is_a_no_op(self) -> None:
+        accumulator = CoverageAccumulator(library=TRPB, eligible_ids=_ids_at_depth(4, 10))
+        trace = BoundedCandidateTrace(campaign="s", coverage=accumulator)
+        trace.note_pool([])
+        self.assertEqual(accumulator.seal().union_proposed_distinct, 0)
+        self.assertEqual(trace.rounds_recorded, 0)
+
     def test_record_round_rejects_ragged_inputs(self) -> None:
         trace = BoundedCandidateTrace(campaign="s")
         with self.assertRaises(ValueError):
@@ -790,6 +848,244 @@ class TestBenchmarkHook(unittest.TestCase):
                 emit_coverage_artifacts(Path(tmp) / "nope", None, eligible_ids=None, stamp="x"),
                 [],
             )
+
+
+class TestCandidatePoolRecorder(unittest.TestCase):
+    """
+    The measurement that decides GENERATION versus ACQUISITION.
+
+    `selection_trace.csv` holds committed picks plus harness rejections, so coverage
+    derived from it is a LOWER BOUND on the ballot. Two different failures produce the
+    same small measured set:
+        (a) a narrow generator that only ever builds a few hundred genotypes;
+        (b) a broad generator whose acquisition function keeps ranking the same shallow
+            candidates first.
+    Only the real pool separates them, so the recorder captures it and every row says
+    which basis it used.
+    """
+
+    def _pool(self) -> list[str]:
+        return _ids_at_depth(4, 300)
+
+    def _fake_selector(self):
+        class _Selector:
+            def __init__(self) -> None:
+                self.candidate_trace = None
+
+        return _Selector()
+
+    def test_attach_gives_the_selector_a_sink(self) -> None:
+        from veritas.diagnostics.benchmark_hook import CandidatePoolRecorder
+
+        recorder = CandidatePoolRecorder(budget=TraceBudget(top_n=3, rejected_sample=2))
+        selector = self._fake_selector()
+        sink = recorder.attach(selector, method="panoptes_default", seed=7)
+        self.assertIs(selector.candidate_trace, sink)
+        self.assertIsInstance(sink, BoundedCandidateTrace)
+
+    def test_the_same_campaign_reuses_one_sink_across_rounds(self) -> None:
+        from veritas.diagnostics.benchmark_hook import CandidatePoolRecorder
+
+        recorder = CandidatePoolRecorder()
+        a = recorder.attach(self._fake_selector(), method="m", seed=1)
+        b = recorder.attach(self._fake_selector(), method="m", seed=1)
+        c = recorder.attach(self._fake_selector(), method="m", seed=2)
+        self.assertIs(a, b)
+        self.assertIsNot(a, c)
+
+    def test_recorder_captures_the_unbounded_pool_while_rows_stay_bounded(self) -> None:
+        from veritas.diagnostics.benchmark_hook import CandidatePoolRecorder
+
+        recorder = CandidatePoolRecorder(budget=TraceBudget(top_n=4, rejected_sample=4))
+        selector = self._fake_selector()
+        sink = recorder.attach(selector, method="panoptes_default", seed=3)
+        pool = self._pool()
+        n = len(pool)
+        sink.record_round(
+            round_index=1,
+            candidates=pool,
+            sources=["gflownet"] * n,
+            predicted_fitness=[0.001 * i for i in range(n)],
+            posterior_uncertainty=[0.05] * n,
+            prior_contribution=[0.0] * n,
+            acquisition_score=[0.001 * i for i in range(n)],
+            pareto_rank=[0] * n,
+            pareto_contribution=[1.0] * n,
+            quality_score=[0.001 * i for i in range(n)],
+            selected_indices=[n - 1, n - 2],
+        )
+        pools = recorder.pools()
+        self.assertEqual(list(pools), [("panoptes_default", "3", 1)])
+        self.assertEqual(len(pools[("panoptes_default", "3", 1)]), 300)
+        self.assertLessEqual(len(recorder.records()), 2 + 4 + 4)
+
+    def test_attaching_to_a_selector_that_cannot_hold_the_attribute_is_harmless(self) -> None:
+        from veritas.diagnostics.benchmark_hook import CandidatePoolRecorder
+
+        class _Slotted:
+            __slots__ = ()
+
+        self.assertIsNone(
+            CandidatePoolRecorder().attach(_Slotted(), method="m", seed=0)
+        )
+
+    def test_pool_coverage_exceeds_the_trace_lower_bound(self) -> None:
+        """
+        The whole point: with the pool captured, an arm that MEASURES 20 variants but
+        GENERATED 300 is reported as generating 300. Without it, 20 is all one sees -
+        and 20 would wrongly implicate generation.
+        """
+        from veritas.diagnostics.benchmark_hook import (
+            CandidatePoolRecorder,
+            emit_coverage_artifacts,
+        )
+
+        import benchmark_panoptes_isolated as iso
+
+        eligible = _ids_at_depth(4, 2_000) + _ids_at_depth(1, 76) + _ids_at_depth(2, 2_166)
+        pool = self._pool()
+        measured = pool[:20]
+
+        outcome = iso.RunOutcome(method="panoptes_default", seed=0, status="completed")
+        for rank, vid in enumerate(measured):
+            outcome.trace.append(
+                iso.TraceRow(method="panoptes_default", seed=0, round_index=1, rank=rank,
+                             variant_id=vid, status="accepted", reason="",
+                             revealed_fitness=0.2)
+            )
+
+        recorder = CandidatePoolRecorder(budget=TraceBudget(top_n=2, rejected_sample=2))
+        sink = recorder.attach(self._fake_selector(), method="panoptes_default", seed=0)
+        n = len(pool)
+        sink.record_round(
+            round_index=1,
+            candidates=pool,
+            sources=["gflownet"] * n,
+            predicted_fitness=[0.0] * n,
+            posterior_uncertainty=[0.0] * n,
+            prior_contribution=[0.0] * n,
+            acquisition_score=[0.0] * n,
+            pareto_rank=[0] * n,
+            pareto_contribution=[1.0] * n,
+            quality_score=[float(i) for i in range(n)],
+            selected_indices=list(range(20)),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            without = emit_coverage_artifacts(
+                run_dir / "a", [outcome], eligible_ids=eligible, stamp="x"
+            )
+            with_pool = emit_coverage_artifacts(
+                run_dir / "b", [outcome], eligible_ids=eligible, stamp="x",
+                proposed_pools=recorder,
+            )
+            payload = json.loads(
+                (run_dir / "b" / "generation_coverage.json").read_text(encoding="utf-8")
+            )
+            with open(run_dir / "b" / "generation_coverage.csv", newline="",
+                      encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertTrue((run_dir / "b" / "candidate_trace.csv").is_file())
+
+        self.assertEqual(without[0].union_distinct, 20)     # trace-only lower bound
+        self.assertEqual(with_pool[0].union_distinct, 300)  # the real ballot
+        self.assertEqual(payload["generated_pool_captured_for"], ["panoptes_default"])
+        self.assertEqual(payload["arms"][0]["pool_source"], "generated_pool")
+        self.assertEqual(rows[0]["pool_source"], "generated_pool")
+
+    def test_an_arm_without_a_captured_pool_is_labelled_a_lower_bound(self) -> None:
+        from veritas.diagnostics.benchmark_hook import emit_coverage_artifacts
+
+        import benchmark_panoptes_isolated as iso
+
+        eligible = _ids_at_depth(4, 2_000)
+        outcome = iso.RunOutcome(method="ridge", seed=0, status="completed")
+        for rank, vid in enumerate(_ids_at_depth(4, 60)):
+            outcome.trace.append(
+                iso.TraceRow(method="ridge", seed=0, round_index=1, rank=rank,
+                             variant_id=vid, status="accepted", reason="",
+                             revealed_fitness=0.3)
+            )
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            emit_coverage_artifacts(run_dir, [outcome], eligible_ids=eligible, stamp="x")
+            with open(run_dir / "generation_coverage.csv", newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+        self.assertEqual(rows[0]["pool_source"], "selection_trace_lower_bound")
+
+
+class TestContinuousValuesAreAlwaysRecorded(unittest.TestCase):
+    """
+    Decision: the 0.5% share floor stays where it is, but every artifact must carry the
+    CONTINUOUS values beside the label so a threshold can be revised later from the
+    written files without re-running a campaign.
+    """
+
+    def _rows_and_payload(self):
+        from veritas.diagnostics.benchmark_hook import emit_coverage_artifacts
+
+        import benchmark_panoptes_isolated as iso
+
+        eligible = _ids_at_depth(4, 40_000) + _ids_at_depth(1, 76) + _ids_at_depth(2, 2_166)
+        outcome = iso.RunOutcome(method="panoptes_default", seed=0, status="completed")
+        for round_index in (1, 2):
+            for rank, vid in enumerate(_ids_at_depth(1, 60)[30 * (round_index - 1):]):
+                outcome.trace.append(
+                    iso.TraceRow(method="panoptes_default", seed=0, round_index=round_index,
+                                 rank=rank, variant_id=vid, status="accepted", reason="",
+                                 revealed_fitness=0.2)
+                )
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp)
+            emit_coverage_artifacts(run_dir, [outcome], eligible_ids=eligible, stamp="x")
+            with open(run_dir / "generation_coverage.csv", newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            payload = json.loads(
+                (run_dir / "generation_coverage.json").read_text(encoding="utf-8")
+            )
+        return rows, payload
+
+    def test_default_share_floor_is_unchanged(self) -> None:
+        self.assertEqual(CollapseThresholds().min_union_share, 0.005)
+
+    def test_every_csv_row_carries_the_continuous_values_and_the_thresholds(self) -> None:
+        rows, _ = self._rows_and_payload()
+        self.assertTrue(rows)
+        for row in rows:
+            for column in (
+                "cumulative_share",
+                "cumulative_mean_proposed_depth",
+                "arm_union_share",
+                "arm_mean_proposed_depth",
+                "arm_depth_reach",
+                "arm_deep_enrichment",
+                "arm_deep_proposed",
+                "arm_deep_universe_share",
+                "threshold_min_union_share",
+                "threshold_min_depth_reach",
+                "threshold_min_deep_enrichment",
+                "threshold_min_proposals_to_judge",
+            ):
+                self.assertIn(column, row)
+                self.assertNotEqual(row[column], "", column)
+                float(row[column])  # parseable, not a label
+            self.assertEqual(float(row["threshold_min_union_share"]), 0.005)
+
+    def test_the_per_round_depth_trajectory_is_recorded(self) -> None:
+        rows, _ = self._rows_and_payload()
+        self.assertEqual([r["round"] for r in rows], ["1", "2"])
+        self.assertEqual([float(r["cumulative_mean_proposed_depth"]) for r in rows], [1.0, 1.0])
+
+    def test_the_json_carries_the_same_continuous_values(self) -> None:
+        _, payload = self._rows_and_payload()
+        diagnosis = payload["arms"][0]["diagnosis"]
+        for key in ("union_share", "mean_proposed_depth", "depth_reach", "deep_enrichment",
+                    "deep_universe_share", "union_distinct", "deep_proposed"):
+            self.assertIn(key, diagnosis)
+        self.assertEqual(diagnosis["thresholds"]["min_union_share"], 0.005)
+        rounds = payload["arms"][0]["coverage"]["rounds"]
+        self.assertIn("cumulative_mean_proposed_depth", rounds[0])
 
 
 class TestDepthReturnLedger(unittest.TestCase):
@@ -1023,6 +1319,117 @@ class TestRealLandscapeDepthShells(unittest.TestCase):
         self.assertAlmostEqual(profile.deep["hit_rate"] * 100, 0.97, places=2)
 
 
+class TestPriorBreakdown(unittest.TestCase):
+    """
+    The structural prior, attributable per candidate.
+
+    It was folded into one scalar inside `compute_biological_prior` and then passed
+    through a tanh, so it could not be recovered afterwards. The decomposition is
+    additive: `compute_biological_prior` keeps its float signature and its six
+    production call sites, and the breakdown is asserted to reproduce it exactly.
+    """
+
+    def setUp(self) -> None:
+        from controller.gatekeeper import Variant
+
+        self.Variant = Variant
+        self.pdb = Path(__file__).resolve().parent.parent / "workers" / "data" / "8EH0.pdb"
+
+    def _cases(self):
+        return [
+            self.Variant(notation="V183A"),
+            self.Variant(notation="V183K:F184D"),      # salt bridge, proximal
+            self.Variant(notation="V183K:F184R"),      # like-charge clash
+            self.Variant(notation="V183A:F184I:V227K:S228G"),
+            self.Variant(notation="WT", mutations=[]),
+        ]
+
+    def test_breakdown_reproduces_the_float_exactly(self) -> None:
+        from workers.math_worker import (
+            compute_biological_prior,
+            compute_biological_prior_breakdown,
+        )
+
+        for variant in self._cases():
+            for invariants in (None, {183, 227}):
+                for pdb in (None, self.pdb if self.pdb.is_file() else None):
+                    expected = compute_biological_prior(
+                        variant, catalytic_invariants=invariants, pdb_path=pdb
+                    )
+                    breakdown = compute_biological_prior_breakdown(
+                        variant, catalytic_invariants=invariants, pdb_path=pdb
+                    )
+                    self.assertEqual(
+                        breakdown.calibrated, expected,
+                        f"{variant.notation} invariants={invariants} pdb={bool(pdb)}",
+                    )
+
+    def test_components_sum_to_the_raw_total(self) -> None:
+        from workers.math_worker import compute_biological_prior_breakdown
+
+        for variant in self._cases():
+            breakdown = compute_biological_prior_breakdown(
+                variant,
+                catalytic_invariants={183},
+                pdb_path=self.pdb if self.pdb.is_file() else None,
+            )
+            self.assertAlmostEqual(
+                breakdown.raw_total,
+                breakdown.electrostatics
+                + breakdown.catalytic_penalty
+                + breakdown.structural_surrogate,
+                places=12,
+            )
+
+    def test_the_components_are_raw_not_calibrated(self) -> None:
+        """
+        The calibration is a tanh, so calibrated components would not sum to the
+        calibrated total. The breakdown is therefore reported pre-calibration.
+        """
+        import workers.math_worker as mw
+
+        saved = mw.PRIOR_CALIBRATION_ENABLED
+        mw.PRIOR_CALIBRATION_ENABLED = True
+        try:
+            # Two invariant hits: raw -9.0, far outside the calibrated range.
+            breakdown = mw.compute_biological_prior_breakdown(
+                self.Variant(notation="V183A:V227K"), catalytic_invariants={183, 227}
+            )
+            self.assertAlmostEqual(breakdown.catalytic_penalty, -9.0)
+            self.assertAlmostEqual(breakdown.raw_total, -9.0)
+            self.assertGreater(breakdown.calibrated, -9.0)
+            self.assertLessEqual(abs(breakdown.calibrated), mw.PRIOR_FITNESS_SPREAD)
+        finally:
+            mw.PRIOR_CALIBRATION_ENABLED = saved
+
+    def test_structural_availability_is_distinguished_from_a_zero_term(self) -> None:
+        from workers.math_worker import compute_biological_prior_breakdown
+
+        without = compute_biological_prior_breakdown(self.Variant(notation="V183A"))
+        self.assertFalse(without.structural_available)
+        self.assertEqual(without.structural_surrogate, 0.0)
+        if self.pdb.is_file():
+            with_structure = compute_biological_prior_breakdown(
+                self.Variant(notation="V183A"), pdb_path=self.pdb
+            )
+            self.assertTrue(with_structure.structural_available)
+
+    def test_the_electrostatic_term_is_isolated(self) -> None:
+        from workers.math_worker import compute_biological_prior_breakdown
+
+        bridge = compute_biological_prior_breakdown(self.Variant(notation="V183K:F184D"))
+        clash = compute_biological_prior_breakdown(self.Variant(notation="V183K:F184R"))
+        self.assertAlmostEqual(bridge.electrostatics, 0.25)
+        self.assertAlmostEqual(clash.electrostatics, -0.30)
+        self.assertEqual(bridge.catalytic_penalty, 0.0)
+
+    def test_trace_carries_the_structural_term_per_candidate(self) -> None:
+        fields = set(CandidateTraceRecord.field_names())
+        self.assertIn("prior_structural", fields)
+        self.assertIn("prior_raw_total", fields)
+        self.assertIn("prior_structural_available", fields)
+
+
 class TestMathWorkerTraceSink(unittest.TestCase):
     """The production selector accepts the sink and fills it per candidate."""
 
@@ -1066,7 +1473,81 @@ class TestMathWorkerTraceSink(unittest.TestCase):
             self.assertTrue(math.isfinite(record.predicted_fitness))
             self.assertTrue(math.isfinite(record.posterior_uncertainty))
             self.assertTrue(math.isfinite(record.prior_contribution))
+            self.assertTrue(math.isfinite(record.prior_structural))
+            self.assertTrue(math.isfinite(record.prior_raw_total))
             self.assertTrue(math.isfinite(record.acquisition_score))
+
+    def test_the_per_candidate_structural_prior_reaches_the_trace(self) -> None:
+        from controller.prompts import ResidueCluster, SearchStrategy
+        from workers.math_worker import select_next_micro_batch
+        from workers.rag_worker import fetch_protein_metadata
+
+        pdb = Path(__file__).resolve().parent.parent / "workers" / "data" / "8EH0.pdb"
+        if not pdb.is_file():
+            self.skipTest("8EH0.pdb not present")
+        metadata = fetch_protein_metadata("TRPB_TM9D8", use_cache=True)
+        strategy = SearchStrategy(
+            target_protein="TrpB",
+            target_accession="TRPB_TM9D8",
+            hypothesis="structural prior attribution",
+            target_clusters=[
+                ResidueCluster(cluster_id="site", positions=[183, 184, 227, 228],
+                               rationale="saturated active site"),
+            ],
+            forbidden_positions=[],
+            max_mutation_depth=2,
+        )
+        trace = BoundedCandidateTrace(
+            campaign="seed0", budget=TraceBudget(top_n=10, rejected_sample=10, seed=0)
+        )
+        select_next_micro_batch(
+            strategy=strategy,
+            wt_sequence=metadata.sequence,
+            evidence=None,
+            batch_size=8,
+            pdb_path=pdb,
+            random_seed=0,
+            candidate_trace=trace,
+        )
+        self.assertTrue(trace.records)
+        self.assertTrue(all(r.prior_structural_available for r in trace.records))
+        # A structural term that is identically zero for every candidate would mean the
+        # plumbing is reporting a constant rather than the per-candidate value.
+        self.assertGreater(len({r.prior_structural for r in trace.records}), 1)
+
+    def test_an_ablated_prior_reports_no_structural_term(self) -> None:
+        from controller.prompts import ResidueCluster, SearchStrategy
+        from workers.math_worker import select_next_micro_batch
+        from workers.rag_worker import fetch_protein_metadata
+
+        metadata = fetch_protein_metadata("P42212", use_cache=True)
+        strategy = SearchStrategy(
+            target_protein="avGFP",
+            target_accession="P42212",
+            hypothesis="prior ablated",
+            target_clusters=[
+                ResidueCluster(cluster_id="c1", positions=[64, 65, 68], rationale="probe"),
+            ],
+            forbidden_positions=[],
+            max_mutation_depth=2,
+        )
+        trace = BoundedCandidateTrace(
+            campaign="seed0", budget=TraceBudget(top_n=5, rejected_sample=0, seed=0)
+        )
+        select_next_micro_batch(
+            strategy=strategy,
+            wt_sequence=metadata.sequence,
+            evidence=None,
+            batch_size=5,
+            random_seed=0,
+            ablate={"prior"},
+            candidate_trace=trace,
+        )
+        self.assertTrue(trace.records)
+        for record in trace.records:
+            self.assertFalse(record.prior_structural_available)
+            self.assertEqual(record.prior_structural, 0.0)
+            self.assertEqual(record.prior_raw_total, 0.0)
 
 
 if __name__ == "__main__":
