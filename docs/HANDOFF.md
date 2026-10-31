@@ -204,32 +204,183 @@ absolute path from the real repo root.
 
 ---
 
-## 5. Open problems — do not start work without an answer
+## 5. The open problems — now answered
 
-These went to an external expert on 2026-10-31. **Do not implement a fix to 1 or 2
-without the answer**; both were deliberately left open because the obvious fixes risk
-either changing what the algorithm is or leaking oracle information.
+All six were resolved by external review on 2026-10-31. These are decisions, not
+suggestions; implement to them.
 
-1. **Candidate-source exhaustion.** Is a locality-constrained acquisition policy
-   *supposed* to degrade to global ranking when its locality is exhausted, or is
-   exhaustion the signal that the policy does not apply to that library? Determines
-   whether `frontier` appears in the cross-protein study at all. The agreed shape of
-   any fix is a **new named policy version**, so existing results stay interpretable
-   as results of the old policy.
-2. **Oracle-free qualification and stopping.** A quantile transfers the *rarity* of a
-   bar but not its *attainability* — on CR6261 the top 0.04% is one variant. Every
-   floor we can construct needs tier information we should not have. And there is **no
-   stopping rule at all**, on targets where the 125 budget already exceeds the entire
-   hit set (HER2 113, eqFP611 82, CR6261 19).
-3. **Covariate and mechanism are on different scales.** The mechanism is relative to
-   the universe's mean depth; the covariate cut is relative to library width.
-4. **Which depth-discount mechanism to test first** — uncertainty calibration, the
-   structural prior, k-DPP, or Pareto. All four correlate with depth, so four
-   correlations will all come back significant and prove nothing.
-5. **What H2 alone can claim.** H1's ordering is substantially pre-published; H2 is
-   one protein.
+### 5.1 Candidate source → `frontier_pool_v2`
 
-Full context: the "Open Problems for Expert Review" doc.
+None of the three options we proposed. **Locality means proximity to promising
+*measured* sequences within the permitted candidate pool — not exactly one
+substitution.** Build an adaptive neighbourhood: multiple measured leads as centres,
+include unmeasured candidates in increasing distance order, expand the radius until a
+shortlist capacity is reached (~250 for a batch of 25 — an engineering starting point,
+not an optimum), deduplicate across leads, deterministic tie-breaking.
+
+Reserve a **fixed, documented** fraction of capacity for candidates outside the local
+neighbourhoods. This is part of the policy, *not* an undocumented fallback that fires
+after failure.
+
+**Three concepts we had conflated must be separate in code and docs:**
+
+| concept | meaning |
+| --- | --- |
+| `design_space` | sequences the library specification permits |
+| `assay_available_pool` | sequences selectable in the experiment |
+| `oracle_evaluable_pool` | sequences with recorded outcomes, for retrospective replay |
+
+They coincide in a fully characterised library and **must not be treated as
+conceptually identical**. Restricting selection to historically measured variants is
+acceptable for retrospective benchmarking only if disclosed as an oracle-coverage
+constraint and applied identically to every method. Missing historical labels do not
+mean a sequence is biologically impossible.
+
+Log the effective search radius. **If most selections come from large distances or the
+broader-search component, the result must not be presented as demonstrating the
+benefit of local optimisation.** Keep `frontier_legacy_v1` alongside `v2`; never
+silently modify the old one and reuse its results.
+
+### 5.2 Qualification → remove landscape quantiles from online decisions entirely
+
+**Our quantile fix is still an oracle leak.** This is a sharper diagnosis than we had.
+A prospective lab cannot know the 99.96th percentile before measuring most of its
+library, and no finite-library adjustment or minimum-count floor fixes that
+information problem. The quantile is fine as a *retrospective evaluation* threshold
+and unacceptable as an *online decision* threshold.
+
+**First implementation — a fixed, oracle-free phase schedule.** Under the
+125-measurement protocol: 25 shared random, then 25 reliability-oriented, then 75
+frontier-oriented. Switch at 50 total measurements. It is independent of the unknown
+fitness distribution, works across assay scales, cannot be satisfied by the initial
+sample, and needs no global-optimum estimate.
+
+It is **deliberately less sophisticated** than what it replaces, and that is the
+point: it removes one source of dataset-specific behaviour so the frontier
+acquisition strategy itself can be evaluated.
+
+Rename it: this is a **`phase_transition`**, not a fitness qualification — reserve
+"qualification" for an actual user-defined experimental target.
+
+Only after benchmarking the fixed schedule, investigate observed-progress switching
+(switch when a measurement improves on the best initial measurement by a predefined
+margin, with a forced checkpoint so it cannot stay in phase one forever). Treat it as
+a separate arm, not an assumed improvement.
+
+Note this makes `v2` a genuinely new arm **on every landscape including TrpB**, since
+the old switch was data-dependent and the new one is positional.
+
+### 5.3 Stopping → out of the primary study
+
+Keep fixed-budget benchmarking as the primary protocol. Changing candidate generation,
+qualification *and* stopping at once makes attribution impossible. There is no
+universally valid oracle-free rule that proves an optimum has been found from a small
+sample.
+
+Two specific warnings. **Do not stop because best fitness has not improved for two
+rounds** — a flat curve can mean local exploitation failure rather than convergence.
+And **budget saturation is a metric problem, not a budget problem**: that 125
+measurements exceeds CR6261's 19-variant hit tier makes raw top-1% count a poor
+endpoint there, to be fixed with measurement-efficiency curves and normalisation
+against the eligible hit-set size. Do not use early stopping to paper over a badly
+defined metric.
+
+### 5.4 Depth covariate → keep the primary, add a secondary
+
+Preserve `depth <= floor(S/2)` as the primary H1 covariate. Add a
+**distribution-relative secondary** — enrichment below the *median eligible-library*
+mutation depth — plus a continuous depth analysis rather than relying on a binary
+split, which can distinguish a smooth relationship from a threshold artifact.
+
+Amending is acceptable because no outcomes have been inspected, provided the original
+is archived, the amendment is dated before analysis, and results are reported
+whichever covariate is more favourable. Do **not** describe the secondary as blind —
+published figures already reveal depth-related patterns.
+
+Limitation to document: a depth distribution computed from historically measured
+variants is a property of the **sampled library**, not of feasible sequence space.
+
+### 5.5 Depth bias → frozen-state counterfactuals
+
+**A correction to our own hypothesis, and it matters.** We suggested that posterior
+variance growing with mutational distance would make an acquisition function prefer
+shallow candidates. **That has the sign backwards.** If the acquisition function
+rewards uncertainty with a positive coefficient, higher variance at depth would
+*favour* deep candidates, not suppress them. Read the actual acquisition equation
+before hypothesising.
+
+Method: freeze one decision state (measured data and outcomes, fitted surrogate,
+candidate pool, prediction vector, structural-prior components, acquisition inputs,
+random state), then evaluate alternate configurations **on that same state**. Trace
+the candidate depth distribution at every stage — generation, prediction, acquisition
+ranking, Pareto, DPP, final batch — and distinguish filtering from score reordering
+from diversity selection.
+
+Four counterfactuals on the frozen state: prior neutralised; uncertainty term varied
+with predictions held fixed; Pareto off; DPP off. Then **one small paired
+full-campaign run** to confirm, because frozen-state interventions cannot show
+long-term effects — changed selections alter future training data.
+
+Primary evidence is controlled ranking differences under one frozen state.
+Correlations are secondary.
+
+**And a reframe:** lower selected depth is not intrinsically bad. If TrpB's shallow
+region is genuinely hit-enriched, shallow preference is *rational* there. The goal is
+not to increase depth; it is to determine when the engine's depth preference aligns
+with the scientific objective.
+
+### 5.6 H2 → narrow claims only
+
+What H2 can support if positive: *"the optimization advantage changes predictably
+between two fitness landscapes defined over the same combinatorial genotype space."*
+
+What it cannot: general superiority across families, a universal depth relationship,
+causality without an intervention isolating depth preference, prospective wet-lab
+effectiveness, or reliable adaptation to new targets. **48 campaigns on one biological
+system are not 48 independent replicates.**
+
+**Our natural-experiment framing was over-read.** Better described as a *paired,
+within-library comparison across biological readouts* than a causal natural
+experiment — the two assays may differ in measurement noise, dynamic range and
+censoring, not only in depth-related geometry. Those alternatives must be evaluated.
+
+Three proteins across two new families supports a **preliminary cross-protein
+characterisation**, not a generalization claim. Report per-protein prominently; any
+aggregate is exploratory.
+
+### 5.7 Genotype architecture → consolidate after the freeze
+
+Separate the production implementation from independent test oracles. **Do not have
+every test call the canonical implementation and compare it against itself.** Retain
+the TrpB and GB1 anchors, the CR9114 reweighting cases, and the WT-omission example as
+golden fixtures, plus property-based tests (round-trip conversion, equivalent mutation
+strings, Hamming symmetry, strict equal-length distance, per-site alphabets, invalid
+residues).
+
+Timing: **not during the frozen study** unless a correctness defect demands it. Do it
+in a branch, run old and new against the full reference corpus, verify identical
+benchmark inputs and eligibility decisions, then remove duplication. Resolve the two
+`LibrarySpec` classes — do not keep two incompatible classes with the same name
+indefinitely.
+
+### 5.8 Arm validity statuses — implement this immediately
+
+Every benchmark arm carries an explicit status, and **only `VALID_COMPLETE` arms at
+equal budget enter the primary matched-budget comparison**:
+
+`VALID_COMPLETE` · `VALID_BUDGET_LIMITED` · `INVALID_NUMERICAL` ·
+`INVALID_PROTOCOL` · `UNAVAILABLE` · `PROVENANCE_UNRESOLVED`
+
+This is how the void results from 2026-10-31 get represented rather than deleted. A
+legacy policy that cannot fill its budget is `VALID_BUDGET_LIMITED` and must not have
+its mean compared directly against fully budgeted methods. ALDE on the seven
+incompatible landscapes is `INVALID_NUMERICAL`. Any numerical fix to ALDE becomes a
+separately named `ALDE_stabilized` that must be validated against the authors'
+behaviour on compatible datasets — a stabilised implementation is not automatically
+the published method.
+
+Full reasoning: the expert review of 2026-10-31, and the "Open Problems for Expert
+Review" doc it responds to.
 
 ---
 
@@ -251,14 +402,44 @@ Candidate-space correctness comes **before** any performance comparison. Running
 development grid first would spend compute characterising a frontier arm that
 structurally cannot fill its budget, then compare it to baselines that fill theirs.
 
-1. Fix candidate-source exhaustion via a versioned policy *(blocked on answer)*
-2. Define qualification and stopping rules that work at both library scales without
-   hidden-oracle information *(blocked on answer)*
-3. Test both mechanisms on constrained CombinGym libraries
-4. Only then re-run the development grid and compare performance
-5. Then H2 on eqFP611 — it is exempt from the anchor-run block and reportable as soon
-   as eqFP611 runs
-6. Then the full cross-protein evaluation
+**Phase 0 — freeze the specifications before any large run.** Define
+`frontier_pool_v2`, the fixed phase schedule, the `design_space` /
+`assay_available_pool` / `oracle_evaluable_pool` semantics, primary and secondary
+depth covariates, and the arm validity statuses. Preserve the legacy policy IDs.
+Commit all of it before viewing any outcome.
+
+**Phase 1 — candidate-space correctness.** Adaptive feasible-pool neighbourhoods,
+multi-lead generation, the documented broader-search component, deduplication,
+budget-fill validation, candidate-source provenance, policy versioning. Required
+tests: saturated 4-site; sparse 10-site HER2-like; a **disconnected Hamming-1 graph**;
+mixed per-position alphabets; a small library with few unmeasured candidates left;
+duplicate lead neighbourhoods; exhaustion; deterministic tie-breaking; exact budget
+fulfilment when feasible; no hidden-outcome access. *Acceptance is correctness, not
+performance — better fitness is a separate hypothesis.*
+
+**Phase 2 — replace qualification** with the fixed phase schedule and
+observed-data-only transition logic, with transition provenance recorded. Keep the
+oracle-quantile behaviour only as a clearly named retrospective legacy analysis.
+
+**Phase 3 — mechanistic diagnostics.** Frozen-state interventions for prior,
+uncertainty term, Pareto and DPP; stage-by-stage depth tracing; then one small paired
+full-campaign confirmation.
+
+**Phase 4 — the independent benchmark.** Validated ridge, random forest, random,
+other compatible baselines, VeritasBio reliability, legacy frontier where applicable,
+and the new adaptive frontier. Full budget accounting, best-so-far, top-1% yield,
+diversity-adjusted yield, tail discovery where resolvable, depth distribution,
+candidate-source behaviour, paired intervals. **Do not tune the new policy on the
+final independent landscapes.**
+
+**Phase 5 — stopping, as a separate pre-registered study.** Not in the primary.
+
+**Phase 6 — consolidate the genotype infrastructure**, after the scientific freeze.
+
+**Explicitly out of scope for now:** a new GP architecture, a foundation model, a new
+interaction-probing algorithm, or an automated policy-learning controller. The next
+contribution comes from understanding and correcting the existing decision process,
+not from adding complexity.
 
 Two smaller items that are not blocked:
 
