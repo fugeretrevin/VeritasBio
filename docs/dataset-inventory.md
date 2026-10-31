@@ -201,12 +201,36 @@ Units and transformation:
 - **No landscape is censored from above:** the maximum value is held by exactly one variant
   everywhere.
 
-> **Caveat on the bnAb floor.** CombinGym's *clean* tables put non-binders at **7.0**, but
-> the *raw* tables (`Data/DMS/Raw/bnAbs_*_raw.csv`) encode them at **6.0**. CombinGym's
-> cleaning step therefore changes the censoring value, and the clean tables also drop rows
-> (CR9114: 48,841 clean rows against a 65,536 variant space). Anything that compares against
-> the published Phillips *et al.* numbers must use one convention consistently. The clean
-> tables are what is used here.
+> **Caveat on the bnAb floor — corrected 2026-10-31.** An earlier version of this caveat
+> stated that the raw tables (`Data/DMS/Raw/bnAbs_*_raw.csv`) encode non-binders at **6.0**
+> and that *"CombinGym's cleaning step therefore changes the censoring value"*. **That is
+> false for every scored bnAb column, on both raw tables**, and is corrected here. Measured
+> column by column at the pinned commit (see [`docs/corpus-audit.md`](corpus-audit.md) §5.3):
+>
+> | raw table | column | n | min | at 6.0 | at 7.0 | scored? |
+> |---|---|---:|---:|---:|---:|---|
+> | `bnAbs_CR9114_raw.csv` | `h1_mean` | 65,094 | **7.0** | **0** | **1,675** | yes |
+> | | `h3_mean` | 65,535 | 6.0 | 58,361 | 0 | no — not curated |
+> | | `fluB_mean` | 65,534 | 6.0 | 65,336 | 0 | no — not curated |
+> | `bnAbs_CR6261_raw.csv` | `h1_mean` | 1,887 | **7.0** | **0** | **214** | yes |
+> | | `h9_mean` | 1,842 | **7.0** | **0** | **372** | yes |
+>
+> So: **no cleaning step changes any censoring value on any of the three bnAb landscapes.**
+> Raw and clean agree on the floor (7.0) and on the mass at it — CR6261-H1 214 and 214,
+> CR6261-H9 372 and 372 (the 213/371 above count the prepared CSVs, which drop the germline
+> row, and CR6261's germline sits at the floor). The **6.0 floor applies to `h3_mean` and
+> `fluB_mean` only**, exactly as the paper's titration boundaries require (10⁻¹¹–10⁻⁶ M for
+> H3 and influenza B, 10⁻¹²–10⁻⁷ M for H1 and H9); neither column is curated into a clean
+> table and neither is scored anywhere. The plural `bnAbs_*_raw.csv` was wrong twice over:
+> `bnAbs_CR6261_raw.csv` carries no `h3_mean` or `fluB_mean` column at all.
+>
+> **The row-dropping half of the old caveat was real and is now fixed.** The clean CR9114
+> workbook did drop 16,695 rows (48,841 against the 65,536 variant space) — an undocumented
+> structural exclusion, named and reversed in [`docs/cr9114-reprep.md`](cr9114-reprep.md);
+> CR9114 is now read from the raw table. CR9114's mass at the floor reads 1,675 raw against
+> 934 clean only because the excluded quadrant was modestly enriched for floored rows, not
+> because the floor value differs. The remaining nine clean tables were diffed against their
+> raw counterparts in `corpus-audit.md` and **drop no row that carries a measurement**.
 
 ---
 

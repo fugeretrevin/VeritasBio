@@ -1,0 +1,531 @@
+﻿====================================================================================================
+GATE 1: the parser reproduces the pre-registered TrpB and GB1 anchors
+====================================================================================================
+  TrpB  sites=4 positions=[183, 184, 227, 228] wt='VFVS'
+        universe 159,999 (expected 159,999)   tier 1,600
+        shallow  168/2242 = 7.4933%   (expected 168/2242 = 7.4933%)   PASS
+        deep     1432/157757 = 0.9077%   enrichment 7.4933x
+  GB1   sites=4 positions=[39, 40, 41, 54] wt='VDGV'
+        universe 149,361 (expected 149,361)   tier 1,494
+        shallow  72/2167 = 3.3226%   (expected 72/2167 = 3.3226%)   PASS
+        deep     1422/147193 = 0.9661%   enrichment 3.3217x
+  both anchors reproduce exactly; proceeding.
+
+====================================================================================================
+creilov   (final_test, 15 sites, primary cut d<=7)
+====================================================================================================
+  design space 184,320  (mixed alphabets [2, 2, 2, 3, 3, 2, 5, 2, 2, 2, 2, 2, 2, 2, 2])
+  RAW   rows in sheet 165,428   keys 165,428   with a measurement 165,428   saturation of design space 89.75%
+  CLEAN rows in sheet 165,428   blank-key rows 0   keys 165,428   with a measurement 165,428
+  SET DIFFERENCE   raw - clean = 0   clean - raw = 0
+  value fidelity on 165,428 shared rows: max |raw - clean| = 0
+  FLOOR   raw min 620.276 (1 rows)   clean min 620.276 (1 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                20        20        20      100.0%        100.0%
+  2               182       176       176      100.0%         96.7%
+  3             1,004       978       978      100.0%         97.4%
+  4             3,767     3,565     3,565      100.0%         94.6%
+  5            10,208     9,603     9,603      100.0%         94.1%
+  6            20,680    19,193    19,193      100.0%         92.8%
+  7            31,944    29,255    29,255      100.0%         91.6%
+  8            37,983    34,230    34,230      100.0%         90.1%
+  9            34,804    30,925    30,925      100.0%         88.9%
+  10           24,398    21,167    21,167      100.0%         86.8%
+  11           12,860    11,022    11,022      100.0%         85.7%
+  12            4,937     4,093     4,093      100.0%         82.9%
+  13            1,304     1,031     1,031      100.0%         79.1%
+  14              212       159       159      100.0%         75.0%
+  15               16        10        10      100.0%         62.5%
+  clean/raw retention over depths with >=10 raw rows: 100.0% to 100.0%  (spread 0.0 pp)
+  => depth-blind
+  raw/design-space retention (library completeness, NOT a cleaning filter): 62.5% to 100.0%  (spread 37.5 pp)
+  COVARIATE   pre-registered 1.875
+    from CLEAN  universe 165,428  tier 1,655  shell 1178/62,790 = 1.8761%  enrichment 1.8753x
+    from RAW    universe 165,428  tier 1,655  shell 1178/62,790 = 1.8761%  enrichment 1.8753x
+    MOVES BY +0.0000 (+0.00% relative)   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 1.9092x
+
+====================================================================================================
+eqfp611_blue   (final_test, 13 sites, primary cut d<=6)
+====================================================================================================
+  design space 8,192  (binary)
+  RAW   rows in sheet 8,192   keys 8,192   with a measurement 8,192   saturation of design space 100.00%
+  CLEAN rows in sheet 8,192   blank-key rows 0   keys 8,192   with a measurement 8,192
+  SET DIFFERENCE   raw - clean = 0   clean - raw = 0
+  value fidelity on 8,192 shared rows: max |raw - clean| = 0
+  FLOOR   raw min 0.0908746 (1 rows)   clean min 0.0908746 (1 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                13        13        13      100.0%        100.0%
+  2                78        78        78      100.0%        100.0%
+  3               286       286       286      100.0%        100.0%
+  4               715       715       715      100.0%        100.0%
+  5             1,287     1,287     1,287      100.0%        100.0%
+  6             1,716     1,716     1,716      100.0%        100.0%
+  7             1,716     1,716     1,716      100.0%        100.0%
+  8             1,287     1,287     1,287      100.0%        100.0%
+  9               715       715       715      100.0%        100.0%
+  10              286       286       286      100.0%        100.0%
+  11               78        78        78      100.0%        100.0%
+  12               13        13        13      100.0%        100.0%
+  13                1         1         1      100.0%        100.0%
+  clean/raw retention over depths with >=10 raw rows: 100.0% to 100.0%  (spread 0.0 pp)
+  => depth-blind
+  raw/design-space retention (library completeness, NOT a cleaning filter): 100.0% to 100.0%  (spread 0.0 pp)
+  COVARIATE   pre-registered 1.854
+    from CLEAN  universe 8,192  tier 82  shell 76/4,095 = 1.8559%  enrichment 1.8541x
+    from RAW    universe 8,192  tier 82  shell 76/4,095 = 1.8559%  enrichment 1.8541x
+    MOVES BY +0.0000 (+0.00% relative)   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 1.8541x
+
+====================================================================================================
+eqfp611_red   (final_test, 13 sites, primary cut d<=6)
+====================================================================================================
+  design space 8,192  (binary)
+  RAW   rows in sheet 8,192   keys 8,192   with a measurement 8,192   saturation of design space 100.00%
+  CLEAN rows in sheet 8,192   blank-key rows 0   keys 8,192   with a measurement 8,192
+  SET DIFFERENCE   raw - clean = 0   clean - raw = 0
+  value fidelity on 8,192 shared rows: max |raw - clean| = 0
+  FLOOR   raw min 0.025218 (1 rows)   clean min 0.025218 (1 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                13        13        13      100.0%        100.0%
+  2                78        78        78      100.0%        100.0%
+  3               286       286       286      100.0%        100.0%
+  4               715       715       715      100.0%        100.0%
+  5             1,287     1,287     1,287      100.0%        100.0%
+  6             1,716     1,716     1,716      100.0%        100.0%
+  7             1,716     1,716     1,716      100.0%        100.0%
+  8             1,287     1,287     1,287      100.0%        100.0%
+  9               715       715       715      100.0%        100.0%
+  10              286       286       286      100.0%        100.0%
+  11               78        78        78      100.0%        100.0%
+  12               13        13        13      100.0%        100.0%
+  13                1         1         1      100.0%        100.0%
+  clean/raw retention over depths with >=10 raw rows: 100.0% to 100.0%  (spread 0.0 pp)
+  => depth-blind
+  raw/design-space retention (library completeness, NOT a cleaning filter): 100.0% to 100.0%  (spread 0.0 pp)
+  COVARIATE   pre-registered 0.634
+    from CLEAN  universe 8,192  tier 82  shell 26/4,095 = 0.6349%  enrichment 0.6343x
+    from RAW    universe 8,192  tier 82  shell 26/4,095 = 0.6349%  enrichment 0.6343x
+    MOVES BY +0.0000 (+0.00% relative)   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 0.6343x
+
+====================================================================================================
+eqfp611_combined   (final_test, 13 sites, primary cut d<=6)
+====================================================================================================
+  design space 8,192  (binary)
+  RAW   rows in sheet 8,192   keys 8,192   with a measurement 8,192   saturation of design space 100.00%
+  CLEAN rows in sheet 8,192   blank-key rows 0   keys 8,192   with a measurement 8,192
+  SET DIFFERENCE   raw - clean = 0   clean - raw = 0
+  value fidelity on 8,192 shared rows: max |raw - clean| = 0
+  FLOOR   raw min 0.154863 (1 rows)   clean min 0.154863 (1 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                13        13        13      100.0%        100.0%
+  2                78        78        78      100.0%        100.0%
+  3               286       286       286      100.0%        100.0%
+  4               715       715       715      100.0%        100.0%
+  5             1,287     1,287     1,287      100.0%        100.0%
+  6             1,716     1,716     1,716      100.0%        100.0%
+  7             1,716     1,716     1,716      100.0%        100.0%
+  8             1,287     1,287     1,287      100.0%        100.0%
+  9               715       715       715      100.0%        100.0%
+  10              286       286       286      100.0%        100.0%
+  11               78        78        78      100.0%        100.0%
+  12               13        13        13      100.0%        100.0%
+  13                1         1         1      100.0%        100.0%
+  clean/raw retention over depths with >=10 raw rows: 100.0% to 100.0%  (spread 0.0 pp)
+  => depth-blind
+  raw/design-space retention (library completeness, NOT a cleaning filter): 100.0% to 100.0%  (spread 0.0 pp)
+  COVARIATE   pre-registered 1.83
+    from CLEAN  universe 8,192  tier 82  shell 75/4,095 = 1.8315%  enrichment 1.8297x
+    from RAW    universe 8,192  tier 82  shell 75/4,095 = 1.8315%  enrichment 1.8297x
+    MOVES BY +0.0000 (+0.00% relative)   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 1.8297x
+
+====================================================================================================
+cr9114_h1   (final_test, 16 sites, primary cut d<=8)
+====================================================================================================
+  design space 65,536  (binary)
+  RAW   rows in sheet 65,536   keys 65,536   with a measurement 65,094   saturation of design space 100.00%
+  CLEAN rows in sheet 48,841   blank-key rows 0   keys 48,841   with a measurement 48,841
+  SET DIFFERENCE   raw - clean = 16,695   clean - raw = 0
+    of the missing: 442 have NO raw measurement; 16,253 DO carry one
+    RECOVERABLE rows (missing yet measured -- the only kind that can move a covariate): 16,253
+    rule 'kept iff the raw measurement is present': NOT exact: 0 FP, 16253 FN
+  value fidelity on 48,841 shared rows: max |raw - clean| = 9.77e-15
+  FLOOR   raw min 7 (1,675 rows)   clean min 7 (934 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                16        16        16      100.0%        100.0%
+  2               120       120       117       97.5%        100.0%
+  3               560       560       538       96.1%        100.0%
+  4             1,820     1,820     1,706       93.7%        100.0%
+  5             4,368     4,368     3,946       90.3%        100.0%
+  6             8,008     8,008     6,936       86.6%        100.0%
+  7            11,440    11,440     9,367       81.9%        100.0%
+  8            12,870    12,870     9,818       76.3%        100.0%
+  9            11,440    11,440     7,984       69.8%        100.0%
+  10            8,008     8,008     5,001       62.5%        100.0%
+  11            4,368     4,368     2,365       54.1%        100.0%
+  12            1,820     1,820       819       45.0%        100.0%
+  13              560       560       196       35.0%        100.0%
+  14              120       120        29       24.2%        100.0%
+  15               16        16         2       12.5%        100.0%
+  16                1         1         0        0.0%        100.0%
+  clean/raw retention over depths with >=10 raw rows: 12.5% to 100.0%  (spread 87.5 pp)
+  => DEPTH-CORRELATED
+  raw/design-space retention (library completeness, NOT a cleaning filter): 100.0% to 100.0%  (spread 0.0 pp)
+  SWEEP over 136 single-site and site-pair exclusion rules -- best four:
+    mutated at BOTH sites 29 and 106                     FP      0  FN    311  symdiff    311
+    mutated at site 29                                   FP  16139  FN     66  symdiff  16205
+    mutated at BOTH sites 29 and 58                      FP   8048  FN   8359  symdiff  16407
+    mutated at BOTH sites 29 and 59                      FP   8052  FN   8363  symdiff  16415
+    any structural rule exact on its own (0 FP, 0 FN)? NO
+  COMPOSITE sweep over 136 rules of the CR9114 form `NOT(mutated at sites ...) AND the measurement is present`:
+    sites ['29', '106']                FP      0  FN      0  symdiff      0
+    sites ['29']                       FP  16139  FN      0  symdiff  16139
+    sites ['29', '58']                 FP   8048  FN   8129  symdiff  16177
+    sites ['29', '95']                 FP   8077  FN   8115  symdiff  16192
+    => EXACT: [['29', '106']]  -- D-8-CLASS STRUCTURAL EXCLUSION, NAMED TO ZERO ERROR
+  COVARIATE   pre-registered 0.584
+    from CLEAN  universe 48,841  tier 489  shell 202/32,444 = 0.6226%  enrichment 0.6219x
+    from RAW    universe 65,094  tier 651  shell 227/38,835 = 0.5845%  enrichment 0.5845x
+    MOVES BY -0.0374 (-6.01% relative)   -> MOVES
+    depth-blind reweighting bound (the fallback when no raw table exists): 0.5622x
+
+====================================================================================================
+cr6261_h1   (final_test, 11 sites, primary cut d<=5)
+====================================================================================================
+  design space 2,048  (binary)
+  RAW   rows in sheet 1,917   keys 1,917   with a measurement 1,887   saturation of design space 93.60%
+  CLEAN rows in sheet 1,887   blank-key rows 0   keys 1,887   with a measurement 1,887
+  SET DIFFERENCE   raw - clean = 30   clean - raw = 0
+    of the missing: 30 have NO raw measurement; 0 DO carry one
+    RECOVERABLE rows (missing yet measured -- the only kind that can move a covariate): 0
+    rule 'kept iff the raw measurement is present': EXACT -- 0 FP, 0 FN
+  value fidelity on 1,887 shared rows: max |raw - clean| = 9.77e-15
+  FLOOR   raw min 7 (214 rows)   clean min 7 (214 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                11        11         9       81.8%        100.0%
+  2                55        54        49       90.7%         98.2%
+  3               165       157       149       94.9%         95.2%
+  4               330       316       308       97.5%         95.8%
+  5               462       435       430       98.9%         94.2%
+  6               462       431       430       99.8%         93.3%
+  7               330       302       302      100.0%         91.5%
+  8               165       151       150       99.3%         91.5%
+  9                55        48        48      100.0%         87.3%
+  10               11        10        10      100.0%         90.9%
+  11                1         1         1      100.0%        100.0%
+  clean/raw retention over depths with >=10 raw rows: 81.8% to 100.0%  (spread 18.2 pp)
+  => DEPTH-CORRELATED
+  raw/design-space retention (library completeness, NOT a cleaning filter): 87.3% to 100.0%  (spread 12.7 pp)
+  SWEEP over 66 single-site and site-pair exclusion rules -- best four:
+    mutated at BOTH sites 75 and 79                      FP    428  FN     19  symdiff    447
+    mutated at BOTH sites 58 and 75                      FP    433  FN     15  symdiff    448
+    mutated at BOTH sites 74 and 75                      FP    423  FN     27  symdiff    450
+    mutated at BOTH sites 74 and 77                      FP    423  FN     27  symdiff    450
+    any structural rule exact on its own (0 FP, 0 FN)? NO
+  COMPOSITE sweep over 66 rules of the CR9114 form `NOT(mutated at sites ...) AND the measurement is present`:
+    sites ['74', '75']                 FP    423  FN      0  symdiff    423
+    sites ['74', '77']                 FP    423  FN      0  symdiff    423
+    sites ['75', '77']                 FP    423  FN      0  symdiff    423
+    sites ['75', '79']                 FP    428  FN      0  symdiff    428
+    => no composite rule reaches 0 FP / 0 FN: NO structural exclusion of the D-8 class
+  NOTE: 0 recoverable rows, so the covariate CANNOT move whatever the depth profile of the membership difference looks like.
+  COVARIATE   pre-registered 0.21
+    from CLEAN  universe 1,887  tier 38  shell 4/945 = 0.4233%  enrichment 0.2102x
+    from RAW    universe 1,887  tier 38  shell 4/945 = 0.4233%  enrichment 0.2102x
+    MOVES BY +0.0000 (+0.00% relative)   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 0.2062x
+
+====================================================================================================
+cr6261_h9   (final_test, 11 sites, primary cut d<=5)
+====================================================================================================
+  design space 2,048  (binary)
+  RAW   rows in sheet 1,917   keys 1,917   with a measurement 1,842   saturation of design space 93.60%
+  CLEAN rows in sheet 1,842   blank-key rows 0   keys 1,842   with a measurement 1,842
+  SET DIFFERENCE   raw - clean = 75   clean - raw = 0
+    of the missing: 75 have NO raw measurement; 0 DO carry one
+    RECOVERABLE rows (missing yet measured -- the only kind that can move a covariate): 0
+    rule 'kept iff the raw measurement is present': EXACT -- 0 FP, 0 FN
+  value fidelity on 1,842 shared rows: max |raw - clean| = 9.59e-14
+  FLOOR   raw min 7 (372 rows)   clean min 7 (372 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                11        11        11      100.0%        100.0%
+  2                55        54        54      100.0%         98.2%
+  3               165       157       151       96.2%         95.2%
+  4               330       316       290       91.8%         95.8%
+  5               462       435       411       94.5%         94.2%
+  6               462       431       419       97.2%         93.3%
+  7               330       302       297       98.3%         91.5%
+  8               165       151       149       98.7%         91.5%
+  9                55        48        48      100.0%         87.3%
+  10               11        10        10      100.0%         90.9%
+  11                1         1         1      100.0%        100.0%
+  clean/raw retention over depths with >=10 raw rows: 91.8% to 100.0%  (spread 8.2 pp)
+  => depth-blind
+  raw/design-space retention (library completeness, NOT a cleaning filter): 87.3% to 100.0%  (spread 12.7 pp)
+  SWEEP over 66 single-site and site-pair exclusion rules -- best four:
+    mutated at BOTH sites 75 and 77                      FP    407  FN     56  symdiff    463
+    mutated at BOTH sites 59 and 75                      FP    418  FN     49  symdiff    467
+    mutated at BOTH sites 30 and 75                      FP    417  FN     51  symdiff    468
+    mutated at BOTH sites 58 and 75                      FP    421  FN     48  symdiff    469
+    any structural rule exact on its own (0 FP, 0 FN)? NO
+  COMPOSITE sweep over 66 rules of the CR9114 form `NOT(mutated at sites ...) AND the measurement is present`:
+    sites ['75', '77']                 FP    407  FN      0  symdiff    407
+    sites ['74', '77']                 FP    411  FN      0  symdiff    411
+    sites ['74', '75']                 FP    412  FN      0  symdiff    412
+    sites ['30', '75']                 FP    417  FN      0  symdiff    417
+    => no composite rule reaches 0 FP / 0 FN: NO structural exclusion of the D-8 class
+  NOTE: 0 recoverable rows, so the covariate CANNOT move whatever the depth profile of the membership difference looks like.
+  COVARIATE   pre-registered 0.0
+    from CLEAN  universe 1,842  tier 37  shell 0/917 = 0.0000%  enrichment 0.0000x
+    from RAW    universe 1,842  tier 37  shell 0/917 = 0.0000%  enrichment 0.0000x
+    MOVES BY +0.0000 (relative n/a (clean is 0))   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 0.0000x
+
+====================================================================================================
+hiv1_protease   (reserve, 11 sites, primary cut d<=5)
+====================================================================================================
+  design space 4,608  (mixed alphabets [2, 2, 2, 2, 2, 3, 2, 2, 3, 2, 2])
+  RAW   rows in sheet 1,175   keys 1,175   with a measurement 1,175   saturation of design space 25.50%
+  CLEAN rows in sheet 1,175   blank-key rows 0   keys 1,175   with a measurement 1,175
+  SET DIFFERENCE   raw - clean = 0   clean - raw = 0
+  value fidelity on 1,175 shared rows: max |raw - clean| = 0
+  FLOOR   raw min -3.33874 (1 rows)   clean min -3.33874 (1 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                13        13        13      100.0%        100.0%
+  2                76        67        67      100.0%         88.2%
+  3               264       176       176      100.0%         66.7%
+  4               606       290       290      100.0%         47.9%
+  5               966       305       305      100.0%         31.6%
+  6             1,092       213       213      100.0%         19.5%
+  7               876        86        86      100.0%          9.8%
+  8               489        23        23      100.0%          4.7%
+  9               181         1         1      100.0%          0.6%
+  10               40         0         0           -          0.0%
+  11                4         0         0           -          0.0%
+  clean/raw retention over depths with >=10 raw rows: 100.0% to 100.0%  (spread 0.0 pp)
+  => depth-blind
+  raw/design-space retention (library completeness, NOT a cleaning filter): 0.0% to 100.0%  (spread 100.0 pp)
+  COVARIATE   pre-registered None
+    from CLEAN  universe 1,175  tier 59  shell 58/851 = 6.8155%  enrichment 1.3573x
+    from RAW    universe 1,175  tier 59  shell 58/851 = 6.8155%  enrichment 1.3573x
+    MOVES BY +0.0000 (+0.00% relative)   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 2.3394x
+
+====================================================================================================
+rhla_rls   (reserve, 11 sites, primary cut d<=5)
+====================================================================================================
+  design space 663,552  (mixed alphabets [2, 4, 3, 8, 3, 2, 4, 6, 4, 3, 2])
+  RAW   rows in sheet 2,346   keys 2,346   with a measurement 2,346   saturation of design space 0.35%
+  CLEAN rows in sheet 2,346   blank-key rows 0   keys 2,346   with a measurement 2,346
+  SET DIFFERENCE   raw - clean = 0   clean - raw = 0
+  value fidelity on 2,346 shared rows: max |raw - clean| = 0
+  FLOOR   raw min 0.000634383 (1 rows)   clean min 0.000634383 (1 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                30        30        30      100.0%        100.0%
+  2               392       356       356      100.0%         90.8%
+  3             2,952     1,959     1,959      100.0%         66.4%
+  4            14,262         0         0           -          0.0%
+  5            46,476         0         0           -          0.0%
+  6           104,324         0         0           -          0.0%
+  7           161,376         0         0           -          0.0%
+  8           168,625         0         0           -          0.0%
+  9           113,382         0         0           -          0.0%
+  10           44,172         0         0           -          0.0%
+  11            7,560         0         0           -          0.0%
+  clean/raw retention over depths with >=10 raw rows: 100.0% to 100.0%  (spread 0.0 pp)
+  => depth-blind
+  raw/design-space retention (library completeness, NOT a cleaning filter): 0.0% to 100.0%  (spread 100.0 pp)
+  COVARIATE   pre-registered None
+    from CLEAN  universe 2,346  tier 47  shell 46/2,345 = 1.9616%  enrichment 0.9791x
+    from RAW    universe 2,346  tier 47  shell 46/2,345 = 1.9616%  enrichment 0.9791x
+    MOVES BY +0.0000 (+0.00% relative)   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 0.9822x
+
+====================================================================================================
+rhla_pct_rha   (reserve, 11 sites, primary cut d<=5)
+====================================================================================================
+  design space 663,552  (mixed alphabets [2, 4, 3, 8, 3, 2, 4, 6, 4, 3, 2])
+  RAW   rows in sheet 2,346   keys 2,346   with a measurement 2,346   saturation of design space 0.35%
+  CLEAN rows in sheet 2,346   blank-key rows 0   keys 2,346   with a measurement 2,346
+  SET DIFFERENCE   raw - clean = 0   clean - raw = 0
+  value fidelity on 2,346 shared rows: max |raw - clean| = 0
+  FLOOR   raw min 0.191052 (1 rows)   clean min 0.191052 (1 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                30        30        30      100.0%        100.0%
+  2               392       356       356      100.0%         90.8%
+  3             2,952     1,959     1,959      100.0%         66.4%
+  4            14,262         0         0           -          0.0%
+  5            46,476         0         0           -          0.0%
+  6           104,324         0         0           -          0.0%
+  7           161,376         0         0           -          0.0%
+  8           168,625         0         0           -          0.0%
+  9           113,382         0         0           -          0.0%
+  10           44,172         0         0           -          0.0%
+  11            7,560         0         0           -          0.0%
+  clean/raw retention over depths with >=10 raw rows: 100.0% to 100.0%  (spread 0.0 pp)
+  => depth-blind
+  raw/design-space retention (library completeness, NOT a cleaning filter): 0.0% to 100.0%  (spread 100.0 pp)
+  COVARIATE   pre-registered None
+    from CLEAN  universe 2,346  tier 47  shell 47/2,345 = 2.0043%  enrichment 1.0004x
+    from RAW    universe 2,346  tier 47  shell 47/2,345 = 2.0043%  enrichment 1.0004x
+    MOVES BY +0.0000 (+0.00% relative)   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 1.0003x
+
+====================================================================================================
+rhla_rha   (reserve, 11 sites, primary cut d<=5)
+====================================================================================================
+  design space 663,552  (mixed alphabets [2, 4, 3, 8, 3, 2, 4, 6, 4, 3, 2])
+  RAW   rows in sheet 2,346   keys 2,346   with a measurement 2,346   saturation of design space 0.35%
+  CLEAN rows in sheet 2,346   blank-key rows 0   keys 2,346   with a measurement 2,346
+  SET DIFFERENCE   raw - clean = 0   clean - raw = 0
+  value fidelity on 2,346 shared rows: max |raw - clean| = 0
+  FLOOR   raw min 0.000982873 (1 rows)   clean min 0.000982873 (1 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                30        30        30      100.0%        100.0%
+  2               392       356       356      100.0%         90.8%
+  3             2,952     1,959     1,959      100.0%         66.4%
+  4            14,262         0         0           -          0.0%
+  5            46,476         0         0           -          0.0%
+  6           104,324         0         0           -          0.0%
+  7           161,376         0         0           -          0.0%
+  8           168,625         0         0           -          0.0%
+  9           113,382         0         0           -          0.0%
+  10           44,172         0         0           -          0.0%
+  11            7,560         0         0           -          0.0%
+  clean/raw retention over depths with >=10 raw rows: 100.0% to 100.0%  (spread 0.0 pp)
+  => depth-blind
+  raw/design-space retention (library completeness, NOT a cleaning filter): 0.0% to 100.0%  (spread 100.0 pp)
+  COVARIATE   pre-registered None
+    from CLEAN  universe 2,346  tier 47  shell 47/2,345 = 2.0043%  enrichment 1.0004x
+    from RAW    universe 2,346  tier 47  shell 47/2,345 = 2.0043%  enrichment 1.0004x
+    MOVES BY +0.0000 (+0.00% relative)   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 1.0003x
+
+====================================================================================================
+sacas9   (reserve, 8 sites, primary cut d<=4)
+====================================================================================================
+  design space 1,296  (mixed alphabets [2, 2, 3, 3, 3, 2, 2, 3])
+  RAW   rows in sheet 1,296   keys 1,296   with a measurement 1,296   saturation of design space 100.00%
+  CLEAN rows in sheet 1,296   blank-key rows 0   keys 1,296   with a measurement 1,296
+  SET DIFFERENCE   raw - clean = 0   clean - raw = 0
+  value fidelity on 1,296 shared rows: max |raw - clean| = 1.11e-16
+  FLOOR   raw min -0.380342 (1 rows)   clean min -0.380342 (1 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                12        12        12      100.0%        100.0%
+  2                62        62        62      100.0%        100.0%
+  3               180       180       180      100.0%        100.0%
+  4               321       321       321      100.0%        100.0%
+  5               360       360       360      100.0%        100.0%
+  6               248       248       248      100.0%        100.0%
+  7                96        96        96      100.0%        100.0%
+  8                16        16        16      100.0%        100.0%
+  clean/raw retention over depths with >=10 raw rows: 100.0% to 100.0%  (spread 0.0 pp)
+  => depth-blind
+  raw/design-space retention (library completeness, NOT a cleaning filter): 100.0% to 100.0%  (spread 0.0 pp)
+  COVARIATE   pre-registered None
+    from CLEAN  universe 1,296  tier 65  shell 45/575 = 7.8261%  enrichment 1.5604x
+    from RAW    universe 1,296  tier 65  shell 45/575 = 7.8261%  enrichment 1.5604x
+    MOVES BY +0.0000 (+0.00% relative)   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 1.5604x
+
+====================================================================================================
+spcas9   (reserve, 8 sites, primary cut d<=4)
+====================================================================================================
+  design space 27,648  (mixed alphabets [2, 2, 2, 12, 9, 4, 4, 2])
+  RAW   rows in sheet 952   keys 952   with a measurement 597   saturation of design space 3.44%
+  CLEAN rows in sheet 5,748   blank-key rows 5,151   keys 597   with a measurement 597
+  SET DIFFERENCE   raw - clean = 355   clean - raw = 0
+    of the missing: 355 have NO raw measurement; 0 DO carry one
+    RECOVERABLE rows (missing yet measured -- the only kind that can move a covariate): 0
+    rule 'kept iff the raw measurement is present': EXACT -- 0 FP, 0 FN
+  value fidelity on 597 shared rows: max |raw - clean| = 0
+  FLOOR   raw min -2.09996 (1 rows)   clean min -2.09996 (1 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                29         7         7      100.0%         24.1%
+  2               317        24        23       95.8%          7.6%
+  3             1,697        64        54       84.4%          3.8%
+  4             4,955       148       115       77.7%          3.0%
+  5             8,231       252       162       64.3%          3.1%
+  6             7,759       267       138       51.7%          3.4%
+  7             3,867       153        80       52.3%          4.0%
+  8               792        36        17       47.2%          4.5%
+  clean/raw retention over depths with >=10 raw rows: 47.2% to 95.8%  (spread 48.6 pp)
+  => DEPTH-CORRELATED
+  raw/design-space retention (library completeness, NOT a cleaning filter): 3.0% to 24.1%  (spread 21.2 pp)
+  SWEEP over 36 single-site and site-pair exclusion rules -- best four:
+    mutated at BOTH sites 926 and 1060                   FP    211  FN    150  symdiff    361
+    mutated at BOTH sites 848 and 1060                   FP    150  FN    233  symdiff    383
+    mutated at BOTH sites 926 and 1003                   FP    274  FN    109  symdiff    383
+    mutated at BOTH sites 1003 and 1060                  FP    218  FN    165  symdiff    383
+    any structural rule exact on its own (0 FP, 0 FN)? NO
+  COMPOSITE sweep over 36 rules of the CR9114 form `NOT(mutated at sites ...) AND the measurement is present`:
+    sites ['661', '848']               FP    142  FN      0  symdiff    142
+    sites ['848', '1060']              FP    150  FN      0  symdiff    150
+    sites ['695', '848']               FP    152  FN      0  symdiff    152
+    sites ['661', '695']               FP    156  FN      0  symdiff    156
+    => no composite rule reaches 0 FP / 0 FN: NO structural exclusion of the D-8 class
+  NOTE: 0 recoverable rows, so the covariate CANNOT move whatever the depth profile of the membership difference looks like.
+  COVARIATE   pre-registered None
+    from CLEAN  universe 597  tier 30  shell 25/199 = 12.5628%  enrichment 2.5000x
+    from RAW    universe 597  tier 30  shell 25/199 = 12.5628%  enrichment 2.5000x
+    MOVES BY +0.0000 (+0.00% relative)   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 3.0729x
+
+====================================================================================================
+gb1_combingym   (development, 4 sites, primary cut d<=2)
+====================================================================================================
+  design space 160,000  (mixed alphabets [20, 20, 20, 20])
+  RAW   rows in sheet 149,361   keys 149,361   with a measurement 149,361   saturation of design space 93.35%
+  CLEAN rows in sheet 149,361   blank-key rows 0   keys 149,361   with a measurement 149,361
+  SET DIFFERENCE   raw - clean = 0   clean - raw = 0
+  value fidelity on 149,361 shared rows: max |raw - clean| = 0
+  FLOOR   raw min 0 (29,477 rows)   clean min 0 (29,477 rows)   identical: True
+  depth      expected       raw     clean   clean/raw  raw/expected
+  0                 1         1         1      100.0%        100.0%
+  1                76        76        76      100.0%        100.0%
+  2             2,166     2,091     2,091      100.0%         96.5%
+  3            27,436    26,019    26,019      100.0%         94.8%
+  4           130,321   121,174   121,174      100.0%         93.0%
+  clean/raw retention over depths with >=10 raw rows: 100.0% to 100.0%  (spread 0.0 pp)
+  => depth-blind
+  raw/design-space retention (library completeness, NOT a cleaning filter): 93.0% to 100.0%  (spread 7.0 pp)
+  COVARIATE   pre-registered None
+    from CLEAN  universe 149,361  tier 1,494  shell 72/2,167 = 3.3226%  enrichment 3.3217x
+    from RAW    universe 149,361  tier 1,494  shell 72/2,167 = 3.3226%  enrichment 3.3217x
+    MOVES BY +0.0000 (+0.00% relative)   -> DOES NOT MOVE
+    depth-blind reweighting bound (the fallback when no raw table exists): 3.3295x
+
+================================================================================================================
+SUMMARY
+================================================================================================================
+landscape         level             raw    clean   diff  cause                       depth-corr       covariate
+---------------------------------------------------------------------------------------------------------------
+creilov           final_test    165,428  165,428      0  none - identical sets                -   does not move
+eqfp611_blue      final_test      8,192    8,192      0  none - identical sets                -   does not move
+eqfp611_red       final_test      8,192    8,192      0  none - identical sets                -   does not move
+eqfp611_combined  final_test      8,192    8,192      0  none - identical sets                -   does not move
+cr9114_h1         final_test     65,536   48,841 16,695  D-8 STRUCTURAL EXCL.               YES   MOVES -0.0374
+cr6261_h1         final_test      1,917    1,887     30  absent measurement        yes(vacuous)   does not move
+cr6261_h9         final_test      1,917    1,842     75  absent measurement                  no   does not move
+hiv1_protease     reserve         1,175    1,175      0  none - identical sets                -    not pre-reg.
+rhla_rls          reserve         2,346    2,346      0  none - identical sets                -    not pre-reg.
+rhla_pct_rha      reserve         2,346    2,346      0  none - identical sets                -    not pre-reg.
+rhla_rha          reserve         2,346    2,346      0  none - identical sets                -    not pre-reg.
+sacas9            reserve         1,296    1,296      0  none - identical sets                -    not pre-reg.
+spcas9            reserve           952      597    355  absent measurement        yes(vacuous)    not pre-reg.
+gb1_combingym     development   149,361  149,361      0  none - identical sets                -    not pre-reg.
