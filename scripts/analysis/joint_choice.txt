@@ -1,0 +1,46 @@
+========================================================================================================
+A SINGLE CONFIGURATION FOR BOTH LANDSCAPES
+========================================================================================================
+  Significance is against the shipped engine on the same 48 seeds, per landscape.
+  'worst t' is the weaker of the two, so a configuration only qualifies if it wins
+  on BOTH. Ranked by that worst case.
+
+  removed                                GB1       d      t     TrpB       d      t   worst t
+  dkl,gflownet                         24.56  +10.08   5.93    50.29   +5.35   5.69      5.69
+  dkl,dpp,gflownet                     23.33   +8.85   4.77    52.92   +7.98   7.05      4.77
+  dkl,dpp                              20.58   +6.10   4.06    49.83   +4.90   4.53      4.06
+  dpp,gflownet                         20.69   +6.21   3.70    49.15   +4.21   4.00      3.70
+  dkl                                  19.81   +5.33   3.63    48.00   +3.06   2.95      2.95
+  dpp                                  20.17   +5.69   3.38    48.06   +3.12   2.79      2.79
+  dkl,dpp,gflownet,pareto              21.15   +6.67   3.96    46.40   +1.46   1.15      1.15
+  dpp,gflownet,pareto                  20.92   +6.44   4.00    45.58   +0.65   0.55      0.55
+
+  CHOICE: remove dkl,gflownet  (keep prior,dpp,pareto)
+    GB1    14.48 -> 24.56
+      vs random         shipped  +13.04 (BETTER)   ->   +23.12 (t=+16.28, BETTER)
+      vs ridge          shipped  -19.17 (WORSE )   ->    -9.08 (t= -3.67, WORSE)
+      vs random_forest  shipped  -21.85 (WORSE )   ->   -11.77 (t= -4.86, WORSE)
+      vs alde           shipped  -23.35 (WORSE )   ->   -13.27 (t= -6.81, WORSE)
+    TRPB   44.94 -> 50.29
+      vs random         shipped  +43.81 (BETTER)   ->   +49.17 (t=+67.56, BETTER)
+      vs ridge          shipped  +13.65 (BETTER)   ->   +19.00 (t= +7.87, BETTER)
+      vs random_forest  shipped  +13.31 (BETTER)   ->   +18.67 (t= +6.47, BETTER)
+      vs alde           shipped  +12.10 (BETTER)   ->   +17.46 (t= +7.10, BETTER)
+
+========================================================================================================
+DOES THE PRIOR BUY TOP-1% YIELD BY GIVING UP THE EXTREME TAIL?
+========================================================================================================
+  Across the 16 subsets that keep the prior vs the 16 that remove it, holding the
+  other four components balanced by construction.
+
+  GB1   (ALDE reaches the top 0.01% in 54% of campaigns)
+    prior KEPT   (16 subsets): top-1%  20.20   P(top 0.01%)   4.2%
+    prior REMOVED(16 subsets): top-1%  20.24   P(top 0.01%)   2.0%
+    across all 32 subsets, corr(top-1% yield, P(top 0.01%)) = +0.411
+    best tail any configuration reaches: 12% (at top-1% 23.96) vs ALDE's 54%
+
+  TRPB   (ALDE reaches the top 0.01% in 25% of campaigns)
+    prior KEPT   (16 subsets): top-1%  45.87   P(top 0.01%)   1.2%
+    prior REMOVED(16 subsets): top-1%  29.02   P(top 0.01%)   3.8%
+    across all 32 subsets, corr(top-1% yield, P(top 0.01%)) = -0.267
+    best tail any configuration reaches: 10% (at top-1% 34.98) vs ALDE's 25%

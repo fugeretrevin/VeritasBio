@@ -1,0 +1,66 @@
+========================================================================================================
+IS THE ADVANTAGE MANY DISTINCT SOLUTIONS, OR ONE DENSE BASIN?
+========================================================================================================
+  Held-out seeds 48-95. Hits = measured variants at/above each run's own top-1% threshold.
+  Hamming distance is over the 4 variable sites. Sequence separation is a proxy, not
+  evidence of functional independence.
+
+========================================================================================================
+TRPB   threshold 0.349399   1,600 of 159,999 variants are top-1%
+  library varies (183, 184, 227, 228) (WT VFVS); 1,600 top-1% library members
+========================================================================================================
+  CEILING - the same greedy rule on the whole top-1% set:   d>=2: 166   d>=3: 20   d>=4: 4
+  No method can report more diversity-adjusted hits than this, at any budget.
+
+  arm                              hits  meanHam  1-clust  %largest    d>=2    d>=3    d>=4   redund  %ceil d2
+  random                           1.69     3.24     1.69     70.8%    1.69    1.56    1.28    1.00x      1.0%
+  ridge                           31.86     2.02     1.09     99.6%    6.95    2.27    1.11    4.58x      4.2%
+  random_forest                   30.40     1.82     1.07     99.0%    4.48    1.74    1.10    6.79x      2.7%
+  alde                            31.74     2.14     1.15     99.4%    7.70    2.46    1.22    4.12x      4.6%
+  reliability                     45.21     2.74     4.52     88.8%   16.29    5.23    2.21    2.77x      9.8%
+  reliability - dkl,gflownet      50.44     2.66     3.29     92.6%   14.88    5.08    2.10    3.39x      9.0%
+  frontier                        40.50     2.03     1.94     93.1%    5.17    2.06    1.46    7.84x      3.1%
+  frontier - dkl,gflownet         33.48     1.86     1.75     97.5%    3.81    1.62    1.27    8.78x      2.3%
+  frontier - dkl,dpp,gflownet     35.02     1.87     1.38     98.9%    3.75    1.42    1.15    9.34x      2.3%
+
+    1-clust = single-linkage groups joining hits that differ at <=1 of 4 sites
+    redund  = raw hits per diversity-adjusted hit at d>=2; 1.00 means every hit is distinct
+
+  Lead over the strongest held-out baseline (ridge), raw vs diversity-adjusted:
+  arm                                        raw            d>=2            d>=3            d>=4
+  reliability                       +13.43 t+6.3    +9.30*t+19.0    +2.98*t+15.8    +1.09*t+12.0
+  reliability - dkl,gflownet        +18.84 t+8.4    +7.93*t+17.1    +2.84*t+13.7    +0.98*t+10.3
+  frontier                           +8.75 t+3.5    -1.64* t-2.6    -0.14  t-0.5    +0.36* t+3.7
+  frontier - dkl,gflownet            +1.82 t+0.9    -3.00* t-6.6    -0.59* t-3.3    +0.18* t+2.4
+  frontier - dkl,dpp,gflownet        +3.20 t+1.5    -3.16* t-5.9    -0.82* t-4.0    +0.05  t+0.6
+    * |t| >= 2.01
+
+========================================================================================================
+GB1   threshold 2.15238   1,494 of 149,360 variants are top-1%
+  library varies (39, 40, 41, 54) (WT VDGV); 1,494 top-1% library members
+========================================================================================================
+  CEILING - the same greedy rule on the whole top-1% set:   d>=2: 146   d>=3: 24   d>=4: 5
+  No method can report more diversity-adjusted hits than this, at any budget.
+
+  arm                              hits  meanHam  1-clust  %largest    d>=2    d>=3    d>=4   redund  %ceil d2
+  random                           1.69     3.58     1.69     72.1%    1.69    1.59    1.41    1.00x      1.2%
+  ridge                           32.79     2.02     1.21     98.7%    6.60    2.38    1.21    4.97x      4.5%
+  random_forest                   37.72     1.82     1.13     99.6%    4.85    1.72    1.09    7.78x      3.3%
+  alde                            36.40     2.14     1.11     97.9%    7.47    2.49    1.32    4.87x      5.1%
+  reliability                     15.02     2.54     3.77     63.3%    6.00    2.85    1.73    2.50x      4.1%
+  reliability - dkl,gflownet      26.85     2.44     3.60     81.6%    9.35    3.42    1.88    2.87x      6.4%
+  frontier                        37.21     1.84     1.06     99.8%    4.56    1.69    1.15    8.16x      3.1%
+  frontier - dkl,gflownet         37.10     1.87     1.25     99.2%    4.81    1.92    1.27    7.71x      3.3%
+  frontier - dkl,dpp,gflownet     35.96     1.88     1.17     99.5%    4.81    1.90    1.21    7.47x      3.3%
+
+    1-clust = single-linkage groups joining hits that differ at <=1 of 4 sites
+    redund  = raw hits per diversity-adjusted hit at d>=2; 1.00 means every hit is distinct
+
+  Lead over the strongest held-out baseline (random_forest), raw vs diversity-adjusted:
+  arm                                        raw            d>=2            d>=3            d>=4
+  reliability                       -22.49 t-7.9    +1.19* t+2.8    +1.15* t+7.6    +0.66* t+6.8
+  reliability - dkl,gflownet        -10.64 t-3.7    +4.57*t+11.2    +1.68* t+9.3    +0.81* t+7.5
+  frontier                           +0.26 t+0.1    -0.21  t-0.6    -0.02  t-0.2    +0.06  t+1.1
+  frontier - dkl,gflownet            +0.15 t+0.1    +0.04  t+0.1    +0.21  t+1.5    +0.19* t+2.9
+  frontier - dkl,dpp,gflownet        -1.04 t-0.4    +0.04  t+0.1    +0.19  t+1.4    +0.13  t+2.0
+    * |t| >= 2.01

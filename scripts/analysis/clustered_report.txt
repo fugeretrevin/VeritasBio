@@ -1,0 +1,60 @@
+================================================================================================================
+SEED-CLUSTERED RE-ANALYSIS OF THE 2^5 FACTORIAL
+================================================================================================================
+  The unit of independence is the seed, not the background-pair difference.
+  'naive t' is the original statistic, kept so the inflation factor is visible.
+
+================================================================================================================
+GB1  —  main effects of REMOVING each component
+================================================================================================================
+  component    effect  clustered t        95% CI (seeds)  seeds +/-   naive t  inflation  n diffs
+  prior         +0.04         0.07        [-1.14, +1.22]      23/24      0.11      1.56x      768
+  dkl           +3.83         5.04        [+2.35, +5.29]      36/12      9.15      1.82x      768
+  dpp           +1.63         2.61        [+0.42, +2.84]      28/20      4.14      1.59x      768
+  gflownet      +1.12         2.08        [+0.05, +2.16]      32/15      3.18      1.53x      768
+  pareto        -0.57        -2.11        [-1.09, -0.04]      20/28     -1.97      0.93x      768
+
+  GB1  —  two-way interactions, seed-clustered
+  pair                     effect  clustered t        95% CI (seeds)   naive t
+  dkl x dpp                 -6.49        -6.77        [-8.37, -4.60]     -8.98  significant
+  dpp x pareto              -2.10        -3.50        [-3.32, -0.98]     -3.82  significant
+  prior x pareto            -1.70        -2.84        [-2.85, -0.52]     -3.08  significant
+  dkl x pareto              -1.77        -2.84        [-3.00, -0.58]     -3.02  significant
+  dkl x gflownet            +1.76         2.30        [+0.33, +3.27]      2.60  significant
+  prior x gflownet          -1.61        -1.66        [-3.45, +0.30]     -2.34  ns
+  prior x dpp               +1.01         0.96        [-1.00, +3.06]      1.39  ns
+  prior x dkl               +0.98         0.96        [-1.03, +2.96]      1.31  ns
+  gflownet x pareto         -0.54        -0.95        [-1.64, +0.59]     -1.01  ns
+  dpp x gflownet            -0.42        -0.55        [-1.88, +1.08]     -0.69  ns
+
+================================================================================================================
+TRPB  —  main effects of REMOVING each component
+================================================================================================================
+  component    effect  clustered t        95% CI (seeds)  seeds +/-   naive t  inflation  n diffs
+  prior        -16.85       -13.80      [-19.27, -14.48]       1/47    -36.48      2.64x      768
+  dkl           +2.27         4.28        [+1.27, +3.30]      35/13      7.15      1.67x      768
+  dpp           -0.11        -0.16        [-1.54, +1.18]      29/19     -0.30      1.87x      768
+  gflownet      +1.36         4.20        [+0.74, +1.99]      34/13      5.72      1.36x      768
+  pareto        -5.66       -16.40        [-6.33, -4.98]       1/47    -21.97      1.34x      768
+
+  TRPB  —  two-way interactions, seed-clustered
+  pair                     effect  clustered t        95% CI (seeds)   naive t
+  prior x dpp               -7.49        -5.98        [-9.95, -5.16]    -10.88  significant
+  dpp x pareto              +1.90         3.09        [+0.73, +3.10]      3.87  significant
+  dkl x pareto              -1.58        -2.97        [-2.65, -0.55]     -3.36  significant
+  dkl x gflownet            +0.98         2.05        [+0.02, +1.88]      2.13  significant
+  prior x pareto            -0.73        -1.01        [-2.09, +0.65]     -1.43  ns
+  dpp x gflownet            +0.40         0.72        [-0.67, +1.48]      0.86  ns
+  dkl x dpp                 +0.14         0.17        [-1.41, +1.78]      0.24  ns
+  gflownet x pareto         +0.04         0.09        [-0.81, +0.88]      0.10  ns
+  prior x dkl               -0.06        -0.06        [-2.11, +2.08]     -0.10  ns
+  prior x gflownet          -0.03        -0.04        [-1.20, +1.12]     -0.05  ns
+
+================================================================================================================
+WHAT SURVIVES THE CORRECTION
+================================================================================================================
+  The held-out confirmation of 'remove dkl,gflownet' is UNAFFECTED: it is a single
+  pair of arms compared over 48 independent seeds, correctly paired, one difference
+  per seed. GB1 +11.83 (t=5.75) and TrpB +5.23 (t=5.57) stand as reported.
+  The same is true of every arm-vs-baseline comparison and of the McNemar tail tests.
+  Only the factorial main effects and interactions were affected.
