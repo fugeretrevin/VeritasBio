@@ -13,6 +13,9 @@ Standard five-role triage vocabulary (`needs-triage`, `needs-info`, `ready-for-a
 ### Domain Docs
 Single-context domain architecture documentation layout. See [`docs/agents/domain.md`](docs/agents/domain.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
+### Environment Paths — READ BEFORE REPORTING ANYTHING MISSING
+Gitignored results directories, the dataset directory and external checkouts resolve against the **real repository root**, not the worktree you may be standing in; every failed resolution must name the paths it checked; an explicitly supplied path is a constraint, never a hint. Run `python -m veritas.paths` before concluding that something is not on disk. See [`docs/agents/paths.md`](docs/agents/paths.md).
+
 ## Natural Conversational Skill Routing
 
 You do not need the user to type slash commands. Recognize conversational intent and seamlessly adopt the appropriate skill flow:
