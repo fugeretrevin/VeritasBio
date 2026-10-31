@@ -1507,7 +1507,22 @@ PRIOR_CALIBRATION_ENABLED: bool = False
 DPP_DIVERSITY_ENABLED: bool = False
 TWO_STAGE_GP_ENABLED: bool = False
 
-ABLATABLE_COMPONENTS: Set[str] = {"dpp", "gflownet", "pareto", "dkl", "prior"}
+#   acquisition - Expected Improvement + Thompson; falls back to a greedy posterior
+#                 mean, removing the uncertainty-seeking term
+#   spatial     - the 3D contact term inside the featurisation; the encoding keeps
+#                 its property deltas and epistatic cross-terms, and the structural
+#                 cross-term falls back to 1D sequence distance. NOT a full
+#                 replacement of the encoding by one-hot, which is separate work.
+#   generator   - combinatorial generation + lead recombination; falls back to
+#                 uniform sampling of eligible untested candidates
+#
+# The first five do not account for the engine's advantage - they sum to about -13.7
+# top-1% against a 44.5-hit edge over random, and two are positive - so these three
+# widen the set rather than deepening it over stages already known to be minor.
+ABLATABLE_COMPONENTS: Set[str] = {
+    "dpp", "gflownet", "pareto", "dkl", "prior",
+    "acquisition", "spatial", "generator",
+}
 
 
 class _AblationSkip(Exception):
@@ -1810,6 +1825,13 @@ def select_next_micro_batch(
         except Exception as sm_err:
             logger.debug("SpatialContactMap initialization skipped: %s", sm_err)
 
+    if "spatial" in ablated:
+        # Dropped AFTER the structure is resolved, so it is actually removed rather
+        # than overwritten a line later, and dropped once here so every featurisation
+        # call site downstream sees it. The encoding then uses 1D sequence distance
+        # for its structural cross-term, which is its documented no-structure path.
+        spatial_map = None
+
     # Step 1: Featurize training evidence if present (with residual prior mean subtraction)
     X_train_list: List[np.ndarray] = []
     y_train_list: List[float] = []
@@ -1936,9 +1958,21 @@ def select_next_micro_batch(
         candidates = generate_candidate_variants(
             strategy,
             wt_sequence,
-            lead_variants=lead_variants,
+            # Ablating the generator removes lead recombination, which is the only
+            # route to depth >= 3 in this function, so the pool becomes singles and
+            # pairs proposed without reference to what has already been measured.
+            lead_variants=None if "generator" in ablated else lead_variants,
             catalytic_invariants=invariants_set,
         )
+        if "generator" in ablated and candidates:
+            # Uniform shuffle, so downstream stages receive the same pool SIZE with no
+            # ordering information from the generator. This isolates HOW candidates are
+            # proposed from how many, which a smaller pool would confound.
+            _gen_rng = np.random.RandomState(
+                (random_seed if random_seed is not None else 42) + 9173
+            )
+            order = _gen_rng.permutation(len(candidates))
+            candidates = [candidates[int(i)] for i in order]
 
     # Which stage generated which candidate. Recorded before the sampler extends the
     # pool, because candidate GENERATION is the stage that failed on TrpB and a trace
@@ -2114,7 +2148,12 @@ def select_next_micro_batch(
     ei_scores = compute_expected_improvement(means, stds, f_best=f_best, xi=exploration_xi)
     max_pool_ei = float(np.max(ei_scores)) if len(ei_scores) > 0 else 0.0
 
-    if acquisition_mode == "hybrid_thompson":
+    if "acquisition" in ablated:
+        # Greedy posterior mean: the surrogate is kept and the uncertainty-seeking is
+        # removed, so this isolates exploration from prediction. If the advantage
+        # survives, exploration is not what earns it.
+        acquisition_scores = np.asarray(means, dtype=np.float64)
+    elif acquisition_mode == "hybrid_thompson":
         z_sample = np.random.normal(0.0, 1.0, size=len(means))
         thompson_sample = means + stds * z_sample
         acquisition_scores = ei_scores + 0.3 * np.maximum(thompson_sample - f_best, 0.0)

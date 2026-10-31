@@ -603,7 +603,13 @@ class TestManifestIdentifiesConfiguration(unittest.TestCase):
         )
 
     def test_every_ablation_arm_of_a_sweep_is_uniquely_identified(self) -> None:
-        """The 2^5 joint design: 32 arms, 32 distinct manifests, no outcomes consulted."""
+        """Every arm of the full joint design gets a distinct manifest.
+
+        The expected count is derived from the component set rather than written as a
+        literal. It was 32 when five components existed, and hardcoding that made the
+        test fail on the addition of a sixth - reporting a component-count change as a
+        fingerprint collision, which is a different and much more alarming defect.
+        """
         import itertools
 
         fingerprints = {}
@@ -616,7 +622,12 @@ class TestManifestIdentifiesConfiguration(unittest.TestCase):
                     f"arm {combo} collides with {fingerprints.get(fingerprint)}",
                 )
                 fingerprints[fingerprint] = combo
-        self.assertEqual(len(fingerprints), 32)
+        expected = 2 ** len(bench.ABLATABLE_COMPONENTS)
+        self.assertEqual(
+            len(fingerprints), expected,
+            f"{len(bench.ABLATABLE_COMPONENTS)} components give {expected} arms; "
+            f"got {len(fingerprints)} distinct fingerprints",
+        )
 
     def test_differing_prior_spread_is_also_distinguishable(self) -> None:
         base = _build_manifest(args=_args())

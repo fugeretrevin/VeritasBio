@@ -159,7 +159,17 @@ MANIFEST_SCHEMA_VERSION = "2.0.0"
 # The selector components `--ablate-components` may disable. Mirrors
 # workers.math_worker.ABLATABLE_COMPONENTS; run_self_checks asserts the two agree, so a
 # name this CLI accepts can never be one the engine rejects half way through a round.
-ABLATABLE_COMPONENTS: Tuple[str, ...] = ("dkl", "dpp", "gflownet", "pareto", "prior")
+# Imported, not duplicated. This was a hardcoded five-name tuple while the error
+# message it feeds already told the user the names "must match
+# workers.math_worker.ABLATABLE_COMPONENTS" - so adding a component to the engine
+# left the benchmark rejecting it with a message pointing at the list that did
+# contain it. Sorted for a canonical arm identity in the manifest.
+def _ablatable_components() -> Tuple[str, ...]:
+    from workers.math_worker import ABLATABLE_COMPONENTS as _engine_components
+    return tuple(sorted(_engine_components))
+
+
+ABLATABLE_COMPONENTS: Tuple[str, ...] = _ablatable_components()
 
 # Process exit codes. Distinct so CI can tell a configuration refusal from a crash.
 EXIT_OK = 0
@@ -2643,6 +2653,8 @@ class PanoptesSelector(Selector):
         ablation: str = "none",
         prior_spread: Optional[float] = None,
         ablate_components: Optional[Set[str]] = None,
+        acquisition_mode: Optional[str] = None,
+        exploration_xi: Optional[float] = None,
     ) -> None:
         super().__init__(seed)
         # Ablation arm. 'none' is the shipped configuration; the others restore one
@@ -2653,6 +2665,14 @@ class PanoptesSelector(Selector):
         # in the arm's notes so a run folder states what it measured - without this,
         # five ablation folders are distinguishable only by their timestamps.
         self.ablate_components = set(ablate_components or ())
+        # None means leave the engine default, so an unset flag changes nothing.
+        self.acquisition_mode = acquisition_mode
+        self.exploration_xi = exploration_xi
+        if acquisition_mode is not None or exploration_xi is not None:
+            self.notes.append(
+                f"ACQUISITION mode={acquisition_mode or 'engine default'} "
+                f"xi={exploration_xi if exploration_xi is not None else 'engine default'}"
+            )
         if self.ablate_components:
             self.notes.append(
                 f"ABLATED_COMPONENTS={','.join(sorted(self.ablate_components))}"
@@ -3163,6 +3183,10 @@ class PanoptesSelector(Selector):
             random_seed=(self.seed or 0) * 1000 + round_index,
             apply_auxiliary_objective_weights=self.ablation in ("aux-weighted", "legacy"),
             ablate=self.ablate_components or None,
+            **({} if self.acquisition_mode is None
+               else {"acquisition_mode": self.acquisition_mode}),
+            **({} if self.exploration_xi is None
+               else {"exploration_xi": float(self.exploration_xi)}),
             candidate_pool=candidate_pool,
             # Write-only diagnostics sink, attached by the harness. This is what
             # captures the engine's REAL ballot: the selection trace holds committed
@@ -5507,6 +5531,8 @@ def build_selector_factories(
                                  ablation=args.ablation,
                                  prior_spread=args.prior_spread,
                                  ablate_components=set(c),
+                                 acquisition_mode=args.acquisition_mode,
+                                 exploration_xi=args.exploration_xi,
                                  qualify_threshold=q, probe_after_qualify=pr)
             )
             detail = (
@@ -6011,6 +6037,22 @@ examples:
             "silently marked UNAVAILABLE because ALDE_PATH was unset, and two complete "
             "benchmark runs were quoted from that report. Use this only to probe what an "
             "environment can run - a run made with it is not a complete comparison."
+        ),
+    )
+    parser.add_argument(
+        "--acquisition-mode", default=None,
+        help=(
+            "Acquisition for the production arm. 'hybrid_thompson' is the engine "
+            "default (EI + 0.3 * Thompson); any other value selects EI alone. Unset "
+            "leaves the engine default. See also --ablate-components acquisition, "
+            "which replaces it with a greedy posterior mean."
+        ),
+    )
+    parser.add_argument(
+        "--exploration-xi", type=float, default=None,
+        help=(
+            "Expected-Improvement exploration bonus. Engine default 0.01; 0.0 removes "
+            "the bonus while keeping EI. Unset leaves the engine default."
         ),
     )
     parser.add_argument("--provenance-mode", choices=("require", "acknowledge-unflagged"), default="require",
