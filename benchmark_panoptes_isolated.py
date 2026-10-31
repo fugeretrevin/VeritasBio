@@ -316,7 +316,11 @@ class LibrarySpec:
                 f"{len(self.allowed_aa_per_position)} per-position alphabets"
             )
         return LibraryDesign(
-            target_id=self.accession,
+            # `accession` is optional: a landscape wired from its own spec plus the WT
+            # sequence registry has no UniProt entry, and inventing one would be a
+            # per-target literal of exactly the kind resolve_library_metadata avoids.
+            # The library key identifies the target unambiguously when none exists.
+            target_id=self.accession or self.key,
             assay_id=self.key,
             wild_type_sequence=wild_type_sequence,
             positions=tuple(
