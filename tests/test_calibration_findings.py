@@ -52,21 +52,40 @@ def test_the_proposed_quantile_preserves_trpbs_behaviour():
     assert qualifying_count(trpb.fitness, absolute) == 64
 
 
-@pytest.mark.parametrize(
-    "key,expected_qualifying",
-    [
-        ("her2", 1_027),          # ~9% of the library clears an absolute 0.70
-        ("cr6261_h1", 1_886),     # the whole library: 0.70 is below the 7.0 assay floor
-        ("cr6261_h9", 1_841),
-        ("cr9114_h1", 48_840),
-        ("creilov", 165_427),
-    ],
-)
-def test_the_legacy_absolute_gates_nothing_outside_trpb(key, expected_qualifying):
+@pytest.mark.parametrize("key", ["cr6261_h1", "cr6261_h9", "cr9114_h1", "creilov"])
+def test_the_legacy_absolute_admits_the_entire_library(key):
+    """On these four, an absolute 0.70 lies below the global minimum.
+
+    The bnAb landscapes are -log10(Kd) with an assay floor of 7.0 and CreiLOV's
+    minimum is 2.793, so every variant clears 0.70 and the qualification stage is a
+    no-op. Asserted as the PROPERTY - qualifying count equals the universe - rather
+    than as a frozen row count: CR9114's table was legitimately re-prepared from
+    48,840 to 65,093 rows mid-project, and a snapshot assertion failed for a data
+    change that does not touch what this test is about.
+    """
     ls = load_landscape(key)
     n_q = qualifying_count(ls.fitness, LEGACY_QUALIFY_ABSOLUTE)
-    assert n_q == expected_qualifying
+    assert n_q == ls.n_universe, (
+        f"{key}: expected the legacy absolute to gate nothing, "
+        f"but {n_q} of {ls.n_universe} qualified"
+    )
+    assert min(ls.fitness) > LEGACY_QUALIFY_ABSOLUTE
     # Which is why every seed logged "qualified before round 1".
+    p = p_qualify_in_draw(n_universe=ls.n_universe, n_qualifying=n_q, n_draws=N_INITIAL)
+    assert p == pytest.approx(1.0)
+
+
+def test_the_legacy_absolute_admits_most_of_her2():
+    """HER2 is the intermediate case: the bar gates, but far too loosely.
+
+    Pinned as a fraction band rather than an exact count, for the same reason as
+    above. The observed figure at the time of writing is 1,027 of 11,276 = 9.11%.
+    """
+    ls = load_landscape("her2")
+    n_q = qualifying_count(ls.fitness, LEGACY_QUALIFY_ABSOLUTE)
+    assert 0 < n_q < ls.n_universe
+    assert 0.05 < n_q / ls.n_universe < 0.15
+    # Enough that a random 25-variant start almost always qualifies already.
     p = p_qualify_in_draw(n_universe=ls.n_universe, n_qualifying=n_q, n_draws=N_INITIAL)
     assert p > 0.9
 
