@@ -2935,6 +2935,13 @@ class RoundMetrics:
     #: rule; anything else names a secondary rule, so a reader can see which measurements
     #: did not come from the policy under test.
     selection_source: str = "policy"
+    #: How many DISTINCT variants the arm proposed this round, before eligibility filtering
+    #: and before any backfill. This is the number that exposes a collapsed surrogate.
+    distinct_proposed: int = 0
+    #: True when the arm could not propose distinct candidates - a null arm. Kept separate
+    #: from a short batch because an eligibility shortfall is recoverable by backfilling
+    #: and this is not.
+    degenerate_proposals: bool = False
 
 
 @dataclass
@@ -3034,17 +3041,22 @@ def run_single(
 
         accepted: List[str] = []
         seen_this_batch: Set[str] = set()
-        # Every id this round has already passed judgement on, so a re-offered candidate
-        # is not traced twice when the batch is backfilled below.
+        # Every id this round has already passed judgement on, in an EARLIER attempt. It is
+        # used only to skip re-offers between attempts; within a single proposal list the
+        # ordinary rules apply, so a duplicate inside one batch is still rejected as
+        # `duplicate_within_batch` rather than quietly dropped.
         judged: Set[str] = set()
+        n_rejected = 0
 
-        def _judge(candidates: Sequence[str]) -> int:
+        def _judge(candidates: Sequence[str], skip: Set[str]) -> int:
             """Applies the rejection rules to a proposal list. Returns how many it accepted."""
+            nonlocal n_rejected
             before = len(accepted)
             for rank, variant_id in enumerate(candidates):
-                if variant_id in judged:
-                    # Already decided earlier this round. A longer ranked list repeats its
-                    # own prefix, so this is a re-offer, not a new duplicate.
+                if variant_id in skip:
+                    # Already decided in an earlier attempt this round. A longer ranked
+                    # list repeats its own prefix, so this is a re-offer, not a new
+                    # candidate, and it must not be traced or counted twice.
                     continue
                 judged.add(variant_id)
                 if len(accepted) >= view.batch_size:
@@ -3058,6 +3070,7 @@ def run_single(
                 else:
                     reason = ""
                 if reason:
+                    n_rejected += 1
                     outcome.trace.append(TraceRow(
                         method=selector.name, seed=seed, round_index=round_index, rank=rank,
                         variant_id=variant_id, status="rejected", reason=reason,
@@ -3068,9 +3081,32 @@ def run_single(
                 accepted.append(variant_id)
             return len(accepted) - before
 
-        _judge(proposals)
+        _judge(proposals, set())
         first_pass_accepted = len(accepted)
         selection_source = getattr(selector, "last_batch_source", "policy")
+
+        # DEGENERATE PROPOSALS are a different failure from ineligible ones, and only the
+        # latter is recoverable.
+        #
+        # An arm whose surrogate has collapsed proposes the SAME variant over and over -
+        # ALDE on a library with an unobserved amino acid at some position produces an
+        # all-NaN prediction vector and np.argmax returns index 0 forever, so its
+        # "trajectory" is one variant picked 100 times. Backfilling must not paper over
+        # that: topping such an arm up to a full batch from its own degenerate ranking
+        # would convert a detectable null arm into a plausible-looking result. So the
+        # distinctness of what the arm PROPOSED is measured here, before any fill, and
+        # recorded per round.
+        distinct_proposed = len(set(proposals))
+        degenerate_proposals = bool(proposals) and distinct_proposed <= max(
+            1, len(proposals) // 10
+        )
+        if degenerate_proposals:
+            logger.warning(
+                "%s seed %d round %d: DEGENERATE PROPOSALS - %d proposal(s) but only %d "
+                "distinct variant(s). An arm that cannot propose distinct candidates is a "
+                "null arm, not a short batch; this is NOT backfilled.",
+                selector.name, seed, round_index, len(proposals), distinct_proposed,
+            )
 
         # Backfill a short batch from the SAME policy.
         #
@@ -3089,7 +3125,7 @@ def run_single(
         # at once and is left alone - its rounds are not re-requestable, and those baselines
         # already fill their budget.
         backfill_attempts = 0
-        if campaign is None and len(accepted) < view.batch_size:
+        if campaign is None and not degenerate_proposals and len(accepted) < view.batch_size:
             untested_remaining = len(view.variant_ids) - len(revealed.measured)
             overshoot = 0
             for backfill_attempts in range(1, BACKFILL_MAX_ATTEMPTS + 1):
@@ -3101,6 +3137,7 @@ def run_single(
                 # observed rejection rate with room to spare and is still bounded.
                 overshoot = max(overshoot * 2, missing * 4, 8)
                 request = min(view.batch_size + overshoot, max(untested_remaining, 1))
+                already_judged = set(judged)
                 try:
                     more = selector.propose(round_index, request, view, revealed)
                 except Exception as exc:
@@ -3110,7 +3147,7 @@ def run_single(
                         selector.name, seed, round_index, request, type(exc).__name__, exc,
                     )
                     break
-                gained = _judge(more)
+                gained = _judge(more, already_judged)
                 if len(accepted) >= view.batch_size:
                     break
                 if gained == 0 and not [v for v in more if v not in judged]:
@@ -3148,10 +3185,18 @@ def run_single(
                 selector.notes.append(f"observe failed at round {round_index}: {exc}")
 
         round_seconds = time.perf_counter() - round_started
-        # Counted from everything judged this round, not from the first proposal list:
+        # Counted as rejections were traced, not as `len(proposals) - len(accepted)`:
         # with backfilling, `len(proposals)` is no longer the number of candidates offered.
-        rejected = len(judged) - len(accepted)
-        status = "completed" if len(accepted) == view.batch_size else "short_batch"
+        rejected = n_rejected
+        if degenerate_proposals:
+            # A degenerate arm is not a short batch. Saying "short_batch" here would put it
+            # in the same bucket as a recoverable eligibility shortfall, which is exactly
+            # the conflation that let a null arm report success.
+            status = "degenerate_proposals"
+        elif len(accepted) == view.batch_size:
+            status = "completed"
+        else:
+            status = "short_batch"
         outcome.rounds.append(RoundMetrics(
             method=selector.name, seed=seed, round_index=round_index,
             n_measurements=len(revealed.measured), best_fitness=revealed.best(),
@@ -3167,12 +3212,19 @@ def run_single(
             status=status,
             failure_reason=(
                 "" if status == "completed"
+                else f"DEGENERATE: {len(proposals)} proposal(s) but only "
+                     f"{distinct_proposed} distinct variant(s). The arm could not propose "
+                     f"distinct candidates, so this is a null arm rather than a "
+                     f"recoverable short batch, and it was NOT backfilled"
+                if status == "degenerate_proposals"
                 else f"{rejected} selection(s) rejected; backfill exhausted after "
                      f"{backfill_attempts} attempt(s) at {len(accepted)}/{view.batch_size}"
             ),
             backfill_attempts=backfill_attempts,
             backfill_added=backfill_added,
             selection_source=selection_source,
+            distinct_proposed=distinct_proposed,
+            degenerate_proposals=degenerate_proposals,
         ))
         if status == "short_batch":
             logger.warning(
@@ -5513,7 +5565,7 @@ examples:
                               f"policy to frontier search (default: "
                               f"{DEFAULT_QUALIFY_QUANTILE}). Resolved to an absolute fitness "
                               f"inside the Evaluator, from the same values array that defines "
-                              f"the top-1% threshold, so the two bars cannot drift apart. The "
+                              f"the top-1%% threshold, so the two bars cannot drift apart. The "
                               f"default reproduces the old absolute 0.70 on TrpB exactly "
                               f"(0.6998, the identical 64 variants). Mutually exclusive with "
                               f"--qualify-threshold.")
@@ -5522,7 +5574,7 @@ examples:
                               f"switches to frontier search - an EXPLICIT OVERRIDE of "
                               f"--qualify-quantile. There is no default: an absolute is not "
                               f"comparable across landscapes (the pre-fix default "
-                              f"{LEGACY_QUALIFY_ABSOLUTE} admitted 100% of three of them), so "
+                              f"{LEGACY_QUALIFY_ABSOLUTE} admitted 100%% of three of them), so "
                               f"it has to be asked for. Under deterministic reveal, P(reach "
                               f"threshold) and time-to-threshold are preserved pathwise, "
                               f"because every trajectory is identical to the baseline until "
