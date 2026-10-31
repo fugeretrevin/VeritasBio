@@ -89,6 +89,11 @@ PINNED_FILES: Tuple[Tuple[str, str, int], ...] = (
      "97f2a084427e67b4d017654bb7ad158f55a2c9cc", 149858),
     ("Data/DMS/Clean/bnAbs_CR9114_H1_clean.xlsx",
      "d9895e1f7e6a25fba4c6e2aced9843f7ad4a7000", 4403699),
+    # Added after the clean workbook was found to drop a whole quadrant of the CR9114 space
+    # (see the LANDSCAPES note for cr9114_h1). Same pinned commit; this EXTENDS hash coverage
+    # to the file now actually scored against, and alters no existing entry.
+    ("Data/DMS/Raw/bnAbs_CR9114_raw.csv",
+     "8ac7352f539a9b4d33330dc3764b0ff5e86a094d", 12258680),
     ("Data/DMS/Clean/CreiLOV_clean.xlsx",
      "9ad0d8ff3cf7c742280c84befcd33780a575b31d", 26263997),
     ("Data/DMS/Clean/eqFP611_clean.xlsx",
@@ -159,11 +164,22 @@ LANDSCAPES: Dict[str, Dict[str, Any]] = {
         "file": "Data/DMS/Clean/CreiLOV_clean.xlsx", "sheet": "Sheet1",
         "variant_col": "genotype", "depth_col": "n_mut", "value_col": "mean",
     },
+    # CR9114 is read from the RAW table, not the curated workbook. The workbook silently
+    # excludes every genotype carrying both F29S (site 1) and Y106S (site 16) - 16,384 of
+    # them, a whole quadrant of the 2^16 space - regardless of affinity. The exclusion is
+    # depth-correlated in closed form (a depth-k genotype carries two specified mutations
+    # with probability k(k-1)/240), so retention falls from 100% at depth 1 to 12.5% at
+    # depth 15 and 0% at depth 16, which removes the fully matured antibody the landscape is
+    # about. The raw table is at the SAME pinned commit, so this changes what is read, not
+    # the pin. See docs/cr9114-reprep.md and the §6 amendment in
+    # docs/preregistration-cross-protein.md.
     "cr9114_h1": {
         "protein": "CR9114", "family": "immunoglobulin heavy-chain variable domain",
         "phenotype": "binding_H1", "sites": 16, "level": "final_test",
-        "file": "Data/DMS/Clean/bnAbs_CR9114_H1_clean.xlsx", "sheet": "CR91114-h1",
-        "variant_col": "genotype", "depth_col": "n_mut", "value_col": "h1_mean",
+        "file": "Data/DMS/Raw/bnAbs_CR9114_raw.csv", "sheet": None,
+        # `genotype` is the 16-bit site indicator string, so Hamming over it is exactly
+        # Hamming over the library sites; `som_mut` is the somatic-mutation count, i.e. depth.
+        "variant_col": "genotype", "depth_col": "som_mut", "value_col": "h1_mean",
     },
     "cr6261_h1": {
         "protein": "CR6261", "family": "immunoglobulin heavy-chain variable domain",
@@ -343,6 +359,29 @@ def read_xlsx(path: Path, sheet: Optional[str] = None
     return name, header, rows[1:]
 
 
+def read_csv_table(path: Path) -> Tuple[str, List[str], List[List[Optional[str]]]]:
+    """Reads a pinned .csv table. Used for the raw CombinGym tables, which are CSV while
+    the curated ones are .xlsx. `csv` is standard library, so this adds no dependency."""
+    import csv as _csv
+
+    with open(path, "r", encoding="utf-8-sig", newline="") as handle:
+        reader = _csv.reader(handle)
+        rows = [row for row in reader]
+    if not rows:
+        return path.name, [], []
+    header = [c.strip() for c in rows[0]]
+    return path.name, header, [list(r) for r in rows[1:]]
+
+
+def read_table(path: Path, sheet: Optional[str]
+               ) -> Tuple[str, List[str], List[List[Optional[str]]]]:
+    """Dispatches on extension so a landscape can be read from either a curated .xlsx
+    workbook or a raw .csv table at the same pinned commit."""
+    if path.suffix.lower() == ".csv":
+        return read_csv_table(path)
+    return read_xlsx(path, sheet)
+
+
 # ==================================================================================
 # Statistics
 # ==================================================================================
@@ -388,7 +427,7 @@ def landscape_stats(key: str, spec: Dict[str, Any], corpus_dir: Path) -> Dict[st
         out["note"] = "sheet/column names not yet resolved; see the protocol's open items"
         return out
 
-    sheet_name, header, rows = read_xlsx(path, spec["sheet"])
+    sheet_name, header, rows = read_table(path, spec["sheet"])
     out["sheet"] = sheet_name
     try:
         variant_at = header.index(spec["variant_col"])
@@ -660,6 +699,26 @@ def cmd_verify(args: argparse.Namespace) -> int:
         print(f"PIN MISMATCH: lock pins {document.get('corpus', {}).get('commit')!r}, "
               f"this script pins {CORPUS['commit']!r}", file=sys.stderr)
         return 2
+
+    # Guard against the drift that the CR9114 re-preparation exposed: a landscape repointed
+    # at a file the lock does not cover would be scored against unhashed bytes, and `verify`
+    # would still pass because it only walks the lock.
+    locked = {entry["path"] for entry in document["files"]}
+    uncovered = [rel for rel, _blob, _size in PINNED_FILES if rel not in locked]
+    if uncovered:
+        print(f"LOCK DOES NOT COVER {len(uncovered)} pinned path(s); re-run `record --force`:",
+              file=sys.stderr)
+        for rel in uncovered:
+            print(f"  - {rel}", file=sys.stderr)
+        return 1
+    scored = {spec["file"] for spec in LANDSCAPES.values()}
+    unpinned = sorted(scored - locked)
+    if unpinned:
+        print(f"LANDSCAPES read {len(unpinned)} file(s) that are not in the lock:",
+              file=sys.stderr)
+        for rel in unpinned:
+            print(f"  - {rel}", file=sys.stderr)
+        return 1
 
     failures: List[str] = []
     skipped: List[str] = []

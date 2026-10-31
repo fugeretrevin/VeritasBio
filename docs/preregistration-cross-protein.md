@@ -120,7 +120,7 @@ than one phenotype. `Data/Data_summary.xlsx` has **9 rows, one per protein**;
 | RhlA | activity_RLs, activity_Rha-(C8-C10), activity_%Rha-(C8-C10) | 11 | 663,552 | 2,346 |
 | CreiLOV | fluorescence | 15 | 184,320 | 165,428 |
 | eqFP611 / mTagBFP2 | fluorescence_blue, fluorescence_red, fluorescence_combined | 13 | 8,192 | 8,192 |
-| CR9114 | binding_H1 | 16 | 65,536 | 48,841 |
+| CR9114 | binding_H1 | 16 | 65,536 | 48,841 **(clean workbook; the raw table holds 65,094 — see D-8)** |
 | CR6261 | binding_H1, binding_H9 | 11 | 2,048 | 1,917 |
 | GB1 | binding | 4 | 160,000 | 149,361 |
 
@@ -175,13 +175,34 @@ against.
 | `Data/DMS/Clean/RhlA_clean.xlsx` | 287,350 | `0cb393531ab6fff5fa8f037221d50cf543429dcd` | `d63fdd66be2a9394a89e8321a4e4553d30b2f8b553773d6faddfb5c114c0f876` |
 | `Data/DMS/Clean/SaCas9_clean.xlsx` | 126,881 | `76b854e6ec16c09c99efd2e153f6f2a10154f280` | `8f74ec4bfce62a15e53bde8c381803e6f29bad6603614073233c47bc6f5d8648` |
 | `Data/DMS/Clean/SpCas9_clean.xlsx` | 113,908 | `00ae9e52824b835ddbd09c569630d813df7414b0` | `48283f3ea546aecf67ed00e64831c69a62f6ba858ca5df018a7ce5d49f74c103` |
+| `Data/DMS/Raw/bnAbs_CR9114_raw.csv` | 12,258,680 | `8ac7352f539a9b4d33330dc3764b0ff5e86a094d` | `ee31f8fc26fce2730d2ae772e7a095aa334b4c6c5d8e7fbfe4b4a5a1c9a794fe` |
 
 Nine wild-type FASTA files are pinned on the same terms; their hashes are in the lock file
 rather than inline here because nothing in the analysis depends on reading them by hand.
 
-All **20 pinned files were fetched and verified on 2026-10-31**: every one matches both the
-git blob SHA-1 published by GitHub's tree API for the pinned commit and the SHA-256 recorded
-in the lock file. `verify` exits 0 on the frozen corpus and exits 1 on a single altered byte.
+All **21 pinned files were fetched and verified**: every one matches both the git blob SHA-1
+published by GitHub's tree API for the pinned commit and the SHA-256 recorded in the lock
+file. `verify` exits 0 on the frozen corpus and exits 1 on a single altered byte.
+
+**The last row was added on 2026-10-31 and the pin did not change.** CR9114 is now scored
+against the **raw** table rather than the curated workbook (D-8, §6.9). The raw table sits at
+the **same already-pinned commit** `c5dccd51`, so the amendment changes *which pinned file is
+read*, not what the corpus is. Concretely, and stated this precisely so nobody later suspects
+the freeze was quietly broken:
+
+- the **commit, date and tree SHA of §3.1 are unchanged**;
+- the lock's `corpus` block is **byte-identical** to the version committed at the freeze;
+- **no existing lock entry changed** — all 20 were recomputed from the same local files and
+  came out identical;
+- the lock **gained exactly one entry**, for a file at the same commit, taking it from 20 to
+  21.
+
+Leaving it out was the alternative, and it would have been worse: the lock as frozen recorded
+only the 20 upstream blobs and **no hash of any derived table**, so a landscape repointed at an
+unlisted file would have been scored against bytes outside the freeze while `verify` still
+passed, because `verify` only walked the lock. That hole is now closed in two ways — the raw
+table is pinned, and `verify` fails if `PINNED_FILES` or any landscape's source file is absent
+from the lock (§3.5).
 
 ### 3.5 Making the freeze checkable
 
@@ -199,7 +220,11 @@ machine-readable form of the freeze.
 
 `verify` recomputes both hashes for every pinned file and exits non-zero on any mismatch,
 missing file or size disagreement. It also refuses to run if the lock file's commit
-disagrees with the script's pin, so a silent re-pin cannot pass unnoticed. The script
+disagrees with the script's pin, so a silent re-pin cannot pass unnoticed, and — added
+2026-10-31 after the CR9114 episode showed the gap — it **fails if any pinned path, or any
+file a landscape in the registry reads, is absent from the lock**. Before that guard, a
+landscape repointed at an unlisted file would have been scored against unhashed bytes with
+`verify` still exiting 0. The script
 depends on the standard library only — including its own minimal `.xlsx` reader — because a
 freeze that needs `pandas` and `openpyxl` to be verifiable is a freeze that changes when
 those packages change. The corpus itself is **not** committed (it lands in the gitignored
@@ -220,8 +245,13 @@ is resolved; the rest stand.
 | D-6 | RhlA's `mutant` column is not fixed-width (observed widths 2–17), so it cannot be used as the variant identifier the way eqFP611's `mutant` column can. Its `genotype` column *is* fixed-width (11 residues) and is used instead. | resolved by column choice; recorded so the wrong column is not picked later |
 | D-7 | Column conventions are inconsistent across the corpus: the variant identifier is a 13-residue combo (eqFP611), an 11-residue combo (RhlA), or a full 56-, 99-, 119-, 121-, 1,053- or 1,368-residue sequence (GB1, HIV-1, CreiLOV, the antibodies, the Cas9s); the depth column is `n_mut` or `num_mut`; the value column is `mean`, `h1_mean`, `h9_mean`, `fitness`, `Mean`, `blue`/`red`/`combined` or three named activity columns. | handled by the per-landscape registry in `freeze_cross_protein_corpus.py`; a silent mis-mapping would be invisible, so each landscape's resolved column names are printed in the stats artifact |
 
+| D-8 | **`bnAbs_CR9114_H1_clean.xlsx` silently drops a whole quadrant of the library.** The exclusion filter is exactly `NOT(site 1 AND site 16) AND h1_mean is present`: every genotype carrying **both F29S and Y106S** is removed — **16,384 of them, one quadrant of the 2^16 space** — regardless of affinity, with zero false positives and zero false negatives, and a sweep over all 120 site pairs confirms (1,16) is the unique such pair. The loss is **depth-correlated in closed form**: a depth-k genotype carries two specified mutations with probability C(14,k−2)/C(16,k) = k(k−1)/240, so retention is 1 − k(k−1)/240, predicting **45.0% / 12.5% / 0%** at depths 12 / 15 / 16 against observed **45.0% / 12.5% / 0%**. The consequence worth stating in one sentence: **the fully matured antibody — the actual CR9114, with all 16 somatic mutations — was entirely absent**, because it necessarily carries both excluded mutations. The clean table omitted the antibody the landscape is about. | **Resolved, 2026-10-31.** CR9114 is scored against `Data/DMS/Raw/bnAbs_CR9114_raw.csv` at the same pinned commit (65,094 eligible rows against the workbook's 48,841). See §6.9 and `docs/cr9114-reprep.md`. The clean workbook is no longer read for CR9114. |
+
 Where the summary and the clean file disagree, **the clean file wins**, because the clean
-file is what is read.
+file is what is read — **except for CR9114**, where D-8 showed the clean file to be the
+defective artifact and the raw table is read instead. That exception is the only one, and it
+is a reminder that "the file we read wins" is a tie-breaking rule, not a guarantee that the
+file we read is correct.
 
 ---
 
@@ -339,7 +369,7 @@ Declared before any performance on any of these targets has been examined.
 | `eqfp611_red` | eqFP611 / mTagBFP2 | GFP-like fluorescent protein (Anthozoa) | red fluorescence | 13 | 8,192 |
 | `eqfp611_combined` | eqFP611 / mTagBFP2 | GFP-like fluorescent protein (Anthozoa) | combined | 13 | 8,192 |
 | `creilov` | CreiLOV | LOV / flavin-binding photosensor | fluorescence | 15 | 165,428 |
-| `cr9114_h1` | CR9114 | immunoglobulin heavy-chain variable domain | binding, H1 | 16 | 48,841 |
+| `cr9114_h1` | CR9114 | immunoglobulin heavy-chain variable domain | binding, H1 | 16 | **65,094** (65,093 mutants; raw table, D-8) |
 | `cr6261_h1` | CR6261 | immunoglobulin heavy-chain variable domain | binding, H1 | 11 | 1,887 |
 | `cr6261_h9` | CR6261 | immunoglobulin heavy-chain variable domain | binding, H9 | 11 | 1,842 |
 
@@ -509,7 +539,7 @@ estimate is unusable. Measured on the frozen corpus:
 | eqFP611 combined | 13 (binary) | 91 | 13 | 14.27x (8.53–22.90) | no |
 | eqFP611 red | 13 (binary) | 91 | 0 | 0.00x (0.00–4.05) | no |
 | CreiLOV | 15 (restricted) | 196 | 18 | 9.18x (5.89–14.04) | no |
-| CR9114 H1 | 16 (binary) | 133 | 0 | 0.00x (0.00–2.80) | no |
+| CR9114 H1 | 16 (binary) | 134 | 0 | 0.00x (0.00–2.78) | no |
 | CR6261 H1 | 11 (binary) | 58 | 0 | 0.00x (0.00–3.08) | no |
 | CR6261 H9 | 11 (binary) | 65 | 0 | 0.00x (0.00–2.78) | no |
 
@@ -603,12 +633,12 @@ shallow-shell enrichment, with the development anchors shown for scale:
 | 2 | `eqfp611_blue` | final test | 1–6 | 4,095 | 76 | 1.8559% | **1.854x** (1.48–2.31) |
 | 3 | `eqfp611_combined` | final test | 1–6 | 4,095 | 75 | 1.8315% | **1.830x** (1.46–2.29) |
 | 4 | `eqfp611_red` | final test | 1–6 | 4,095 | 26 | 0.6349% | **0.634x** (0.43–0.93) |
-| 5 | `cr9114_h1` | final test | 1–8 | 32,444 | 202 | 0.6226% | **0.622x** (0.54–0.71) |
+| 5 | `cr9114_h1` | final test | 1–8 | 38,835 | 227 | 0.5845% | **0.584x** (0.51–0.67) |
 | 6 | `cr6261_h1` | final test | 1–5 | 945 | 4 | 0.4233% | **0.210x** (0.08–0.54) |
 | 7 | `cr6261_h9` | final test | 1–5 | 917 | 0 | 0.0000% | **0.000x** (0.00–0.21) |
 
 **Ranks 1–3 are a near-tie and ranks 4–5 are a near-tie,** at 1.875/1.854/1.830 and
-0.634/0.622, with heavily overlapping intervals. The ordering within each cluster is not
+0.634/0.584, with heavily overlapping intervals. The ordering within each cluster is not
 meaningfully resolved and the rank test should be read as separating four groups — {CreiLOV,
 blue, combined} > {red, CR9114} > {CR6261 H1} > {CR6261 H9} — rather than seven distinct
 levels. Concretely: adopting the depth-0 convention of §6.3 swapped ranks 1 and 2 (CreiLOV
@@ -622,7 +652,7 @@ The per-protein rows the primary test uses, from the means of the above:
 |---|---|---|
 | CreiLOV | 1 | 1.875x |
 | eqFP611 / mTagBFP2 | 3 | 1.439x (spread 0.634–1.854) |
-| CR9114 | 1 | 0.622x |
+| CR9114 | 1 | 0.584x |
 | CR6261 | 2 | 0.105x (spread 0.000–0.210) |
 
 Four proteins, a strict ordering, no ties — and, unlike the landscape-level ordering, one
@@ -895,6 +925,59 @@ ordering tracks the covariate while the within-protein manipulation does not —
 point to a confound correlated with the covariate rather than to the covariate itself, and
 must be reported that way rather than as support for the mechanism.
 
+### 6.9 CR9114's covariate was revised before any arm ran, and what that does to its standing
+
+The CR9114 value in §6.5 changed from **0.622x to 0.584x** on 2026-10-31, before any arm ran
+on it, because the curated workbook this protocol had been reading excludes a whole quadrant
+of the library (D-8). The full correction is in `docs/cr9114-reprep.md`; the moved values are
+in §5.1, §6.3, §6.5, §8.2, §9.1, §9.3, §9.4 and §9.5, and the regenerated
+`cross_protein_corpus_stats.json`. Two things follow that matter more than the numbers.
+
+#### 6.9.1 The old figure was an overestimate, and that was predicted quantitatively first
+
+Before the full table was obtained, a depth-blind reweighting bound predicted the corrected
+enrichment at **0.5622x**. The truth is **0.5845x** — the right direction, **3.8% relative**.
+The error's direction was forced: the workbook's filter removes deep genotypes
+preferentially, deep genotypes are where CR9114's hits live (hit rate rises monotonically with
+depth to 13.79% at depth 14), so a clean-only shell ratio had to *understate* the deep shell's
+richness and therefore *overstate* the shallow shell's enrichment. It did, by 6.0% relative.
+
+**Methodological note worth keeping.** Two independent routes to the same quantity agreeing
+to 3.8% is the best available evidence that the re-preparation introduced no new error, since
+a mistake in either would have to be matched by a compensating mistake in the other. It also
+establishes **reweighting as a usable bound when a full table cannot be obtained** — not a
+substitute for the full table, but a check that is informative rather than decorative, and one
+this protocol should reach for the next time a corpus file is suspect.
+
+#### 6.9.2 CR9114 can now carry a pre-registered ranking — but its position is anticipated, not predicted
+
+**It can carry a ranking.** Every shell in the re-prepared table is **≥98.3% complete**, and
+the residual incompleteness is **non-monotone in the opposite direction**, so it cannot
+manufacture a depth gradient of the kind the covariate measures. The §6.5 ordering uses
+**0.584x** at the primary cut and CR9114 stays at rank 5 of 7 landscapes and rank 3 of 4
+proteins — the position is unchanged, now on trustworthy numbers.
+
+**Its position is anticipated, not predicted.** Per `docs/label-provenance.md`, **Phillips
+Figure 5A already publishes maximum affinity against mutation depth for CR9114.** Anyone who
+had read that figure would expect CR9114's hits to sit deep and its shallow shell to be
+depleted. So CR9114's place in the H1 ordering is **recoverable from the published
+literature** and is not a novel prediction of this protocol.
+
+Both statements hold at once and neither cancels the other:
+
+- fixing the attrition makes the number **trustworthy**; it does not make it **novel**;
+- CR9114 remains legitimate held-out evidence about **arm performance**, which Figure 5A says
+  nothing about — the figure describes the landscape, not any method's behaviour on it;
+- but **H1's ordering may not be presented as though all four positions were blind**. Where
+  the ordering is reported, CR9114's is flagged as literature-anticipated. With n = 4 proteins
+  and one position anticipated, the ordering's evidential value is weaker still than §6.4's
+  power statement alone implies.
+
+Whether the other three positions are likewise recoverable from published depth-versus-fitness
+figures has not been checked and is recorded as **O-13**. It should be checked before the H1
+ordering is interpreted, because an ordering every position of which is anticipated is not a
+test of anything.
+
 ---
 
 ## 7. Arms
@@ -1111,7 +1194,7 @@ consumes a very different share of the eligible universe from target to target.
 | landscape | eligible universe | 125 as a share |
 |---|---|---|
 | `creilov` | 165,428 | 0.08% |
-| `cr9114_h1` | 48,841 | 0.26% |
+| `cr9114_h1` | 65,094 | 0.19% |
 | `eqfp611_*` | 8,192 | 1.53% |
 | `cr6261_h1` | 1,887 | 6.62% |
 | `cr6261_h9` | 1,842 | 6.79% |
@@ -1133,7 +1216,8 @@ Two pre-specified bounds, with their consequences:
   sensitivity. Said here rather than discovered later.
 - **Cap.** Fractional budgets are capped at **625 total measurements** (five times the
   absolute protocol) for tractability. The cap binds on `creilov` above 0.25% and on
-  `cr9114_h1` above 1%; where it binds, the cell is reported as capped with the fraction
+  `cr9114_h1` above 0.5% (1% of its 65,094 variants is 651); where it binds, the cell is
+  reported as capped with the fraction
   actually reached, never as the nominal fraction. The small libraries — which are the reason
   this analysis exists — are unaffected by the cap.
 
@@ -1168,7 +1252,7 @@ Resulting assignment on the frozen corpus:
 | landscape | eligible | tier | tier members | boundary ties |
 |---|---|---|---|---|
 | `eqfp611_blue` / `_red` / `_combined` | 8,192 | 1% | 82 | 1 |
-| `cr9114_h1` | 48,841 | 1% | 489 | 1 |
+| `cr9114_h1` | 65,094 | 1% | 651 | 1 |
 | `cr6261_h1` | 1,887 | **2%** | 38 | 1 |
 | `cr6261_h9` | 1,842 | **2%** | 37 | 1 |
 | `creilov` | 165,428 | 1% | 1,655 | 1 |
@@ -1220,7 +1304,7 @@ labels alone and published here, before any arm runs.
 | `eqfp611_blue` | 1% | 82 | **38** | 14 | 3.96 | 13 |
 | `eqfp611_red` | 1% | 82 | **28** | 10 | 7.11 | 13 |
 | `eqfp611_combined` | 1% | 82 | **38** | 15 | 3.98 | 13 |
-| `cr9114_h1` | 1% | 489 | **280** | 118 | 8.91 | 15 |
+| `cr9114_h1` | 1% | 651 | **365** | 143 | 9.27 | 16 |
 | `cr6261_h1` | 2% | 38 | **18** | 9 | 7.18 | 11 |
 | `cr6261_h9` | 2% | 37 | **21** | 8 | 8.30 | 11 |
 | `creilov` | 1% | 1,655 | **647** | 188 | 6.50 | 15 |
@@ -1241,7 +1325,7 @@ and must be carried into interpretation:
   share is the only sensible reading.
 - **The d ≥ 2 filter bites far harder on four-site 20-way libraries than on wide binary
   ones.** It keeps 146 of GB1's 1,494 hits (9.8%) but 38 of eqFP611's 82 (46%), 647 of
-  CreiLOV's 1,655 (39%) and 280 of CR9114's 489 (57%). Absolute diversity-adjusted counts are
+  CreiLOV's 1,655 (39%) and 365 of CR9114's 651 (56%). Absolute diversity-adjusted counts are
   therefore **not comparable across library geometries**, which is the second reason §12.2
   aggregates ceiling shares.
 
@@ -1252,11 +1336,20 @@ and must be carried into interpretation:
 | `eqfp611_blue` | 0.0909 | 0.012% | 1.608 | 0.012% | effectively uncensored |
 | `eqfp611_red` | 0.0252 | 0.012% | 1.692 | 0.012% | effectively uncensored |
 | `creilov` | 620.3 | 0.0006% | 15,690 | 0.0006% | uncensored; 165,428 distinct values in 165,428 rows |
-| `cr9114_h1` | 7.00 | **1.91%** | 9.835 | 0.002% | mild floor at the −log10(Kd) detection limit |
+| `cr9114_h1` | 7.00 | **2.57%** (1,675 rows) | 9.835 | 0.002% | mild floor at the −log10(Kd) detection limit |
 | `cr6261_h1` | 7.00 | **11.34%** | 9.729 | 0.053% | censored from below |
 | `cr6261_h9` | 7.00 | **20.20%** | 10.15 | 0.054% | censored from below |
 | GB1 (dev) | 0.00 | **19.74%** | 8.762 | 0.0007% | censored from below |
 | HER2 (dev) | 0.10 | **51.7%** | — | — | heavily censored from below |
+
+**Correction to a claim about these floors, recorded 2026-10-31.** It has been stated
+elsewhere that the raw bnAb tables encode non-binders at 6.0 and that CombinGym's cleaning
+step therefore changes the censoring value. **That is false for H1.** Raw `h1_mean` has a
+minimum of **7.0 with 1,675 rows at the floor — identical to clean**. The 6.0 floor applies
+to `h3_mean` and `fluB_mean` only, which is exactly what the paper's titration boundaries
+require. Nothing in this protocol depends on the false version, and the H1 censoring figures
+in the table above are the raw table's own. The earlier "cleaning changed the censoring value"
+caveat does not apply to any landscape this protocol scores.
 
 **All observed censoring in this corpus is from below.** That matters for which endpoints
 survive:
@@ -1285,8 +1378,9 @@ Said plainly rather than reported as a zero:
 
 - **Top 0.1% and top 0.01% are not resolvable on the small targets.** 0.1% of CR6261 H1 is
   2 variants and 0.01% is 0. These endpoints are computed only where the tier holds at least
-  10 members — on this corpus that is `cr9114_h1` (49 at 0.1%, 5 at 0.01%, the latter at the
-  limit), `creilov` (166 and 17), and the development landscapes. Elsewhere the cell reads
+  10 members — on this corpus that is `cr9114_h1` (66 at 0.1%, 7 at 0.01%, the latter below
+  the limit and therefore **not** resolvable), `creilov` (166 and 17), and the development
+  landscapes. Elsewhere the cell reads
   **"not resolvable at this universe size"**, never 0.0. The `eqfp611_*` landscapes have 9
   variants at 0.1% and 1 at 0.01%, so both are unresolvable there; at 0.01% the endpoint
   would be "did the campaign find the single global maximum", which is reported under
@@ -1649,8 +1743,8 @@ of order.
 
 1. Freeze this document and `scripts/freeze_cross_protein_corpus.py`. **Commit before any
    cross-protein arm runs.** ← this step
-2. `fetch`, `record`, `verify` the corpus; commit the lock file. **Done 2026-10-31, 20/20
-   files verified.**
+2. `fetch`, `record`, `verify` the corpus; commit the lock file. **Done; 21/21 files verified
+   (20 at the 2026-10-31 freeze, plus the raw CR9114 table on 2026-10-31 — same pin, §3.4).**
 3. `stats` on every target; the covariates of §6.5 and the ceilings of §9.3 are published
    above. Label-only, no arms. **Done 2026-10-31.** Recompute TrpB's anchor with the same
    code path (§16 O-4).
@@ -1685,8 +1779,10 @@ step 6's eqFP611 cells.
 | O-9 | **A8 is a budget-matched re-implementation, not MULTI-evolve** (§7.5). The published schedule assumes a singles screen plus ~100–200 pairwise measurements; this protocol's entire budget is 125. The adaptation rule is fixed on first use but has not been written or tested. | A8 results are evidence about a fixed depth schedule at a 125-measurement budget, never a reproduction of the published result. |
 | O-10 | **ALDE runs at 26% of its own demonstrated budget here** (§7.6): 125 against 96 + 4×96 = 480, and at batch 25 rather than 96. ALDE publishes no batch-size sensitivity analysis, so a deficit at these budgets is partly a statement about the budget. | ALDE must not carry the claim; ridge is the reference baseline. Mitigation is the 480-measurement development runs on TrpB and GB1, which have not been run. |
 | O-11 | **The CR6261 H1/H9 genotype intersection has not been computed** (§6.7.5). H2's replication instance needs it, because the two antigens have 1,887 and 1,842 rows and the shared-initial-sample construction applies only to genotypes present in both. | Compute and record before running the replication contrast. |
-| O-12 | **Whether the policy's selection depth scales with library width is unmeasured — and this matters because it governs whether the mechanism means anything beyond four sites at all, not because it confounds H1.** The depth bias (reliability 2.63 / 2.56; baselines 3.48–3.60) was measured on **two libraries of identical four-site width**, which cannot distinguish an absolute constant from a proportion of sites. **The serious branch: under the proportional reading** (~65% of sites) the policy selects near depth 8.5 of 13 on eqFP611 and 10.4 of 16 on CR9114, i.e. it is **not a shallow exploiter on any library wider than four sites**. The shallow-exploitation mechanism would then describe **only TrpB and GB1 — both development data — and would not apply to a single independent target.** That is a more serious threat to the project than the generalization result itself, because it would void the mechanism's relevance rather than merely weaken the evidence for it. Under the **absolute** reading the policy instead gets effectively shallower as libraries widen (2.6 of 4 sites is 65% of positions, 2.6 of 16 is 16%) and performance should degrade monotonically with site count. **Correction to an earlier draft of this item:** it claimed site count covaries with the enrichment ordering strongly enough to confound H1. Checked against the frozen per-protein values — CR9114 16 sites / 0.622x, CreiLOV 15 / 1.875x, eqFP611 13 / 1.439x, CR6261 11 / 0.105x — the Spearman correlation between site count and enrichment is **rho_s = +0.400, exact one-sided p = 9/24 = 0.3750**. The two orderings differ at one position and it is the decisive one: **CR9114 is the widest library in the corpus (16 sites) yet only third of four in enrichment.** That single inversion decorrelates width from the covariate enough that **H1 is not seriously confounded by it**. The confound framing was an overstatement and is withdrawn; the premise-undercutting branch above is the reason this item is a priority. | **Testable from the §10 rows at zero extra compute**, by the read-out pre-specified in §10.1, and it must be done before P2 (§6.7.4) is scored. Site count is still reported alongside enrichment in every H1 table (§6.5) — as disclosure, not as a correction for a confound that the data does not support. |
+| O-12 | **Whether the policy's selection depth scales with library width is unmeasured — and this matters because it governs whether the mechanism means anything beyond four sites at all, not because it confounds H1.** The depth bias (reliability 2.63 / 2.56; baselines 3.48–3.60) was measured on **two libraries of identical four-site width**, which cannot distinguish an absolute constant from a proportion of sites. **The serious branch: under the proportional reading** (~65% of sites) the policy selects near depth 8.5 of 13 on eqFP611 and 10.4 of 16 on CR9114, i.e. it is **not a shallow exploiter on any library wider than four sites**. The shallow-exploitation mechanism would then describe **only TrpB and GB1 — both development data — and would not apply to a single independent target.** That is a more serious threat to the project than the generalization result itself, because it would void the mechanism's relevance rather than merely weaken the evidence for it. Under the **absolute** reading the policy instead gets effectively shallower as libraries widen (2.6 of 4 sites is 65% of positions, 2.6 of 16 is 16%) and performance should degrade monotonically with site count. **Correction to an earlier draft of this item:** it claimed site count covaries with the enrichment ordering strongly enough to confound H1. Checked against the frozen per-protein values — CR9114 16 sites / **0.584x**, CreiLOV 15 / 1.875x, eqFP611 13 / 1.439x, CR6261 11 / 0.105x — the Spearman correlation between site count and enrichment is **rho_s = +0.400, exact one-sided p = 9/24 = 0.3750**. (The CR9114 re-preparation of §6.9 moved that value from 0.622x to 0.584x and left the rank pattern, and therefore rho_s and p, **unchanged**.) The two orderings differ at one position and it is the decisive one: **CR9114 is the widest library in the corpus (16 sites) yet only third of four in enrichment.** That single inversion decorrelates width from the covariate enough that **H1 is not seriously confounded by it**. The confound framing was an overstatement and is withdrawn; the premise-undercutting branch above is the reason this item is a priority. | **Testable from the §10 rows at zero extra compute**, by the read-out pre-specified in §10.1, and it must be done before P2 (§6.7.4) is scored. Site count is still reported alongside enrichment in every H1 table (§6.5) — as disclosure, not as a correction for a confound that the data does not support. |
 | O-7 | **The size of the mode effect is still unknown** (§7.3). The mitigation — running reliability and frontier pool-restricted on TrpB and GB1 — is **now in progress on held-out seeds 48–95**, against the fixed GFlowNet-enabled anchors of §7.4 (TrpB 45.21 / 40.50, GB1 15.02 / 37.21). | Until those runs land, the aggregate, the H1 test and the gate decision are all blocked by §7.4. |
+| O-13 | **How much of the H1 ordering is recoverable from published literature is unchecked.** CR9114's position is **anticipated, not predicted**: Phillips Figure 5A already publishes maximum affinity against mutation depth for it (§6.9.2). Whether eqFP611, CreiLOV and CR6261 have equivalent published depth-versus-fitness figures has not been checked. | An ordering every position of which is recoverable from the literature is not a test of anything. Check before the H1 ordering is interpreted, and flag each anticipated position where the ordering is reported. |
+| O-14 | **The clean/raw divergence was only checked for CR9114.** D-8's filter was found because a depth-correlated retention pattern was noticed in one landscape. The other nine CombinGym clean workbooks have **not** been diffed against their raw counterparts, and four of them — CreiLOV, eqFP611, CR6261 H1 and H9 — are final-test targets whose covariates this protocol has pre-registered. | A second silent exclusion of the D-8 kind would move a pre-registered covariate after the freeze. Diff every clean workbook against its raw table, and record the result, before the arms are interpreted. Cheap: the raw tables are at the same pin. |
 | O-8 | **No wet-lab validation of anything here.** Every figure is a retrospective simulation over a fully-measured library. | Nothing in this study is evidence about a real campaign. |
 
 ---
@@ -1709,8 +1805,20 @@ written after cross-protein results have been examined must say so in its first 
 | 2026-10-31 | §16 O-12, §6.5 | **corrected**: the claim that site count covaries with the enrichment ordering strongly enough to confound H1 was an overstatement and is withdrawn. Measured on the frozen per-protein values, rho_s = **+0.400**, exact one-sided p = **9/24 = 0.3750**, because CR9114 is the widest library (16 sites) yet third of four in enrichment. O-12 now leads with the premise-undercutting branch instead: under a proportional depth bias the policy is not a shallow exploiter on any library wider than four sites, so the mechanism would describe only TrpB and GB1 — both development data — and no independent target | the confound risk and the premise-undercutting risk are not the same risk, and the item led with the weaker one. The first is not supported by the data; the second is unmeasured and would void the mechanism's relevance rather than merely weaken its evidence |
 | 2026-10-31 | §3.2 | recorded that **no CR9114/H9 landscape exists** — Phillips et al. assayed CR9114 against H1, H3 and influenza B, and H9 for CR6261 only — and that it may not be listed as unobtainable, pending or absent | the CR6261 H1/H9 pair invites the symmetric assumption; an experiment never performed is not a missing file |
 | 2026-10-31 | §5.3 | added the whole-study count: **seven proteins, five structural families**, with trastuzumab, CR9114 and CR6261 as three proteins in **one** immunoglobulin V-domain family, and the acquisition contributing **+2** families the project had no data in. Also recorded that of §5.2's three independent families, the Ig V-domain is **already represented in development data** by trastuzumab, so transfer to a *new* family rests on **two** families, not three | the earlier count did not place trastuzumab in the same family as the two bnAbs, which both understated the study-wide family count and overstated the independence of the antibody results at the family level |
+| **2026-10-31** | §3.6 D-8, §6.9 | **CR9114 re-prepared and its covariate revised, before any arm ran on it.** `bnAbs_CR9114_H1_clean.xlsx` excludes every genotype carrying both F29S and Y106S — 16,384 genotypes, one quadrant of the 2^16 space — regardless of affinity, with retention falling in closed form as 1 − k(k−1)/240 and predicting 45.0% / 12.5% / 0% at depths 12 / 15 / 16 against those observed exactly. The fully matured 16-mutation antibody was entirely absent. CR9114 is now scored against the raw table at the same pinned commit | a depth-correlated filter on the covariate's own axis is the one defect that could manufacture the gradient H1 measures. Found and fixed before any arm ran, so the covariate is revised rather than the result reinterpreted |
+| **2026-10-31** | §5.1, §6.3, §6.5, §8.2, §9.1, §9.3, §9.4, §9.5, §16 O-12, `cross_protein_corpus_stats.json` | **values moved**: eligible universe 48,841 → **65,094** rows (65,093 mutants); top-1% hits 489 → **651**; tier boundary 9.6077550214 → **9.6088080625**; primary enrichment 0.622x → **0.584x** (−6.0% relative); d≤2 enrichment **0.000x, unchanged** (shell of 134); mean hit depth 8.91 → **9.27**; max observed depth 15 → **16**; d≥2 ceiling 280 → **365** (+30.4%); d≥3 ceiling 118 → **143**; 125-measurement budget share 0.26% → **0.19%**; floor mass 1.91% → **2.57%** (1,675 rows); top 0.1% / 0.01% tiers 49 / 5 → **66 / 7**. The fractional-budget cap now binds on `cr9114_h1` above 0.5% rather than 1%. Regenerated the stats artifact; **only the `cr9114_h1` block changed**, the other 13 landscapes are byte-identical. The per-protein H1 ordering and `rho_s = +0.400, p = 9/24` are unchanged | the stats artifact is generated from the corpus, so it had to be regenerated from the raw table rather than hand-edited; its generator read the clean workbook and would otherwise have reproduced the hole |
+| **2026-10-31** | §3.4, §3.5, `cross_protein_corpus.lock.json`, `freeze_cross_protein_corpus.py` | **the pin did not change; the lock gained one entry.** `Data/DMS/Raw/bnAbs_CR9114_raw.csv` is now pinned (git blob `8ac7352f…`, sha256 `ee31f8fc…`, 12,258,680 bytes) at the same commit `c5dccd51`. The `corpus` block is byte-identical and **no existing entry changed** — all 20 were recomputed and came out identical — taking the lock from 20 to 21 files. `verify` now also **fails if any pinned path, or any file a landscape reads, is absent from the lock**; it reports 21/21 | the lock recorded only upstream blobs and no derived table, so a landscape repointed at an unlisted file would have been scored against unhashed bytes while `verify` still exited 0. Pinning the raw table closes that for CR9114 and the new guard closes the class |
+| **2026-10-31** | §6.9.1 | recorded that the pre-fix **depth-blind reweighting bound predicted 0.5622x against the measured 0.5845x** — right direction, 3.8% relative — and that two independent routes agreeing is the best available evidence the re-preparation introduced no new error | it validates reweighting as a usable bound when a full table cannot be obtained, which is a reusable method rather than a one-off observation |
+| **2026-10-31** | §6.9.2, §16 O-13 | recorded that CR9114's position in the H1 ordering is **anticipated, not predicted** — Phillips Figure 5A already publishes max affinity against depth for it — so fixing the attrition makes the number trustworthy but not novel, and the ordering may not be presented as though all four positions were blind | an ordering recoverable from published figures is not a test; whether the other three positions are likewise recoverable is unchecked (O-13) |
+| **2026-10-31** | §9.4, §16 O-14 | **corrected an inventory claim**: the raw bnAb tables do **not** floor H1 at 6.0. Raw `h1_mean` has a minimum of 7.0 with 1,675 rows at the floor, identical to clean; the 6.0 floor applies to `h3_mean` and `fluB_mean` only. The "cleaning changed the censoring value" caveat is false for H1 and applies to no landscape this protocol scores. Also opened O-14: the other nine clean workbooks have not been diffed against their raw counterparts | a false caveat about censoring would have been carried into the censored-endpoint reasoning of §9.4; and D-8 was found in the one landscape anyone looked at, which says nothing about the other nine |
 | 2026-10-31 | §4.5, §8.3, §12.2 | added: **CR6261 is excluded from the pooled aggregate** on three pre-computable grounds — 125 measurements is 6.63% of its 1,886 mutants against 0.08% on TrpB; its top-1% tier is 19 variants so the budget exceeds the hit set and an oracle scores like a good method; and its H9 covariate is degenerate at zero under both cut definitions. Retained in full as the qualitative demonstration that the covariate can invert, and as H2's replication instance. The pooled aggregate is now over **3 proteins** | a target can be legitimately held out and still be the wrong instrument; the ratio and the tier size are properties of the dataset, not of any result |
 | 2026-10-31 | §7.6 | added the named threat that ALDE runs at 26% of its own demonstrated budget (125 against 96 + 4×96 = 480, batch 25 rather than 96, no published batch-size sensitivity), with the mitigation of also running the grid at 96 + 4×96 on TrpB and GB1 | both are development data, so the mitigation costs nothing held-out, and without it an ALDE deficit cannot be attributed to the method rather than the budget |
 
-No cross-protein arm had been run and no cross-protein performance figure had been examined
-when this table was written.
+Every row above is dated **2026-10-31**: the initial freeze and all amendments to date fall on
+the same day, in the table's order, which is why the order and not the date distinguishes
+them. The rows from "CR9114 re-prepared" onward are the CR9114 round and came last.
+
+**No cross-protein arm had been run and no cross-protein performance figure had been examined
+when any row of this table was written.** Every amendment so far revises a *covariate, a
+convention, a hash, an arm or a threshold* — never an interpretation of a result, because there
+are no results yet.

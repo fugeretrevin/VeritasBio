@@ -1093,65 +1093,65 @@
       "phenotype": "binding_H1",
       "sites": 16,
       "level": "final_test",
-      "file": "Data/DMS/Clean/bnAbs_CR9114_H1_clean.xlsx",
-      "sheet": "CR91114-h1",
-      "rows_in_sheet": 48841,
-      "dropped_missing_or_unparseable": 0,
-      "eligible_universe": 48841,
+      "file": "Data/DMS/Raw/bnAbs_CR9114_raw.csv",
+      "sheet": "bnAbs_CR9114_raw.csv",
+      "rows_in_sheet": 65536,
+      "dropped_missing_or_unparseable": 442,
+      "eligible_universe": 65094,
       "variant_string_widths": [
-        121
+        16
       ],
       "variant_width_uniform": true,
       "duplicate_variant_ids": 0,
       "value_min": 7.0,
-      "value_max": 9.83450771611474,
-      "distinct_values": 47908,
-      "mass_at_min": 934,
-      "frac_at_min": 0.019123277574169244,
+      "value_max": 9.834507716114741,
+      "distinct_values": 63420,
+      "mass_at_min": 1675,
+      "frac_at_min": 0.025732018311979597,
       "mass_at_max": 1,
-      "frac_at_max": 2.047460125714052e-05,
+      "frac_at_max": 1.5362398992226627e-05,
       "censored_from_below": false,
       "censored_from_above": false,
       "tier_fraction": 0.01,
       "tier_deepened_from_1pct": false,
-      "tier_size_nominal": 489,
-      "tier_boundary_value": 9.60775502138942,
-      "hits_strictly_above_boundary": 488,
-      "hits_including_boundary_ties": 489,
+      "tier_size_nominal": 651,
+      "tier_boundary_value": 9.60880806254742,
+      "hits_strictly_above_boundary": 650,
+      "hits_including_boundary_ties": 651,
       "boundary_tie_mass": 1,
-      "hit_count_ceiling": 489,
-      "diversity_adjusted_ceiling_d1": 489,
-      "diversity_adjusted_ceiling_d2": 280,
-      "diversity_adjusted_ceiling_d3": 118,
+      "hit_count_ceiling": 651,
+      "diversity_adjusted_ceiling_d1": 651,
+      "diversity_adjusted_ceiling_d2": 365,
+      "diversity_adjusted_ceiling_d3": 143,
       "achievable_at_budget": {
         "25": {
           "raw_hits": 25,
           "diversity_adjusted_d2": 25,
-          "fraction_of_universe": 0.0005118650314285129
+          "fraction_of_universe": 0.0003840599748056657
         },
         "50": {
           "raw_hits": 50,
           "diversity_adjusted_d2": 50,
-          "fraction_of_universe": 0.0010237300628570258
+          "fraction_of_universe": 0.0007681199496113314
         },
         "75": {
           "raw_hits": 75,
           "diversity_adjusted_d2": 75,
-          "fraction_of_universe": 0.0015355950942855389
+          "fraction_of_universe": 0.0011521799244169969
         },
         "100": {
           "raw_hits": 100,
           "diversity_adjusted_d2": 100,
-          "fraction_of_universe": 0.0020474601257140517
+          "fraction_of_universe": 0.0015362398992226627
         },
         "125": {
           "raw_hits": 125,
           "diversity_adjusted_d2": 125,
-          "fraction_of_universe": 0.0025593251571425645
+          "fraction_of_universe": 0.0019202998740283283
         }
       },
-      "mean_depth_of_hit": 8.91002044989775,
-      "max_depth_observed": 15,
+      "mean_depth_of_hit": 9.265745007680492,
+      "max_depth_observed": 16,
       "depth_profile": {
         "0": {
           "variants": 1,
@@ -1172,69 +1172,78 @@
           ]
         },
         "2": {
-          "variants": 117,
+          "variants": 118,
           "hits": 0,
           "hit_rate": 0.0,
           "wilson95": [
             0.0,
-            0.03178924614829014
+            0.031528339504195695
           ]
         },
         "3": {
-          "variants": 538,
+          "variants": 552,
           "hits": 1,
-          "hit_rate": 0.0018587360594795538,
+          "hit_rate": 0.0018115942028985507,
           "wilson95": [
-            0.00032818793930361814,
-            0.010452564964611251
+            0.00031986246779545403,
+            0.010189355202028428
           ]
         },
         "4": {
-          "variants": 1706,
+          "variants": 1796,
           "hits": 3,
-          "hit_rate": 0.0017584994138335288,
+          "hit_rate": 0.0016703786191536749,
           "wilson95": [
-            0.0005982247244893679,
-            0.005157548028696186
+            0.0005682384769107119,
+            0.004899720288420223
           ]
         },
         "5": {
-          "variants": 3946,
+          "variants": 4302,
           "hits": 10,
-          "hit_rate": 0.002534211860111505,
+          "hit_rate": 0.0023245002324500234,
           "wilson95": [
-            0.0013771418384753368,
-            0.004658912805613734
+            0.0012631376526368713,
+            0.004273865766780774
           ]
         },
         "6": {
-          "variants": 6936,
-          "hits": 38,
-          "hit_rate": 0.005478662053056517,
+          "variants": 7915,
+          "hits": 39,
+          "hit_rate": 0.004927353126974099,
           "wilson95": [
-            0.003994285691859818,
-            0.007510510109940308
+            0.0036066889926462294,
+            0.00672834035555565
           ]
         },
         "7": {
-          "variants": 9367,
-          "hits": 55,
-          "hit_rate": 0.005871677164513718,
+          "variants": 11339,
+          "hits": 60,
+          "hit_rate": 0.005291471911103272,
           "wilson95": [
-            0.004514136828969729,
-            0.007634340912418348
+            0.0041134134563171765,
+            0.006804614387960746
           ]
         },
         "8": {
-          "variants": 9818,
-          "hits": 95,
-          "hit_rate": 0.009676105113057649,
+          "variants": 12797,
+          "hits": 114,
+          "hit_rate": 0.008908337891693366,
           "wilson95": [
-            0.007922468340659636,
-            0.011813286883328113
+            0.007421317303080174,
+            0.01069010604561251
           ]
         },
         "9": {
+          "variants": 11394,
+          "hits": 139,
+          "hit_rate": 0.012199403194663859,
+          "wilson95": [
+            0.010341808961461838,
+            0.014385808096387544
+          ]
+        },
+        "10": {
           "variants": 7984,
           "hits": 110,
           "hit_rate": 0.01377755511022044,
@@ -1243,58 +1252,58 @@
             0.016578329319432768
           ]
         },
-        "10": {
-          "variants": 5001,
-          "hits": 80,
-          "hit_rate": 0.015996800639872025,
-          "wilson95": [
-            0.012872596847102225,
-            0.019863996355176463
-          ]
-        },
         "11": {
-          "variants": 2365,
-          "hits": 52,
-          "hit_rate": 0.021987315010570826,
+          "variants": 4363,
+          "hits": 89,
+          "hit_rate": 0.020398808159523264,
           "wilson95": [
-            0.01680657691259076,
-            0.028718402598796624
+            0.016606856498796355,
+            0.025034558833895944
           ]
         },
         "12": {
-          "variants": 819,
-          "hits": 32,
-          "hit_rate": 0.03907203907203907,
+          "variants": 1820,
+          "hits": 57,
+          "hit_rate": 0.03131868131868132,
           "wilson95": [
-            0.027810754450241976,
-            0.054637034427011094
+            0.02425143708560643,
+            0.040360241910646535
           ]
         },
         "13": {
-          "variants": 196,
-          "hits": 9,
-          "hit_rate": 0.04591836734693878,
+          "variants": 560,
+          "hits": 20,
+          "hit_rate": 0.03571428571428571,
           "wilson95": [
-            0.02434308700635445,
-            0.08495084531161182
+            0.023236576816555957,
+            0.05451836331906437
           ]
         },
         "14": {
-          "variants": 29,
-          "hits": 4,
-          "hit_rate": 0.13793103448275862,
+          "variants": 120,
+          "hits": 8,
+          "hit_rate": 0.06666666666666667,
           "wilson95": [
-            0.05497439925859471,
-            0.30558993876598656
+            0.03416530668517112,
+            0.12605130462198694
           ]
         },
         "15": {
-          "variants": 2,
+          "variants": 16,
+          "hits": 1,
+          "hit_rate": 0.0625,
+          "wilson95": [
+            0.01111934464124728,
+            0.28328737798148207
+          ]
+        },
+        "16": {
+          "variants": 1,
           "hits": 0,
           "hit_rate": 0.0,
           "wilson95": [
             0.0,
-            0.6576197760453506
+            0.7934506882081973
           ]
         }
       },
@@ -1302,65 +1311,65 @@
       "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 8,
-        "shell_variants": 32444,
-        "shell_hits": 202,
-        "shell_hit_rate": 0.006226112686475157,
-        "enrichment_vs_base_rate": 0.6218600607773684,
+        "shell_variants": 38835,
+        "shell_hits": 227,
+        "shell_hit_rate": 0.005845242693446633,
+        "enrichment_vs_base_rate": 0.5844703961401153,
         "wilson95_hit_rate": [
-          0.0054267065742858835,
-          0.007142433329769761
+          0.005134415323859059,
+          0.006653821443347632
         ],
         "enrichment_wilson95": [
-          0.5420159014206479,
-          0.7133815669924026
+          0.513394210585686,
+          0.6653208187915065
         ],
         "resolvable": true,
-        "deep_variants": 16396,
-        "deep_hits": 287,
-        "deep_hit_rate": 0.0175042693339839,
+        "deep_variants": 26258,
+        "deep_hits": 424,
+        "deep_hit_rate": 0.016147459821768604,
         "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 133,
+        "shell_variants": 134,
         "shell_hits": 0,
         "shell_hit_rate": 0.0,
         "enrichment_vs_base_rate": 0.0,
         "wilson95_hit_rate": [
           0.0,
-          0.028072332118501443
+          0.027868675451295993
         ],
         "enrichment_wilson95": [
           0.0,
-          2.803846161553638
+          2.786610690977974
         ],
         "resolvable": false,
-        "deep_variants": 48707,
-        "deep_hits": 489,
-        "deep_hit_rate": 0.010039624694602418,
+        "deep_variants": 64959,
+        "deep_hits": 651,
+        "deep_hit_rate": 0.010021705999168707,
         "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 4,
-        "shell_variants": 2377,
+        "shell_variants": 2482,
         "shell_hits": 4,
-        "shell_hit_rate": 0.0016827934371055953,
-        "enrichment_vs_base_rate": 0.1680763072835877,
+        "shell_hit_rate": 0.0016116035455278,
+        "enrichment_vs_base_rate": 0.16114550106388112,
         "wilson95_hit_rate": [
-          0.0006545940502592051,
-          0.004319050388400745
+          0.0006268940716364461,
+          0.004136667513914152
         ],
         "enrichment_wilson95": [
-          0.06538042537568474,
-          0.43138392642102413
+          0.06268362933809957,
+          0.41362862542354495
         ],
         "resolvable": true,
-        "deep_variants": 46463,
-        "deep_hits": 485,
-        "deep_hit_rate": 0.010438413361169102,
+        "deep_variants": 62611,
+        "deep_hits": 647,
+        "deep_hit_rate": 0.010333647442142754,
         "definition": "1 <= depth <= round(sites/4)"
       },
-      "base_rate": 0.010012080014741713,
+      "base_rate": 0.010000921743939534,
       "status": "ok"
     },
     "cr6261_h1": {
