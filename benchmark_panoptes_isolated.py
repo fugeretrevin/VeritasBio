@@ -1,13 +1,25 @@
 """
-benchmark_panoptes_isolated.py - Standalone comparison benchmark on the TrpB landscape.
+benchmark_panoptes_isolated.py - Standalone comparison benchmark on a combinatorial library.
 
 Purpose:
-    Compares PanoptesBio's production selection path against credible alternatives on the
-    existing four-site TrpB active-site dataset (Johnston et al. 2024), under a single shared
-    hidden-results protocol. Nothing in the existing project is imported for its side effects,
-    and nothing in the existing project is modified: this file is self-contained, writes only
-    into a fresh run folder under `benchmark_comparison_results/`, and imports production
-    modules read-only.
+    Compares PanoptesBio's production selection path against credible alternatives on a
+    registered combinatorial protein library, under a single shared hidden-results protocol.
+    Nothing in the existing project is imported for its side effects, and nothing in the
+    existing project is modified: this file writes only into a fresh run folder under
+    `benchmark_comparison_results/` and imports production modules read-only.
+
+Libraries:
+    `LIBRARIES` registers the four-site TrpB active site (Johnston et al. 2024), the
+    four-site GB1 domain (Wu et al. 2016) and the ten-site trastuzumab CDR-H3 library
+    (Mason et al. 2021). The library is chosen with --library and then THREADED through
+    every call path as an argument; there is no module-level active library, so two
+    libraries can be loaded and compared in one process.
+
+    A new library is added by registering a `LibrarySpec` - positions, parent residues,
+    permissible alphabet, label policy, assay limits, provenance - and pointing it at a
+    prepared CSV. No selection or optimisation code changes. The canonical schema and the
+    validating ingestion path live in `veritas/datasets/`, which imports nothing from
+    `workers` or `controller`.
 
 Methods compared:
     A. random          - uniform sampling of untested eligible variants, without replacement.
@@ -29,17 +41,38 @@ Protocol (shared by every method):
     - Duplicate, already-observed, unknown and invalid selections are rejected and logged.
       A short batch stays short; it is never backfilled with random picks.
 
+Selection modes (kept explicit and distinct per library):
+    POOL-RESTRICTED - the selector is handed the enumerated untested measured variants and
+    ranks them. The default for retrospective benchmarking on a library that is a sparse
+    sample of its product (HER2: 11,277 measured genotypes against a 20^10 product), where
+    free generation proposes variants nobody assayed.
+    GENERATIVE - the selector proposes under the library's mutation constraints, which is
+    what the saturated libraries (TrpB, GB1) support. Ranking a supplied pool is strictly
+    easier, so a pool-mode result never validates unconstrained generation, and every
+    pool-mode run says so in its report.
+
+Labels and censoring (never conflated):
+    A missing label, a true measured zero and a detection floor are three different things.
+    HER2 ships 36,391 rows across a train/test split; the 25,114 'test' rows all carry
+    DMS_score exactly 0.0, which is an ABSENT LABEL, not a measurement of no binding - they
+    are excluded, and each is checked against the declared placeholder so a real measurement
+    cannot be discarded as an absent one. Of the 11,276 eligible HER2 variants, 5,832 sit
+    exactly at the assay floor of 0.1; those keep their measured value and are COUNTED as
+    left-censored, so a block of ties reads as a detection limit rather than a real plateau.
+
 Provenance (read this before quoting any number from this benchmark):
     The published TrpB four-site landscape is NOT fully measured. Johnston et al. (2024) state
     that 159,129 variants (99.45%) had sufficient sequencing coverage for quantification and
     that "the missing 871 fitness values were imputed" with the scikit-learn KNN imputer.
     The prepared CSV in this repository carries no flag distinguishing the two, so by default
     this benchmark refuses to run on it and tells you how to supply the imputed-variant list.
-    See --provenance-mode.
+    See --provenance-mode. Each library carries its own provenance record; nothing quotes
+    one library's published split while loading another's.
 
 Usage:
     python benchmark_panoptes_isolated.py --help
     python benchmark_panoptes_isolated.py --smoke-test
+    python benchmark_panoptes_isolated.py --library gb1 --imputed-ids <file>
 """
 
 from __future__ import annotations
@@ -71,29 +104,27 @@ os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parent
-DEFAULT_DATASET = REPO_ROOT / "scripts" / "data" / "TRPB_THEMA_Johnston_2024.csv"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "benchmark_comparison_results"
-PARENT_ACCESSION = "TRPB_TM9D8"
-PARENT_METADATA_JSON = REPO_ROOT / "workers" / "data" / f"{PARENT_ACCESSION}.json"
-STRUCTURE_PDB = REPO_ROOT / "workers" / "data" / "8EH0.pdb"
 
-# The four saturated active-site positions of the published library (1-indexed, Tm9D8* numbering).
-ACTIVE_SITE_POSITIONS: Tuple[int, ...] = (183, 184, 227, 228)
-PARENT_RESIDUES = "VFVS"
 AA_ALPHABET = "ACDEFGHIKLMNPQRSTVWY"
 AA_INDEX = {aa: i for i, aa in enumerate(AA_ALPHABET)}
-
-# Published provenance of the upstream landscape (bioRxiv 10.1101/2024.06.23.600144v1).
-PUBLISHED_MEASURED_COUNT = 159_129
-PUBLISHED_IMPUTED_COUNT = 871
-PUBLISHED_GLOBAL_OPTIMUM = "V183A:F184I:V227K:S228G"
-
-# Higher fitness is better: the authors normalise each landscape's maximum fitness to 1.
-FITNESS_DIRECTION = "higher_is_better"
 
 BENCHMARK_VERSION = "1.0.0"
 
 logger = logging.getLogger("panoptes_isolated_benchmark")
+
+# The canonical library/dataset schema lives outside this file, so a new combinatorial
+# library is describable without touching the benchmark or the optimiser. Imported
+# read-only; nothing in veritas.datasets imports workers or controller.
+from veritas.datasets import (  # noqa: E402  (after the isolation preamble, deliberately)
+    AssayMeta,
+    ColumnMap,
+    FitnessDirection,
+    IngestConfig,
+    LibraryDesign,
+    SelectionMode,
+    VariablePosition,
+)
 
 
 # ==============================================================================================
@@ -102,20 +133,23 @@ logger = logging.getLogger("panoptes_isolated_benchmark")
 @dataclass(frozen=True)
 class LibrarySpec:
     """
-    A combinatorially-saturated library this protocol can run on.
+    A combinatorial library this protocol can run on, described by data alone.
 
-    Everything above was TrpB constants at module scope, read directly by the encoders
-    (`_canonical_variant_id`, `_combo_from_notation`, `_one_hot_matrix`). That made
-    every result single-target, which is the binding limitation on every claim in
-    docs/NEXT_STEPS.md: a method tuned and measured on one landscape demonstrates
-    nothing about generalisation.
+    These were TrpB constants at module scope (`ACTIVE_SITE_POSITIONS`,
+    `PARENT_RESIDUES`, `PARENT_ACCESSION`, `PUBLISHED_*`), read directly by the encoders
+    and reassigned by a `configure_library()` that mutated nine globals. That made every
+    result single-target - the binding limitation on every claim in docs/NEXT_STEPS.md,
+    because a method tuned and measured on one landscape demonstrates nothing about
+    generalisation - and it made two libraries in one process impossible, which is
+    exactly what a cross-protein study needs.
 
-    `configure_library()` reassigns those globals rather than threading a spec through
-    ten functions. A module-level active library is a compromise, but the encoders read
-    the globals at call time so reassignment is sufficient, and it keeps this change
-    small enough to be reviewable.
+    There is now no active-library state anywhere. Every function that needs a library
+    takes one as an argument, and `to_design()` converts this registry entry into the
+    canonical `veritas.datasets.LibraryDesign` so a new library is ingested and validated
+    through data and configuration without touching the optimiser.
     """
 
+    # ---- REQUIRED --------------------------------------------------------------------
     key: str
     label: str
     dataset: Path
@@ -127,6 +161,7 @@ class LibrarySpec:
     published_measured_count: Optional[int]
     published_imputed_count: Optional[int]
     provenance_note: str
+    # ---- OPTIONAL --------------------------------------------------------------------
     # When set, only CSV rows whose 'stage' column holds this value enter the universe.
     # HER2 ships 36,391 rows of which 25,114 are an unlabelled held-out split carrying
     # DMS_score exactly 0.0 - not a measurement of zero binding but an absent label.
@@ -139,6 +174,124 @@ class LibrarySpec:
     # proposes variants that do not exist and the batch comes up short. The selector is
     # handed the untested measured variants instead and ranks them.
     pool_restricted: bool = False
+    # The value the unlabelled split carries where a measurement would be. Declared so
+    # ingestion can VERIFY that every discarded row really is unlabelled, rather than
+    # trusting the split column and silently throwing a measurement away.
+    unlabelled_placeholder: Optional[float] = None
+    # Per-position permissible alphabets, one string per declared position. None means
+    # all 20 at every position. Never inferred from the observed sequences: an assay
+    # covering 11,277 of 20^10 genotypes would otherwise "declare" whatever it sampled.
+    allowed_aa_per_position: Optional[Tuple[str, ...]] = None
+    # Assay metadata. Each default is "unknown", never a plausible guess.
+    fitness_direction: str = FitnessDirection.HIGHER_IS_BETTER.value
+    assay_units: Optional[str] = None
+    assay_transformation: str = "none"
+    detection_floor: Optional[float] = None
+    detection_ceiling: Optional[float] = None
+    replicate_count: Optional[int] = None
+    source_publication: Optional[str] = None
+    source_doi: Optional[str] = None
+    dataset_version: Optional[str] = None
+    # Deterministic duplicate handling for ingestion through veritas.datasets.
+    duplicate_policy: str = "reject"
+    conflict_tolerance: float = 0.0
+
+    # -- derived -----------------------------------------------------------------------
+    @property
+    def n_sites(self) -> int:
+        return len(self.positions)
+
+    @property
+    def selection_mode(self) -> SelectionMode:
+        """
+        POOL_RESTRICTED and GENERATIVE are kept explicit and distinct. Ranking an
+        enumerated feasible pool is a strictly easier problem than generating under
+        mutation constraints, so success in pool mode does not validate generation.
+        """
+        return SelectionMode.POOL_RESTRICTED if self.pool_restricted else SelectionMode.GENERATIVE
+
+    @property
+    def metadata_json(self) -> Path:
+        return REPO_ROOT / "workers" / "data" / f"{self.accession}.json"
+
+    def alphabet_for(self, slot: int) -> str:
+        if self.allowed_aa_per_position is None:
+            return AA_ALPHABET
+        return self.allowed_aa_per_position[slot]
+
+    @property
+    def one_hot_width(self) -> int:
+        return sum(len(self.alphabet_for(s)) for s in range(self.n_sites))
+
+    def assay_meta(self) -> AssayMeta:
+        return AssayMeta(
+            units=self.assay_units,
+            transformation=(
+                self.assay_transformation if self.assay_transformation != "none" else None
+            ),
+            detection_floor=self.detection_floor,
+            detection_ceiling=self.detection_ceiling,
+            replicate_count=self.replicate_count,
+            measurement_provenance=self.provenance_note,
+            source_publication=self.source_publication,
+            source_doi=self.source_doi,
+            dataset_version=self.dataset_version,
+        )
+
+    def to_design(self, wild_type_sequence: str) -> LibraryDesign:
+        """
+        The canonical schema entry for this library.
+
+        Validates the declared positions and parent residues against the real wild-type
+        sequence: a mismatch raises `WildTypeMismatchError` rather than aligning the
+        dataset against the wrong reference.
+        """
+        if len(self.parent_residues) != self.n_sites:
+            raise BenchmarkError(
+                f"library {self.key!r} declares {self.n_sites} positions but "
+                f"{len(self.parent_residues)} parent residues ({self.parent_residues!r})"
+            )
+        if self.allowed_aa_per_position is not None and (
+            len(self.allowed_aa_per_position) != self.n_sites
+        ):
+            raise BenchmarkError(
+                f"library {self.key!r} declares {self.n_sites} positions but "
+                f"{len(self.allowed_aa_per_position)} per-position alphabets"
+            )
+        return LibraryDesign(
+            target_id=self.accession,
+            assay_id=self.key,
+            wild_type_sequence=wild_type_sequence,
+            positions=tuple(
+                VariablePosition(
+                    position=position,
+                    wild_type_aa=self.parent_residues[slot],
+                    allowed_aa=tuple(self.alphabet_for(slot)),
+                )
+                for slot, position in enumerate(self.positions)
+            ),
+            fitness_direction=FitnessDirection(self.fitness_direction),
+            selection_mode=self.selection_mode,
+            assay=self.assay_meta(),
+            label=self.label,
+        )
+
+    def ingest_config(
+        self,
+        wild_type_sequence: str,
+        dataset_path: Optional[Path] = None,
+    ) -> IngestConfig:
+        """The configuration that ingests this library through `veritas.datasets`."""
+        return IngestConfig(
+            design=self.to_design(wild_type_sequence),
+            source=dataset_path or self.dataset,
+            column_map=ColumnMap(),
+            labelled_stage=self.labelled_stage,
+            unlabelled_placeholder=self.unlabelled_placeholder,
+            duplicate_policy=self.duplicate_policy,
+            conflict_tolerance=self.conflict_tolerance,
+            transform=self.assay_transformation,
+        )
 
 
 LIBRARIES: Dict[str, LibrarySpec] = {
@@ -158,6 +311,9 @@ LIBRARIES: Dict[str, LibrarySpec] = {
             "fitness values imputed with the scikit-learn KNN imputer; the prepared CSV "
             "carries no flag separating them."
         ),
+        assay_units="fitness normalised to the landscape maximum",
+        source_publication="Johnston et al. 2024",
+        source_doi="10.1101/2024.06.23.600144",
     ),
     "gb1": LibrarySpec(
         key="gb1",
@@ -180,6 +336,9 @@ LIBRARIES: Dict[str, LibrarySpec] = {
             "universe rather than imputed into it, but the measured/imputed split of "
             "what IS present is unverified."
         ),
+        assay_units="relative fitness (parent = 1.0)",
+        source_publication="Wu et al. 2016",
+        source_doi="10.7554/eLife.16965",
     ),
     "her2": LibrarySpec(
         key="her2",
@@ -196,6 +355,16 @@ LIBRARIES: Dict[str, LibrarySpec] = {
         # 11,277 labelled variants against a 20^10 product: 0.00000001% saturation.
         # Free generation would propose unmeasured variants essentially every time.
         pool_restricted=True,
+        # Every one of the 25,114 held-out rows carries DMS_score exactly 0.0. Declaring
+        # the placeholder lets ingestion VERIFY that - a held-out row carrying anything
+        # else would be a real measurement about to be discarded, and is refused.
+        unlabelled_placeholder=0.0,
+        # 5,833 of the 11,277 labelled rows sit exactly at 0.1. That is the assay's
+        # detection floor, so those are left-censored observations, not exact values.
+        detection_floor=0.1,
+        assay_units="normalised HER2 binding enrichment",
+        source_publication="Mason et al. 2021",
+        source_doi="10.1038/s41551-021-00699-9",
         provenance_note=(
             "The prepared CSV carries 36,391 rows across a 'train'/'test' split; the "
             "25,114 'test' rows all carry DMS_score exactly 0.0, which is an absent "
@@ -207,37 +376,30 @@ LIBRARIES: Dict[str, LibrarySpec] = {
     ),
 }
 
-ACTIVE_LIBRARY: LibrarySpec = LIBRARIES["trpb"]
+#: The default library for the CLI's --dataset default only. It is a default value, not
+#: process state: nothing reads it to decide which library is running.
+DEFAULT_LIBRARY_KEY = "trpb"
+DEFAULT_DATASET = LIBRARIES[DEFAULT_LIBRARY_KEY].dataset
 
 
-def configure_library(key: str) -> LibrarySpec:
+def resolve_library(key: str) -> LibrarySpec:
     """
-    Points the module's encoders and defaults at one library. Call before load_universe.
+    Looks one library up by key. Replaces the old `configure_library()`.
 
-    Reassigns the module globals the encoders read, so a single process runs one library
-    at a time. Returns the spec so callers can report which one is active.
+    `configure_library()` reassigned nine module globals (`ACTIVE_LIBRARY`,
+    `ACTIVE_SITE_POSITIONS`, `PARENT_RESIDUES`, ...) that the encoders read at call time.
+    That made the library implicit process state: one library per process, no way to
+    ingest two in one run, and every encoder silently coupled to whichever call had run
+    last. This function only looks the spec up; the caller threads it through explicitly.
     """
-    global ACTIVE_LIBRARY, DEFAULT_DATASET, PARENT_ACCESSION, PARENT_METADATA_JSON
-    global STRUCTURE_PDB, ACTIVE_SITE_POSITIONS, PARENT_RESIDUES
-    global PUBLISHED_MEASURED_COUNT, PUBLISHED_IMPUTED_COUNT, PUBLISHED_GLOBAL_OPTIMUM
-
     if key not in LIBRARIES:
         raise BenchmarkError(
             f"unknown library {key!r}; choose from {', '.join(sorted(LIBRARIES))}"
         )
     spec = LIBRARIES[key]
-    ACTIVE_LIBRARY = spec
-    DEFAULT_DATASET = spec.dataset
-    PARENT_ACCESSION = spec.accession
-    PARENT_METADATA_JSON = REPO_ROOT / "workers" / "data" / f"{spec.accession}.json"
-    STRUCTURE_PDB = spec.structure_pdb
-    ACTIVE_SITE_POSITIONS = spec.positions
-    PARENT_RESIDUES = spec.parent_residues
-    PUBLISHED_MEASURED_COUNT = spec.published_measured_count
-    PUBLISHED_IMPUTED_COUNT = spec.published_imputed_count
-    PUBLISHED_GLOBAL_OPTIMUM = spec.published_optimum
-    logger.info("Library: %s (%s), positions %s, parent %s",
-                spec.key, spec.label, list(spec.positions), spec.parent_residues)
+    logger.info("Library: %s (%s), positions %s, parent %s, mode %s",
+                spec.key, spec.label, list(spec.positions), spec.parent_residues,
+                spec.selection_mode.value)
     return spec
 
 
@@ -285,15 +447,25 @@ class Universe:
     """
 
     variant_ids: List[str]                      # canonical, position-ordered mutation notation
-    combos: Dict[str, str]                      # variant id -> 4 residues at the saturated sites
+    combos: Dict[str, str]                      # variant id -> one residue per variable site
     fitness: Dict[str, float]                   # EVALUATOR ONLY
-    one_hot: np.ndarray                         # (n_variants, 80), row order == variant_ids
+    one_hot: np.ndarray                         # (n_variants, n_sites * 20), rows == variant_ids
     index_of: Dict[str, int]
+    # The library this universe was built from. Carried on the object rather than read
+    # from module state, so a universe is self-describing and two can coexist.
+    library: LibrarySpec
     fingerprint: DatasetFingerprint
     provenance_status: str
     provenance_detail: str
     excluded_imputed: int
     duplicates_dropped: int
+    #: Rows that exist in the file but carry no label (HER2's held-out split). Counted so
+    #: a reader can see the eligible universe is the labelled split, not the whole file.
+    unlabelled_excluded: int = 0
+    #: Measurements sitting at the library's declared detection limits. Their values are
+    #: unchanged - what is recorded is that they are censored, not exact.
+    censored_at_floor: int = 0
+    censored_at_ceiling: int = 0
     synthetic: bool = False
     # Ground truth for a planted synthetic interaction, for the TEST HARNESS only.
     # Never read by a selector: a policy that could see this would be scored on a
@@ -315,25 +487,47 @@ def _sha256_file(path: Path) -> Tuple[str, int]:
     return digest.hexdigest(), size
 
 
-def _canonical_variant_id(combo: str) -> str:
-    """Builds position-ordered ProteinGym notation for a combo over ACTIVE_SITE_POSITIONS
-    (parent residues dropped). The combo has one residue per saturated position, so it is
-    4 characters for TrpB and GB1 and 10 for the HER2 CDR-H3 library."""
+def _canonical_variant_id(combo: str, library: LibrarySpec) -> str:
+    """
+    Builds position-ordered ProteinGym notation for a FULL-LENGTH combo over
+    `library.positions`, dropping the sites that carry the parent residue.
+
+    The combo has one residue per declared position - 4 characters for TrpB and GB1, 10
+    for the HER2 CDR-H3 library - and that is enforced, because a short combo would
+    otherwise be zipped against the position list and silently produce a different
+    variant id.
+    """
+    if len(combo) != library.n_sites:
+        raise BenchmarkError(
+            f"genotype {combo!r} has {len(combo)} site(s) but library {library.key!r} "
+            f"declares {library.n_sites} ({list(library.positions)}); genotypes are never "
+            f"truncated or padded to match"
+        )
     parts = [
-        f"{PARENT_RESIDUES[i]}{pos}{combo[i]}"
-        for i, pos in enumerate(ACTIVE_SITE_POSITIONS)
-        if combo[i] != PARENT_RESIDUES[i]
+        f"{library.parent_residues[i]}{pos}{combo[i]}"
+        for i, pos in enumerate(library.positions)
+        if combo[i] != library.parent_residues[i]
     ]
     return ":".join(parts)
 
 
-def _combo_from_notation(notation: str) -> Optional[str]:
+def _combo_from_notation(notation: str, library: LibrarySpec) -> Optional[str]:
     """
-    Maps 'V183A:F184I' to the combo 'AIVS', one residue per position in
-    ACTIVE_SITE_POSITIONS. Returns None when the notation touches a position outside the
-    library or disagrees with the parent residue.
+    Maps 'V183A:F184I' to the FULL-LENGTH combo 'AIVS', one residue per position in
+    `library.positions`.
+
+    A mutation string OMITS wild-type positions, so 'V183A:F184A:V227A' is a four-site
+    genotype whose fourth site is the parent residue; the returned combo is always
+    `library.n_sites` characters, with the parent filled in wherever the string is silent.
+
+    Returns None - rather than raising - when the notation touches a position outside the
+    library, disagrees with the parent residue, or is not substitution notation. The
+    engine's own proposals are passed through here, and an off-library proposal must be
+    recorded as a rejected selection in the trace rather than abort the campaign. The
+    strict, raising equivalent is `veritas.datasets.LibraryDesign.combo_from_mutations`,
+    which is what dataset ingestion uses.
     """
-    residues = list(PARENT_RESIDUES)
+    residues = list(library.parent_residues)
     if notation in ("", "WT"):
         return "".join(residues)
     for token in notation.split(":"):
@@ -344,20 +538,25 @@ def _combo_from_notation(notation: str) -> Optional[str]:
         if not pos_text.isdigit():
             return None
         position = int(pos_text)
-        if position not in ACTIVE_SITE_POSITIONS:
+        if position not in library.positions:
             return None
-        slot = ACTIVE_SITE_POSITIONS.index(position)
-        if wt_aa != PARENT_RESIDUES[slot] or mut_aa not in AA_INDEX:
+        slot = library.positions.index(position)
+        if wt_aa != library.parent_residues[slot] or mut_aa not in AA_INDEX:
             return None
         residues[slot] = mut_aa
     return "".join(residues)
 
 
-def _one_hot_matrix(combos: Sequence[str]) -> np.ndarray:
-    """One-hot encodes combos as len(ACTIVE_SITE_POSITIONS) x 20 binary features
+def _one_hot_matrix(combos: Sequence[str], library: LibrarySpec) -> np.ndarray:
+    """One-hot encodes combos as len(library.positions) x 20 binary features
     (80 for the four-site libraries, 200 for the ten-site HER2 library)."""
-    matrix = np.zeros((len(combos), len(ACTIVE_SITE_POSITIONS) * len(AA_ALPHABET)), dtype=np.float32)
+    matrix = np.zeros((len(combos), library.n_sites * len(AA_ALPHABET)), dtype=np.float32)
     for row, combo in enumerate(combos):
+        if len(combo) != library.n_sites:
+            raise BenchmarkError(
+                f"genotype {combo!r} at row {row} has {len(combo)} site(s) but library "
+                f"{library.key!r} declares {library.n_sites}"
+            )
         for slot, residue in enumerate(combo):
             matrix[row, slot * len(AA_ALPHABET) + AA_INDEX[residue]] = 1.0
     return matrix
@@ -402,16 +601,30 @@ def _load_imputed_ids(
     return None, "no imputed-variant list supplied and the dataset carries no provenance column"
 
 
-PROVENANCE_HELP = f"""
-Measurement provenance could not be established for this dataset.
+def _provenance_help(library: LibrarySpec) -> str:
+    """
+    The actionable refusal text, written for whichever library is being loaded.
 
-Why this matters:
-  Johnston et al. (2024) report that {PUBLISHED_MEASURED_COUNT:,} of the 160,000 four-site TrpB
-  variants had sufficient sequencing coverage to be quantified, and that the remaining
-  {PUBLISHED_IMPUTED_COUNT} fitness values were IMPUTED with the scikit-learn KNN imputer.
-  The prepared CSV in this repository re-encodes the published `label` column verbatim and
-  carries no flag separating measured from imputed records, so a run over it would mix
-  {PUBLISHED_IMPUTED_COUNT} model-filled values into a benchmark presented as experimental.
+    Library-specific because the numbers are: TrpB has a published measured/imputed split,
+    GB1 has none recorded, and quoting TrpB's 871 imputed values while loading GB1 would
+    be a fabricated provenance claim.
+    """
+    if library.published_measured_count is not None and library.published_imputed_count:
+        why = f"""
+  The upstream authors report that {library.published_measured_count:,} variants had
+  sufficient sequencing coverage to be quantified, and that {library.published_imputed_count}
+  fitness values were IMPUTED. The prepared CSV in this repository re-encodes the published
+  label column verbatim and carries no flag separating measured from imputed records, so a
+  run over it would mix {library.published_imputed_count} model-filled values into a
+  benchmark presented as experimental."""
+    else:
+        why = f"""
+  {library.provenance_note}"""
+    return f"""
+Measurement provenance could not be established for library '{library.key}'
+({library.dataset.name}).
+
+Why this matters:{why}
 
 How to fix it (pick one):
   1. Supply the imputed-variant list:
@@ -433,25 +646,42 @@ How to fix it (pick one):
 
 
 def load_universe(
+    library: LibrarySpec,
     dataset_path: Path,
     provenance_mode: str,
     imputed_ids_path: Optional[Path],
     max_variants: Optional[int] = None,
     subsample_seed: int = 0,
+    strict_rows: bool = True,
 ) -> Universe:
     """
-    Loads the TrpB CSV into an eligible universe, enforcing the provenance policy.
+    Loads one library's prepared CSV into an eligible universe, enforcing the provenance
+    and label policies declared on its `LibrarySpec`.
+
+    `library` is an explicit argument, not module state: that is what makes this loader
+    reusable for a library it has never seen, and what lets a cross-protein study hold
+    two universes in one process.
 
     Filtering rules, all reported in the manifest:
-      - a record must map onto the four saturated positions and agree with the parent residues;
-      - duplicate variant ids keep the first occurrence;
+      - a record must map onto the declared positions and agree with the parent residues.
+        With `strict_rows` (the default) a record that does not is a REFUSAL naming the
+        row, because a dataset whose rows do not match the declared design is a
+        configuration error, not noise to be dropped;
+      - rows outside `library.labelled_stage` carry no label and never enter the universe.
+        When the library declares `unlabelled_placeholder`, each such row is checked
+        against it, so a real measurement cannot be discarded as an absent label;
+      - duplicate variant ids keep the first occurrence and are counted;
       - non-finite scores are dropped;
       - imputed records are dropped when a provenance list is available.
+
+    Censoring is RECORDED, never applied: a value at the declared detection floor stays
+    at its measured value and is counted in `censored_at_floor`, so a downstream reader
+    can see that a block of ties is a detection limit rather than a real plateau.
     """
     if not dataset_path.is_file():
         raise BenchmarkError(
             f"Dataset not found: {dataset_path}\n"
-            "Prepare it first with:  python scripts/download_trpb_benchmark.py"
+            f"Prepare it first with:  python scripts/download_trpb_benchmark.py"
         )
 
     sha, size = _sha256_file(dataset_path)
@@ -459,28 +689,48 @@ def load_universe(
     rows: List[Tuple[str, float, Optional[str]]] = []
     provenance_column: Optional[str] = None
     unlabelled_skipped = 0
-    required_stage = ACTIVE_LIBRARY.labelled_stage
+    required_stage = library.labelled_stage
     with open(dataset_path, "r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         fieldnames = [f.strip() for f in (reader.fieldnames or [])]
         if required_stage is not None and "stage" not in fieldnames:
             raise BenchmarkError(
-                f"library {ACTIVE_LIBRARY.key!r} requires rows with stage "
+                f"library {library.key!r} requires rows with stage "
                 f"{required_stage!r}, but {dataset_path} has no 'stage' column "
                 f"(found {fieldnames}). Refusing to admit unlabelled rows as "
                 f"measurements."
             )
         if "mutant" not in fieldnames or "DMS_score" not in fieldnames:
             raise BenchmarkError(
-                f"{dataset_path} does not look like the prepared TrpB benchmark CSV "
-                f"(expected 'mutant' and 'DMS_score' columns, found {fieldnames})."
+                f"{dataset_path} does not look like a prepared benchmark CSV for library "
+                f"{library.key!r} (expected 'mutant' and 'DMS_score' columns, found "
+                f"{fieldnames})."
             )
         for candidate in ("provenance", "is_imputed", "imputed", "measured"):
             if candidate in fieldnames:
                 provenance_column = candidate
                 break
-        for row in reader:
+        for offset, row in enumerate(reader):
+            line = offset + 2  # 1-indexed, header included
             if required_stage is not None and (row.get("stage") or "").strip() != required_stage:
+                # An absent label, not a measurement of zero. When the library declares
+                # what the placeholder is, verify it: a held-out row carrying anything
+                # else is a real measurement about to be thrown away.
+                if library.unlabelled_placeholder is not None:
+                    placeholder_text = (row.get("DMS_score") or "").strip()
+                    try:
+                        observed = float(placeholder_text)
+                    except ValueError:
+                        observed = float("nan")
+                    if not (abs(observed - library.unlabelled_placeholder) < 1e-9):
+                        raise BenchmarkError(
+                            f"{dataset_path.name} line {line}: row is outside the labelled "
+                            f"stage {required_stage!r} but carries DMS_score "
+                            f"{placeholder_text!r}, not the declared placeholder "
+                            f"{library.unlabelled_placeholder!r}. That looks like a real "
+                            f"measurement in the held-out split; refusing to discard it as "
+                            f"an absent label."
+                        )
                 unlabelled_skipped += 1
                 continue
             notation = (row.get("mutant") or "").strip()
@@ -514,31 +764,46 @@ def load_universe(
             provenance_status = "UNVERIFIED_INCLUDES_IMPUTED"
             # The imputed count is library-specific and may be unknown, so fall back to
             # the library's own provenance note rather than printing "None".
-            if PUBLISHED_IMPUTED_COUNT is not None:
-                caveat = f"up to {PUBLISHED_IMPUTED_COUNT} published KNN-imputed values are included"
+            if library.published_imputed_count is not None:
+                caveat = (
+                    f"up to {library.published_imputed_count} published KNN-imputed values "
+                    f"are included"
+                )
             else:
-                caveat = f"measured/imputed split unverified ({ACTIVE_LIBRARY.provenance_note})"
+                caveat = f"measured/imputed split unverified ({library.provenance_note})"
             provenance_detail = (
                 f"{source}; {caveat} because --provenance-mode acknowledge-unflagged was passed"
             )
         else:
-            raise ProvenanceError(PROVENANCE_HELP.strip())
+            raise ProvenanceError(_provenance_help(library).strip())
 
     # ---- Build the universe ----------------------------------------------------------------
     seen: Set[str] = set()
     duplicates = 0
     excluded_imputed = 0
     unmapped = 0
+    censored_at_floor = 0
+    censored_at_ceiling = 0
     ids: List[str] = []
     combos: List[str] = []
     scores: List[float] = []
+    floor = library.detection_floor
+    ceiling = library.detection_ceiling
 
     for notation, score, flag in rows:
-        combo = _combo_from_notation(notation)
+        combo = _combo_from_notation(notation, library)
         if combo is None:
+            if strict_rows:
+                raise BenchmarkError(
+                    f"{dataset_path.name}: record {notation!r} does not map onto library "
+                    f"{library.key!r}'s declared positions {list(library.positions)} with "
+                    f"parent residues {library.parent_residues!r}. Either the dataset or the "
+                    f"library design is wrong; pass --lenient-rows to drop such records and "
+                    f"count them instead."
+                )
             unmapped += 1
             continue
-        variant_id = _canonical_variant_id(combo)
+        variant_id = _canonical_variant_id(combo, library)
         if not variant_id:
             continue  # the parent itself is not a library member
         if variant_id in seen:
@@ -560,6 +825,13 @@ def load_universe(
         ids.append(variant_id)
         combos.append(combo)
         scores.append(score)
+        # Censoring is COUNTED, never applied. A value at the declared floor keeps its
+        # measured value; what changes is that the report can say the ties are a
+        # detection limit rather than a real plateau.
+        if floor is not None and score <= floor + 1e-12:
+            censored_at_floor += 1
+        elif ceiling is not None and score >= ceiling - 1e-12:
+            censored_at_ceiling += 1
 
     if unlabelled_skipped:
         logger.warning(
@@ -567,7 +839,14 @@ def load_universe(
             "universe is the labelled split only.", unlabelled_skipped, required_stage
         )
     if unmapped:
-        logger.warning("%d record(s) did not map onto positions %s and were dropped.", unmapped, list(ACTIVE_SITE_POSITIONS))
+        logger.warning("%d record(s) did not map onto positions %s and were dropped.",
+                       unmapped, list(library.positions))
+    if censored_at_floor:
+        logger.info(
+            "%d of %d eligible variants (%.1f%%) sit at the declared detection floor %s "
+            "and are LEFT-CENSORED, not exact measurements.",
+            censored_at_floor, len(ids), 100.0 * censored_at_floor / max(len(ids), 1), floor,
+        )
     if len(ids) < 1000:
         raise BenchmarkError(
             f"Only {len(ids)} eligible variants survived filtering; refusing to benchmark on so few records."
@@ -590,8 +869,9 @@ def load_universe(
         variant_ids=ids,
         combos=dict(zip(ids, combos)),
         fitness=dict(zip(ids, scores)),
-        one_hot=_one_hot_matrix(combos),
+        one_hot=_one_hot_matrix(combos, library),
         index_of={v: i for i, v in enumerate(ids)},
+        library=library,
         fingerprint=DatasetFingerprint(
             path=str(dataset_path),
             sha256=sha,
@@ -603,25 +883,29 @@ def load_universe(
         provenance_detail=provenance_detail,
         excluded_imputed=excluded_imputed,
         duplicates_dropped=duplicates,
+        unlabelled_excluded=unlabelled_skipped,
+        censored_at_floor=censored_at_floor,
+        censored_at_ceiling=censored_at_ceiling,
     )
 
     best_id = max(universe.fitness, key=lambda v: universe.fitness[v])
-    if PUBLISHED_GLOBAL_OPTIMUM is None:
+    if library.published_optimum is None:
         # No published optimum recorded for this library, so there is nothing to check
         # against. Log the observed best so a fitness-direction error is still visible.
         logger.info("Global optimum in the eligible set: %s (%.4f); no published value "
                     "on record for library %r to cross-check against.",
-                    best_id, universe.fitness[best_id], ACTIVE_LIBRARY.key)
-    elif best_id != PUBLISHED_GLOBAL_OPTIMUM:
+                    best_id, universe.fitness[best_id], library.key)
+    elif best_id != library.published_optimum:
         logger.warning(
             "Global optimum in the eligible set is %s, not the published %s. Check the dataset and "
             "the fitness direction before interpreting results.",
-            best_id, PUBLISHED_GLOBAL_OPTIMUM,
+            best_id, library.published_optimum,
         )
     return universe
 
 
 def build_synthetic_universe(
+    library: LibrarySpec,
     n_variants: int = 0,
     seed: int = 7,
     plant_sign_epistasis: bool = False,
@@ -629,25 +913,38 @@ def build_synthetic_universe(
     pair_bonus: float = 1.40,
 ) -> Universe:
     """
-    Builds a clearly-labelled SYNTHETIC four-site landscape for mechanism validation.
+    Builds a clearly-labelled SYNTHETIC landscape over `library`'s design, for mechanism
+    validation.
 
     Values here are generated additive-plus-pairwise numbers, NOT biology. Every output of a
     synthetic run is stamped so these numbers can never be mistaken for assay performance.
 
-    `n_variants <= 0` (the default) covers the complete 20^4 - 1 combo space, which is what the
-    production adapter needs: it proposes variants from the full saturated library, so a sparse
+    `n_variants <= 0` (the default) covers the complete 20^n_sites - 1 combo space, which is what
+    the production adapter needs: it proposes variants from the full saturated library, so a sparse
     synthetic subsample would reject nearly every one of its selections and leave that code path
     untested. A positive value subsamples instead, for a faster but less representative check.
     """
-    rng = np.random.default_rng(seed)
-    singles = rng.normal(0.0, 0.25, size=(len(ACTIVE_SITE_POSITIONS), len(AA_ALPHABET)))
-    pair = rng.normal(0.0, 0.12, size=(len(ACTIVE_SITE_POSITIONS), len(AA_ALPHABET),
-                                       len(ACTIVE_SITE_POSITIONS), len(AA_ALPHABET)))
+    import itertools
 
+    n_sites = library.n_sites
+    rng = np.random.default_rng(seed)
+    singles = rng.normal(0.0, 0.25, size=(n_sites, len(AA_ALPHABET)))
+    pair = rng.normal(0.0, 0.12, size=(n_sites, len(AA_ALPHABET), n_sites, len(AA_ALPHABET)))
+
+    # Enumerating the complete product is only tractable for a small library: it is
+    # 160,000 genotypes for a four-site one and 20^10 for the HER2 CDR-H3 library. A
+    # library that large has to be subsampled explicitly rather than silently.
+    full_size = len(AA_ALPHABET) ** n_sites
+    if not n_variants and full_size > 1_000_000:
+        raise BenchmarkError(
+            f"the complete product of library {library.key!r} is {len(AA_ALPHABET)}^{n_sites} "
+            f"genotypes, which is too large to enumerate. Pass --synthetic-size to subsample "
+            f"a synthetic landscape over this design."
+        )
     complete = [
-        a + b + c + d
-        for a in AA_ALPHABET for b in AA_ALPHABET for c in AA_ALPHABET for d in AA_ALPHABET
-        if a + b + c + d != PARENT_RESIDUES
+        "".join(parts)
+        for parts in itertools.product(AA_ALPHABET, repeat=n_sites)
+        if "".join(parts) != library.parent_residues
     ]
     if n_variants and n_variants < len(complete):
         combos: Sequence[str] = random.Random(seed).sample(complete, n_variants)
@@ -670,14 +967,14 @@ def build_synthetic_universe(
     # harness; it is never placed in the Universe handed to a selector.
     planted: Optional[Dict[str, Any]] = None
     if plant_sign_epistasis:
-        slot_a, slot_b = rng.choice(len(ACTIVE_SITE_POSITIONS), size=2, replace=False)
+        slot_a, slot_b = rng.choice(n_sites, size=2, replace=False)
         res_a = AA_ALPHABET[int(rng.integers(len(AA_ALPHABET)))]
         res_b = AA_ALPHABET[int(rng.integers(len(AA_ALPHABET)))]
         planted = {
             "slot_a": int(slot_a), "residue_a": res_a,
             "slot_b": int(slot_b), "residue_b": res_b,
-            "position_a": ACTIVE_SITE_POSITIONS[int(slot_a)],
-            "position_b": ACTIVE_SITE_POSITIONS[int(slot_b)],
+            "position_a": library.positions[int(slot_a)],
+            "position_b": library.positions[int(slot_b)],
             "solo_penalty": float(solo_penalty),
             "pair_bonus": float(pair_bonus),
         }
@@ -702,7 +999,7 @@ def build_synthetic_universe(
                 value += pair_bonus
             elif has_a or has_b:
                 value -= solo_penalty
-        ids.append(_canonical_variant_id(combo))
+        ids.append(_canonical_variant_id(combo, library))
         combo_list.append(combo)
         scores.append(float(value))
 
@@ -715,8 +1012,9 @@ def build_synthetic_universe(
         variant_ids=ids,
         combos=dict(zip(ids, combo_list)),
         fitness=dict(zip(ids, scores)),
-        one_hot=_one_hot_matrix(combo_list),
+        one_hot=_one_hot_matrix(combo_list, library),
         index_of={v: i for i, v in enumerate(ids)},
+        library=library,
         fingerprint=DatasetFingerprint(
             path=f"<synthetic:seed={seed}>",
             sha256=hashlib.sha256(f"synthetic-{seed}-{n_variants}".encode()).hexdigest(),
@@ -815,6 +1113,10 @@ class CandidateView:
     one_hot: np.ndarray
     index_of: Dict[str, int]
     combos: Dict[str, str]
+    #: Library DESIGN - positions, parent residues, alphabet, selection mode. Design
+    #: facts are not outcome information, and a selector that cannot see them cannot be
+    #: library-aware.
+    library: LibrarySpec
     batch_size: int
     n_rounds: int
 
@@ -1245,8 +1547,9 @@ class AldeSelector(Selector):
             "savedir_subdir": str(run_root),
             "data_npz": str(data_npz),
             # ALDE uses this only to name its own cache and output folders; it must track
-            # the active library or two libraries share one encoded design space on disk.
-            "protein": f"{ACTIVE_LIBRARY.key}_panoptes",
+            # the library being run or two libraries share one encoded design space on
+            # disk. Taken from the candidate view, which carries its own library.
+            "protein": f"{view.library.key}_panoptes",
             "seed": self.seed,
             "budget": n_rounds * batch_size,   # excludes the initial sample, per ALDE's convention
             "batch_size": batch_size,
@@ -1474,6 +1777,7 @@ class PanoptesSelector(Selector):
         metadata: Any,
         use_live_muse: bool,
         pdb_path: Optional[Path],
+        library: LibrarySpec,
         call_budget: Optional[int] = None,
         qualify_threshold: Optional[float] = None,
         probe_after_qualify: bool = False,
@@ -1546,6 +1850,10 @@ class PanoptesSelector(Selector):
         self.qualified_at_round: Optional[int] = None
         self.wt_sequence = wt_sequence
         self.metadata = metadata
+        # The library being run, held on the selector rather than read from module
+        # state. Everything target-specific - the assayable positions handed to the
+        # planner, the accession, the encoders, pool-restricted mode - comes from here.
+        self.library = library
         self.use_live_muse = use_live_muse
         self.pdb_path = pdb_path
         self.call_budget = call_budget
@@ -1575,18 +1883,18 @@ class PanoptesSelector(Selector):
 
                 self._orchestrator = Orchestrator(
                     OrchestratorConfig(
-                        target_accession=PARENT_ACCESSION,
+                        target_accession=self.library.accession,
                         use_mock_llm=False,
                         enable_live_llm=True,
                         enable_reflection=True,
                         random_seed=self.seed,
                     ),
-                    # The four saturated sites ARE this benchmark's ordered library:
+                    # The saturated sites ARE this benchmark's ordered library:
                     # declaring them is experimental design, not a hint about which
                     # residues win. Without it the planner proposes distal allosteric
-                    # residues that the four-site library cannot measure, and whole
-                    # rounds are discarded as not_in_eligible_universe.
-                    assayable_positions=ACTIVE_SITE_POSITIONS,
+                    # residues that the library cannot measure, and whole rounds are
+                    # discarded as not_in_eligible_universe.
+                    assayable_positions=self.library.positions,
                 )
             return self._orchestrator
         if self._mock_planner is None:
@@ -1701,7 +2009,7 @@ class PanoptesSelector(Selector):
         and the scan position from a coverage count. On a 4-site library a full scan is
         at most 20 variants, so it fits inside one batch.
         """
-        positions = list(ACTIVE_SITE_POSITIONS)
+        positions = list(self.library.positions)
 
         # The whole background is the best MEASURED variant, not a per-identity mean.
         #
@@ -1728,6 +2036,17 @@ class PanoptesSelector(Selector):
                 continue
             # Count only variants that share most of this background, so coverage is
             # measured in the relevant neighbourhood rather than library-wide.
+            #
+            # Both genotypes are full length over the library's positions by
+            # construction, and that is asserted rather than assumed: zipping a 3-site
+            # genotype against a 4-site one compares the wrong sites and says nothing.
+            if len(combo) != len(background):
+                raise BenchmarkError(
+                    f"genotype length mismatch: {combo!r} ({len(combo)}) vs background "
+                    f"{background!r} ({len(background)}) on library {self.library.key!r}. "
+                    f"Canonicalise to full length before comparing; never zip unequal "
+                    f"genotypes."
+                )
             shared = sum(1 for a, b in zip(combo, background) if a == b)
             if shared >= len(positions) - 2:
                 for slot, residue in enumerate(combo):
@@ -1740,7 +2059,7 @@ class PanoptesSelector(Selector):
                 continue
             combo = list(background)
             combo[scan_slot] = residue
-            vid = _canonical_variant_id("".join(combo))
+            vid = _canonical_variant_id("".join(combo), self.library)
             if vid and vid in view.index_of and vid not in revealed.measured:
                 if vid not in proposals:
                     proposals.append(vid)
@@ -1779,12 +2098,12 @@ class PanoptesSelector(Selector):
 
         # Untested Hamming-1 neighbours of the incumbent: 4 positions x 19 residues.
         neighbours = []
-        for slot in range(len(ACTIVE_SITE_POSITIONS)):
+        for slot in range(self.library.n_sites):
             for aa in AA_ALPHABET:
                 if aa == best_combo[slot]:
                     continue
                 combo = best_combo[:slot] + aa + best_combo[slot + 1:]
-                vid = _canonical_variant_id(combo)
+                vid = _canonical_variant_id(combo, self.library)
                 if vid in view.index_of and vid not in revealed.measured:
                     neighbours.append((vid, combo))
         if not neighbours:
@@ -1795,11 +2114,11 @@ class PanoptesSelector(Selector):
         for vid, score in revealed.measured.items():
             combo = view.combos.get(vid)
             if combo:
-                rows.append(_one_hot_matrix([combo])[0])
+                rows.append(_one_hot_matrix([combo], self.library)[0])
                 ys.append(score)
         if len(rows) >= 10:
             model = Ridge(alpha=1.0).fit(np.asarray(rows), np.asarray(ys))
-            X = _one_hot_matrix([c for _, c in neighbours])
+            X = _one_hot_matrix([c for _, c in neighbours], self.library)
             order = np.argsort(-model.predict(X))
         else:
             order = np.arange(len(neighbours))
@@ -1844,7 +2163,7 @@ class PanoptesSelector(Selector):
         # that nobody assayed. Everything after generation - prior, DKL, Pareto, DPP -
         # runs unchanged; only the source of candidates differs.
         candidate_pool = None
-        if ACTIVE_LIBRARY.pool_restricted:
+        if self.library.pool_restricted:
             from controller.gatekeeper import Variant
 
             candidate_pool = [Variant(notation=vid) for vid in view.untested(revealed)]
@@ -1872,8 +2191,8 @@ class PanoptesSelector(Selector):
         self.last_batch_predictions = {}
         proposals: List[str] = []
         for variant, mean in zip(batch.variants, batch.predicted_means or [0.0] * len(batch.variants)):
-            combo = _combo_from_notation(variant.notation)
-            variant_id = _canonical_variant_id(combo) if combo else variant.notation
+            combo = _combo_from_notation(variant.notation, self.library)
+            variant_id = _canonical_variant_id(combo, self.library) if combo else variant.notation
             self.last_batch_predictions[variant_id] = float(mean)
             proposals.append(variant_id)
         return proposals
@@ -2094,30 +2413,62 @@ class _ScriptedSelector(Selector):
         return list(self.scripted)
 
 
-def run_self_checks() -> List[Tuple[str, bool, str]]:
+def run_self_checks(library: LibrarySpec) -> List[Tuple[str, bool, str]]:
     """
-    Validates the benchmark's own mechanics: encoding round trips, evaluator isolation,
-    selection rejection rules and budget accounting. Returns (check, passed, detail) rows.
+    Validates the benchmark's own mechanics against `library`: encoding round trips,
+    genotype-length discipline, evaluator isolation, selection rejection rules and budget
+    accounting. Returns (check, passed, detail) rows.
     """
     results: List[Tuple[str, bool, str]] = []
 
     def check(name: str, condition: bool, detail: str = "") -> None:
         results.append((name, bool(condition), detail))
 
-    # 1. Notation <-> combo round trip, including parent-residue slots.
-    combo = "AIKG"
-    notation = _canonical_variant_id(combo)
-    check("notation round trip", _combo_from_notation(notation) == combo, f"{combo} -> {notation}")
-    partial = _canonical_variant_id("AFVS")  # only position 183 differs from the parent
-    check("partial variant maps back", _combo_from_notation(partial) == "AFVS", f"'{partial}'")
-    check("off-library notation rejected", _combo_from_notation("S65T") is None, "position outside the library")
-    check("parent-mismatch rejected", _combo_from_notation("A183V") is None, "wrong parent residue")
+    def raises(error: type, call) -> bool:
+        try:
+            call()
+        except error:
+            return True
+        except Exception:
+            return False
+        return False
 
-    universe = build_synthetic_universe(n_variants=600, seed=3)
+    # 1. Notation <-> combo round trip, including parent-residue slots.
+    full_combo = library.parent_residues
+    mutated = "".join(
+        "A" if residue != "A" else "V" for residue in library.parent_residues
+    )
+    notation = _canonical_variant_id(mutated, library)
+    check("notation round trip", _combo_from_notation(notation, library) == mutated,
+          f"{mutated} -> {notation}")
+    # A mutation string OMITS wild-type positions: this one names a single site and must
+    # still canonicalise to a FULL-LENGTH genotype with the parent filled in elsewhere.
+    partial_combo = mutated[0] + library.parent_residues[1:]
+    partial = _canonical_variant_id(partial_combo, library)
+    check("wild-type sites are omitted and refilled",
+          _combo_from_notation(partial, library) == partial_combo
+          and len(partial_combo) == library.n_sites,
+          f"'{partial}' -> {partial_combo} ({library.n_sites} sites)")
+    check("off-library notation rejected",
+          _combo_from_notation("S65T", library) is None
+          if 65 not in library.positions else True,
+          "position outside the library")
+    wrong_parent = f"{'A' if library.parent_residues[0] != 'A' else 'V'}{library.positions[0]}V"
+    check("parent-mismatch rejected", _combo_from_notation(wrong_parent, library) is None,
+          f"{wrong_parent}: wrong parent residue")
+    # Unequal genotype lengths are refused, never zipped or truncated.
+    check("short genotype refused, not truncated",
+          raises(BenchmarkError, lambda: _canonical_variant_id(full_combo[:-1], library)),
+          f"{library.n_sites - 1} of {library.n_sites} sites")
+    check("over-long genotype refused",
+          raises(BenchmarkError, lambda: _canonical_variant_id(full_combo + "A", library)),
+          f"{library.n_sites + 1} of {library.n_sites} sites")
+
+    universe = build_synthetic_universe(library, n_variants=600, seed=3)
     evaluator = Evaluator(universe)
     view = CandidateView(
         variant_ids=universe.variant_ids, one_hot=universe.one_hot, index_of=universe.index_of,
-        combos=universe.combos, batch_size=5, n_rounds=1,
+        combos=universe.combos, library=library, batch_size=5, n_rounds=1,
     )
 
     # 2. The selector-visible view carries no outcome information.
@@ -2150,7 +2501,7 @@ def run_self_checks() -> List[Tuple[str, bool, str]]:
     # 5. A full-budget run consumes exactly the configured budget.
     view_full = CandidateView(
         variant_ids=universe.variant_ids, one_hot=universe.one_hot, index_of=universe.index_of,
-        combos=universe.combos, batch_size=10, n_rounds=3,
+        combos=universe.combos, library=library, batch_size=10, n_rounds=3,
     )
     full = run_single(RandomSelector(1), evaluator, view_full, universe.variant_ids[:10], seed=1)
     check("full budget consumed", full.rounds[-1].n_measurements == 10 + 3 * 10,
@@ -2275,8 +2626,15 @@ def write_plot(
     stamp: str,
     synthetic: bool,
     cache_dir: Path,
+    library_label: str,
 ) -> Optional[str]:
-    """Best measured fitness vs total measurements, mean with a +/-1 s.d. band across seeds."""
+    """
+    Best measured fitness vs total measurements, mean with a +/-1 s.d. band across seeds.
+
+    `library_label` is required rather than defaulted: the title used to be the literal
+    string "TrpB four-site landscape", so a GB1 or HER2 run produced a plot captioned
+    with the wrong protein.
+    """
     os.environ["MPLCONFIGDIR"] = str(cache_dir)
     try:
         import matplotlib
@@ -2304,7 +2662,7 @@ def write_plot(
 
     axes.set_xlabel("Unique experimental measurements used")
     axes.set_ylabel("Best measured fitness found")
-    title = "TrpB four-site landscape - best measured fitness vs budget"
+    title = f"{library_label} - best measured fitness vs budget"
     if synthetic:
         title = "SYNTHETIC landscape (NOT biological) - best value vs budget"
     axes.set_title(title)
@@ -2342,7 +2700,7 @@ def write_report(
     add(f"  {config['seeds']} paired seeds; {config['initial_size']} shared starting variants, "
         f"then {config['rounds']} rounds x {config['batch_size']}.")
     add(f"  Total budget per method per seed: {config['total_budget']} unique measurements, including the start.")
-    add(f"  Fitness direction: {FITNESS_DIRECTION}.")
+    add(f"  Fitness direction: {manifest['dataset']['fitness_direction']}.")
     add(f"  Top-1% threshold: {manifest['top1']['threshold']:.6g} (99th percentile over the eligible set).")
     add(f"  Ties: every variant at or above the threshold counts as a hit - "
         f"{manifest['top1']['n_hits']:,} of {manifest['dataset']['unique_variants']:,} variants qualify.")
@@ -2469,33 +2827,59 @@ ALL_METHODS = ("random", "ridge", "random_forest", "alde", "panoptes_default", "
 DEFAULT_METHODS = ("random", "ridge", "random_forest", "panoptes_default")
 
 
-def _load_panoptes_context(pdb: bool = True) -> Tuple[Any, str, Optional[Path]]:
-    """Step 1 of the production loop: cached protein metadata, no network and no writes."""
+def _load_panoptes_context(
+    library: LibrarySpec,
+    pdb: bool = True,
+) -> Tuple[Any, str, Optional[Path], LibraryDesign]:
+    """
+    Step 1 of the production loop: cached protein metadata, no network and no writes.
+
+    This is also where the library's declared design meets the real wild-type sequence,
+    so it returns the canonical `LibraryDesign`. Building it validates every declared
+    position and parent residue against that sequence and refuses on a mismatch, which
+    is the check that stops the dataset being aligned against the wrong reference.
+    """
     from workers.rag_worker import fetch_protein_metadata
 
-    if not PARENT_METADATA_JSON.is_file():
+    metadata_json = library.metadata_json
+    if not metadata_json.is_file():
         raise BenchmarkError(
-            f"Parent metadata cache {PARENT_METADATA_JSON} is missing. Generate it with:\n"
-            "  python scripts/download_trpb_benchmark.py"
+            f"Parent metadata cache {metadata_json} is missing for library "
+            f"{library.key!r}. Generate it with:\n"
+            f"  python scripts/download_trpb_benchmark.py"
         )
-    metadata = fetch_protein_metadata(PARENT_ACCESSION, use_cache=True)
+    metadata = fetch_protein_metadata(library.accession, use_cache=True)
     sequence = metadata.sequence
-    observed = "".join(sequence[p - 1] for p in ACTIVE_SITE_POSITIONS)
-    if observed != PARENT_RESIDUES:
+    if max(library.positions) > len(sequence):
         raise BenchmarkError(
-            f"Parent residues at {list(ACTIVE_SITE_POSITIONS)} are '{observed}', expected "
-            f"'{PARENT_RESIDUES}'. Residue numbering does not match the dataset; refusing to run."
+            f"library {library.key!r} declares position {max(library.positions)} but "
+            f"{library.accession}'s sequence is {len(sequence)} residues long."
         )
-    pdb_path = STRUCTURE_PDB if (pdb and STRUCTURE_PDB.is_file()) else None
-    return metadata, sequence, pdb_path
+    observed = "".join(sequence[p - 1] for p in library.positions)
+    if observed != library.parent_residues:
+        raise BenchmarkError(
+            f"Parent residues at {list(library.positions)} are '{observed}', expected "
+            f"'{library.parent_residues}'. Residue numbering does not match the dataset; "
+            f"refusing to run."
+        )
+    # Raises WildTypeMismatchError / AlphabetError on any disagreement, rather than
+    # quietly tolerating a library description the sequence does not support.
+    design = library.to_design(sequence)
+    structure = library.structure_pdb
+    pdb_path = structure if (pdb and structure is not None and structure.is_file()) else None
+    return metadata, sequence, pdb_path, design
 
 
 def build_selector_factories(
     args: argparse.Namespace,
     methods: Sequence[str],
+    library: LibrarySpec,
 ) -> Tuple[Dict[str, Callable[[int], Selector]], Dict[str, Dict[str, str]]]:
     """
     Resolves each requested method into a factory, or a visible unavailable/unsupported status.
+
+    `library` is threaded in rather than read from module state, so the factories a run
+    builds are tied to the library that run loaded.
 
     Optional integrations are resolved defensively: a failure here marks that one method and
     never prevents the local baselines from running.
@@ -2513,7 +2897,7 @@ def build_selector_factories(
                 "status": "available",
                 "detail": (
                     f"sklearn Ridge(alpha=1.0) on "
-                    f"{len(ACTIVE_SITE_POSITIONS) * len(AA_ALPHABET)} one-hot features"
+                    f"{library.n_sites * len(AA_ALPHABET)} one-hot features"
                 ),
             }
         elif method == "random_forest":
@@ -2579,13 +2963,14 @@ def build_selector_factories(
                 }
                 continue
             try:
-                metadata, sequence, pdb_path = _load_panoptes_context()
+                metadata, sequence, pdb_path, _design = _load_panoptes_context(library)
             except Exception as exc:
                 status[method] = {"status": "UNSUPPORTED", "detail": f"{type(exc).__name__}: {exc}"}
                 continue
             factories[method] = (
-                lambda seed, m=metadata, s=sequence, p=pdb_path, l=live, q=qualify, pr=probe:
-                PanoptesSelector(seed, s, m, l, p, call_budget=args.max_model_calls,
+                lambda seed, m=metadata, s=sequence, p=pdb_path, l=live, q=qualify, pr=probe,
+                lib=library:
+                PanoptesSelector(seed, s, m, l, p, lib, call_budget=args.max_model_calls,
                                  ablation=args.ablation,
                                  prior_spread=args.prior_spread,
                                  ablate_components=_parse_components(args.ablate_components),
@@ -2606,7 +2991,8 @@ def build_selector_factories(
     return factories, status
 
 
-def execute(args: argparse.Namespace) -> int:
+def execute(args: argparse.Namespace, library: LibrarySpec) -> int:
+    """Runs one benchmark against one library. The library is an argument, not state."""
     started = datetime.now(timezone.utc)
     run_id = f"run_{started.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
     output_root = Path(args.output_dir).expanduser().resolve()
@@ -2635,7 +3021,7 @@ def execute(args: argparse.Namespace) -> int:
     use_synthetic = args.smoke_test or args.plant_sign_epistasis
 
     if use_synthetic:
-        self_checks = run_self_checks()
+        self_checks = run_self_checks(library)
         failed = [name for name, passed, _ in self_checks if not passed]
         print("\nSelf-checks")
         print("-" * 78)
@@ -2644,6 +3030,7 @@ def execute(args: argparse.Namespace) -> int:
         if failed:
             raise BenchmarkError(f"self-checks failed: {failed}")
         universe = build_synthetic_universe(
+            library,
             n_variants=args.synthetic_size,
             seed=args.synthetic_seed,
             plant_sign_epistasis=args.plant_sign_epistasis,
@@ -2651,11 +3038,13 @@ def execute(args: argparse.Namespace) -> int:
         logger.warning("SMOKE TEST: using a SYNTHETIC landscape. These numbers are not biology.")
     else:
         universe = load_universe(
+            library=library,
             dataset_path=Path(args.dataset).expanduser().resolve(),
             provenance_mode=args.provenance_mode,
             imputed_ids_path=Path(args.imputed_ids).expanduser().resolve() if args.imputed_ids else None,
             max_variants=args.max_variants,
             subsample_seed=args.subsample_seed,
+            strict_rows=not args.lenient_rows,
         )
 
     stamp = f"provenance={universe.provenance_status}"
@@ -2669,6 +3058,7 @@ def execute(args: argparse.Namespace) -> int:
         one_hot=universe.one_hot,
         index_of=universe.index_of,
         combos=universe.combos,
+        library=universe.library,
         batch_size=args.batch_size,
         n_rounds=args.rounds,
     )
@@ -2683,7 +3073,7 @@ def execute(args: argparse.Namespace) -> int:
     unknown = [m for m in methods if m not in ALL_METHODS]
     if unknown:
         raise BenchmarkError(f"Unknown method(s) {unknown}. Choose from: {', '.join(ALL_METHODS)}")
-    factories, method_status = build_selector_factories(args, methods)
+    factories, method_status = build_selector_factories(args, methods, library)
 
     # ---- Run -------------------------------------------------------------------------------
     outcomes: List[RunOutcome] = []
@@ -2722,7 +3112,7 @@ def execute(args: argparse.Namespace) -> int:
     write_round_metrics_csv(run_dir / "round_metrics.csv", outcomes, stamp)
     write_summary_csv(run_dir / "summary.csv", summary_rows, stamp)
     plot_note = write_plot(run_dir / "best_fitness_vs_measurements.png", outcomes, stamp,
-                           universe.synthetic, cache_dir)
+                           universe.synthetic, cache_dir, library.label)
     if plot_note:
         logger.warning(plot_note)
 
@@ -2757,12 +3147,43 @@ def execute(args: argparse.Namespace) -> int:
         limitations.insert(0, "SYNTHETIC RUN: values are generated, not measured. These results say "
                               "nothing about biological performance.")
     if universe.provenance_status == "UNVERIFIED_INCLUDES_IMPUTED":
+        # 0 published imputed values is a recorded fact, not an unknown, so it does not
+        # get the "up to 0 may be included" phrasing an unknown count would deserve.
+        if library.published_imputed_count:
+            caveat = (
+                f"Measurement provenance is UNVERIFIED: up to "
+                f"{library.published_imputed_count} published KNN-imputed values may be "
+                f"included in the eligible set."
+            )
+        else:
+            caveat = (
+                f"Measurement provenance is UNVERIFIED for library {library.key!r}: "
+                f"{library.provenance_note}"
+            )
+        limitations.insert(0, caveat)
+    if universe.unlabelled_excluded:
         limitations.insert(0, (
-            f"Measurement provenance is UNVERIFIED: up to {PUBLISHED_IMPUTED_COUNT} published "
-            "KNN-imputed values may be included in the eligible set."
-            if PUBLISHED_IMPUTED_COUNT is not None else
-            f"Measurement provenance is UNVERIFIED for library "
-            f"{ACTIVE_LIBRARY.key!r}: {ACTIVE_LIBRARY.provenance_note}"
+            f"{universe.unlabelled_excluded:,} row(s) of {universe.fingerprint.path} carry no "
+            f"label (stage != {library.labelled_stage!r}) and are excluded. Their "
+            f"DMS_score placeholder of {library.unlabelled_placeholder!r} is an ABSENT "
+            f"LABEL, not a measurement; the eligible universe is the labelled split only."
+        ))
+    if universe.censored_at_floor:
+        limitations.insert(0, (
+            f"{universe.censored_at_floor:,} of {len(universe):,} eligible measurements "
+            f"({100.0 * universe.censored_at_floor / max(len(universe), 1):.1f}%) sit at the "
+            f"declared assay floor of {library.detection_floor} and are LEFT-CENSORED, not "
+            f"exact values. This library is censored from below: a large mass of ties at the "
+            f"floor is expected, and a model treating them as exact continuous labels is "
+            f"mis-specified."
+        ))
+    if library.pool_restricted:
+        limitations.insert(0, (
+            f"POOL-RESTRICTED run: library {library.key!r} is a sparse sample of its "
+            f"combinatorial product, so the selector was handed the enumerated untested "
+            f"measured variants and RANKED them. That is a strictly easier problem than "
+            f"generating under mutation constraints, and success here does not validate "
+            f"unconstrained generation."
         ))
     if not unchanged:
         limitations.insert(0, "WARNING: the repository source hash changed during this run - see manifest.")
@@ -2787,23 +3208,50 @@ def execute(args: argparse.Namespace) -> int:
             "enable_live_muse": bool(args.enable_live_muse),
             "max_model_calls": args.max_model_calls,
             "max_variants": args.max_variants,
+            "library": library.key,
+            "lenient_rows": bool(args.lenient_rows),
         },
         "dataset": {
             **universe.fingerprint.to_dict(),
+            "library": library.key,
+            "library_label": library.label,
             "provenance_status": universe.provenance_status,
             "provenance_detail": universe.provenance_detail,
+            "provenance_note": library.provenance_note,
             "excluded_imputed": universe.excluded_imputed,
             "duplicates_dropped": universe.duplicates_dropped,
+            "unlabelled_excluded": universe.unlabelled_excluded,
             "synthetic": universe.synthetic,
-            "fitness_direction": FITNESS_DIRECTION,
-            "active_site_positions": list(ACTIVE_SITE_POSITIONS),
-            "parent_residues": PARENT_RESIDUES,
-            "sequence_mapping": "variant id == position-ordered notation vs the Tm9D8* parent; "
-                                "selections are matched to the library by their 4-residue combo",
+            "fitness_direction": library.fitness_direction,
+            "active_site_positions": list(library.positions),
+            "parent_residues": library.parent_residues,
+            "selection_mode": library.selection_mode.value,
+            "assay": {
+                "units": library.assay_units,
+                "transformation": library.assay_transformation,
+                "detection_floor": library.detection_floor,
+                "detection_ceiling": library.detection_ceiling,
+                "censored_at_floor": universe.censored_at_floor,
+                "censored_at_ceiling": universe.censored_at_ceiling,
+                "censoring": (
+                    "values at a declared limit keep their measured value and are counted "
+                    "here; they are NOT exact continuous labels"
+                ),
+                "unlabelled_placeholder": library.unlabelled_placeholder,
+                "labelled_stage": library.labelled_stage,
+                "source_publication": library.source_publication,
+                "source_doi": library.source_doi,
+                "dataset_version": library.dataset_version,
+            },
+            "sequence_mapping": (
+                f"variant id == position-ordered notation vs the {library.accession} parent; "
+                f"wild-type positions are OMITTED from the notation and refilled, so every "
+                f"genotype is {library.n_sites} residue(s) long before any comparison"
+            ),
             "published_split": {
-                "measured": PUBLISHED_MEASURED_COUNT,
-                "imputed_knn": PUBLISHED_IMPUTED_COUNT,
-                "source": "bioRxiv 10.1101/2024.06.23.600144v1",
+                "measured": library.published_measured_count,
+                "imputed_knn": library.published_imputed_count,
+                "source": library.source_doi or "see provenance_note",
             },
         },
         "top1": {
@@ -2863,9 +3311,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="benchmark_panoptes_isolated.py",
         description=(
-            "Isolated comparison benchmark for PanoptesBio on the TrpB four-site landscape. "
-            "Writes only into a fresh folder under benchmark_comparison_results/ and never "
-            "modifies the existing project."
+            "Isolated comparison benchmark for PanoptesBio on a registered combinatorial "
+            "library (--library). Writes only into a fresh folder under "
+            "benchmark_comparison_results/ and never modifies the existing project."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
@@ -2886,7 +3334,9 @@ examples:
     parser.add_argument("--smoke-test", action="store_true",
                         help="Run a small bounded CPU test on a clearly-labelled SYNTHETIC landscape.")
     parser.add_argument("--dataset", default=str(DEFAULT_DATASET),
-                        help="Path to the prepared TrpB CSV (default: %(default)s).")
+                        help="Path to the prepared CSV for the chosen --library. Left at this "
+                             "default while --library names another library, it is replaced by "
+                             "that library's own dataset (default: %(default)s).")
     parser.add_argument("--methods", default=",".join(DEFAULT_METHODS),
                         help=f"Comma-separated subset of: {', '.join(ALL_METHODS)} (default: %(default)s).")
     parser.add_argument("--seeds", type=int, default=20, help="Number of paired seeds (default: %(default)s).")
@@ -2932,6 +3382,12 @@ examples:
                              "distinguished from the published KNN-imputed ones.")
     parser.add_argument("--imputed-ids", default=None,
                         help="File listing the imputed (non-measured) variants to exclude.")
+    parser.add_argument("--lenient-rows", action="store_true",
+                        help="Drop and COUNT dataset rows that do not map onto the library's "
+                             "declared positions, instead of refusing to run. Off by default: a "
+                             "dataset whose rows disagree with the declared design is a "
+                             "configuration error, and dropping them silently shrinks the "
+                             "eligible universe without changing any printed number.")
     parser.add_argument("--max-variants", type=int, default=None,
                         help="Optionally subsample the candidate universe (seeded) for a faster run.")
     parser.add_argument("--subsample-seed", type=int, default=0, help="Seed for --max-variants.")
@@ -2956,11 +3412,14 @@ examples:
                              "live comparison is reported as SKIPPED rather than silently mocked.")
     parser.add_argument("--max-model-calls", type=int, default=50,
                         help="Hard cap on live model calls across the whole run (default: %(default)s).")
-    parser.add_argument("--library", choices=tuple(sorted(LIBRARIES)), default="trpb",
-                        help="Which saturated library to run. 'trpb' is the development "
+    parser.add_argument("--library", choices=tuple(sorted(LIBRARIES)),
+                        default=DEFAULT_LIBRARY_KEY,
+                        help="Which registered library to run. 'trpb' is the development "
                              "landscape and has been extensively analysed, so results on it "
-                             "are development evidence; 'gb1' is independent and is where a "
-                             "generalisation claim has to be earned (default: %(default)s).")
+                             "are development evidence; 'gb1' is an independent saturated "
+                             "library and is where a generalisation claim has to be earned; "
+                             "'her2' is a sparse ten-site library run POOL-RESTRICTED "
+                             "(default: %(default)s).")
     parser.add_argument("--synthetic-seed", type=int, default=7,
                         help="RNG seed for the synthetic landscape. Varying it gives "
                              "independent landscapes, which is how a policy is tested "
@@ -3020,7 +3479,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     _load_repo_dotenv()
 
-    logging.basicConfig(  # configured before configure_library so its log line is visible
+    logging.basicConfig(  # configured before resolve_library so its log line is visible
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
@@ -3028,10 +3487,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     logging.getLogger("workers").setLevel(logging.WARNING)
     logging.getLogger("controller").setLevel(logging.WARNING)
 
-    # Before anything reads a dataset, a position or a parent residue. The encoders and
-    # defaults are module globals, so this has to happen first.
-    spec = configure_library(args.library)
-    if args.dataset == str(LIBRARIES["trpb"].dataset) and args.library != "trpb":
+    # The library is resolved once and then passed down every call path. Nothing is
+    # reassigned at module scope, so this is ordering for the log line only.
+    spec = resolve_library(args.library)
+    if args.dataset == str(LIBRARIES[DEFAULT_LIBRARY_KEY].dataset) and args.library != DEFAULT_LIBRARY_KEY:
         # --dataset still carries the argparse default, so the user selected a library
         # without naming a file. Point it at that library's dataset instead of silently
         # scoring one library's variants against another's table.
@@ -3051,7 +3510,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             parser.error(f"{name} must be >= 1")
 
     try:
-        return execute(args)
+        return execute(args, spec)
     except ProvenanceError as exc:
         print(f"\nPROVENANCE ERROR\n{'=' * 78}\n{exc}\n", file=sys.stderr)
         return 3
