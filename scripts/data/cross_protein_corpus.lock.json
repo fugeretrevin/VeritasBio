@@ -1,0 +1,160 @@
+{
+  "schema": "veritasbio/cross-protein-corpus-lock/1",
+  "corpus": {
+    "name": "CombinGym",
+    "repo": "https://github.com/sitonglab/CombinGym",
+    "commit": "c5dccd514a9acfe1089a5f1555faea98afd78019",
+    "commit_date_utc": "2026-09-16T07:33:53Z",
+    "tree_sha": "911f19c7ba82e112056f154d3e8b2073f70dc7d1",
+    "raw_base": "https://raw.githubusercontent.com/sitonglab/CombinGym/c5dccd514a9acfe1089a5f1555faea98afd78019/",
+    "collection_size": "14 landscapes over 9 proteins",
+    "frozen_on": "2026-10-31"
+  },
+  "notes": [
+    "git_blob_sha1 is authoritative: it is the value GitHub's tree API reports for the pinned commit, and `git hash-object` reproduces it.",
+    "sha256 is recorded only for files whose local copy already matched the pin.",
+    "Files listed with a non-'recorded' sha256_status were not verifiable at record time; `verify` still checks their blob SHA-1 against the pin."
+  ],
+  "files": [
+    {
+      "path": "Data/Data_summary.xlsx",
+      "git_blob_sha1": "45d6067d821f338df36045f56c4959fc3cffc86d",
+      "size_bytes": 13055,
+      "sha256": "a3b873e4eb16bae12b41de5f2d46a77d3fecd43e81cd81ef931d51a1c2b38c8a",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Clean/bnAbs_CR6261_H1_clean.xlsx",
+      "git_blob_sha1": "90864f0970ab50b6b9ee0623f1acecd8aac81d3b",
+      "size_bytes": 164703,
+      "sha256": "43778937140871704228516976eccf5d5fac7ac79dcc1de8e94007803da9a0f5",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Clean/bnAbs_CR6261_H9_clean.xlsx",
+      "git_blob_sha1": "97f2a084427e67b4d017654bb7ad158f55a2c9cc",
+      "size_bytes": 149858,
+      "sha256": "9ddf1989ee1a4a9449b67bba9ff14ab8b0190ca827611e9196542bb4c2de7063",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Clean/bnAbs_CR9114_H1_clean.xlsx",
+      "git_blob_sha1": "d9895e1f7e6a25fba4c6e2aced9843f7ad4a7000",
+      "size_bytes": 4403699,
+      "sha256": "1a1053862608769f5c7dd34cb93e003d26bcf8404a57dd8edcaa5b6463640084",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Clean/CreiLOV_clean.xlsx",
+      "git_blob_sha1": "9ad0d8ff3cf7c742280c84befcd33780a575b31d",
+      "size_bytes": 26263997,
+      "sha256": "5b1bfaa6788808dfd2692a3757e5d5aa30eb6097653543c1e1c60caa079ad27f",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Clean/eqFP611_clean.xlsx",
+      "git_blob_sha1": "0d7423fe554453675fc2af10ed0320ffdfc21904",
+      "size_bytes": 616607,
+      "sha256": "27e26e9d198e04f81740349399a8e5fb4687f4f2af7b27b0f9d374e04b0a8d63",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Clean/GB1_clean.xlsx",
+      "git_blob_sha1": "c4b9a7dd4eedceb10c952ebc897c69362f215a4d",
+      "size_bytes": 4350703,
+      "sha256": "1cbbb4554a4cd0a1c4d564cf37965e9a8a30cab360fab351b707774b017b842f",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Clean/HIV-1_clean.xlsx",
+      "git_blob_sha1": "ad96e7c6b000bb9f1033d91fe297fb41ced62c5c",
+      "size_bytes": 47401,
+      "sha256": "a0ed221928a81e6e3d5b57571867dccfc4771bc7f4db6629c2da2cf8a99a6023",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Clean/RhlA_clean.xlsx",
+      "git_blob_sha1": "0cb393531ab6fff5fa8f037221d50cf543429dcd",
+      "size_bytes": 287350,
+      "sha256": "d63fdd66be2a9394a89e8321a4e4553d30b2f8b553773d6faddfb5c114c0f876",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Clean/SaCas9_clean.xlsx",
+      "git_blob_sha1": "76b854e6ec16c09c99efd2e153f6f2a10154f280",
+      "size_bytes": 126881,
+      "sha256": "8f74ec4bfce62a15e53bde8c381803e6f29bad6603614073233c47bc6f5d8648",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Clean/SpCas9_clean.xlsx",
+      "git_blob_sha1": "00ae9e52824b835ddbd09c569630d813df7414b0",
+      "size_bytes": 113908,
+      "sha256": "48283f3ea546aecf67ed00e64831c69a62f6ba858ca5df018a7ce5d49f74c103",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/WT Sequence/bnAbs_CR6261.fasta",
+      "git_blob_sha1": "dbd6181366b401d8f9a0dff7218925b23a24d7dc",
+      "size_bytes": 141,
+      "sha256": "eb33620948402b145d77c1fc77edb0c1f64aa6613ad5bc2c9f00bf762c574ca7",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/WT Sequence/bnAbs_CR9114.fasta",
+      "git_blob_sha1": "3da4c71ad344f0025bf5a97df49a7fdbcb813bbe",
+      "size_bytes": 141,
+      "sha256": "b404e35d7a6aea4306df41d77f09236675717571e0033789e5d213e4d0582284",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/WT Sequence/CreiLOV.fasta",
+      "git_blob_sha1": "28203777abb3dd6949c81b07cc5ad9ef187c63f6",
+      "size_bytes": 134,
+      "sha256": "dc696f32002cd9b08e9388fa5789f6e32e00c944ec1524adb7e6bfd499b7ea23",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/WT Sequence/eqFP611(mTagBFP2).fasta",
+      "git_blob_sha1": "b73e838216a07d21aa5572a7090a3e9d8826f101",
+      "size_bytes": 249,
+      "sha256": "2c6785a0239d7284381ce938cbb3e63d55333693b4a882c7ec07f1e732e3fe35",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/WT Sequence/GB1.fasta",
+      "git_blob_sha1": "7f856d7aeaf1769580d01548ed3298f8dd129750",
+      "size_bytes": 66,
+      "sha256": "5703f04a827731008e67c376121c1eb7ea3536d504a4dfde5b90ce62a3e1c2b3",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/WT Sequence/HIV-1.fasta",
+      "git_blob_sha1": "b7724dc1b1db587d26ccca9a7cd1f08b840cfbaa",
+      "size_bytes": 120,
+      "sha256": "c800052667dc04bf6b5108984d26897aa4c23c8227d9f0e9f21de027ac2cda01",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/WT Sequence/RhlA.fasta",
+      "git_blob_sha1": "50e0093113f21fbbf192869fe18506d3a68635ba",
+      "size_bytes": 307,
+      "sha256": "67d83dff84e876e73033c26c9d9f7653e0b13966596d299d73124eff10241c19",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/WT Sequence/SaCas9(SaCas9-KKH).fasta",
+      "git_blob_sha1": "8fc81dbe4cff2d4d048d25c120ae61945b2132ff",
+      "size_bytes": 1072,
+      "sha256": "760708d0e3b823c2feff048fe41b8525b5ccbb5a9a7595dbff188dafa31c12f3",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/WT Sequence/SpCas9.fasta",
+      "git_blob_sha1": "90f650f6286b6697f353629fa3f048354a3d85f6",
+      "size_bytes": 1383,
+      "sha256": "d9a6ffd24ca21190d48dd8357569cdcb0f73e87e1ef0843dd0e4b62eb7203132",
+      "sha256_status": "recorded"
+    }
+  ]
+}

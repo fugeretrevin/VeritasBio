@@ -1,0 +1,3030 @@
+{
+  "schema": "veritasbio/cross-protein-landscape-stats/1",
+  "corpus": {
+    "name": "CombinGym",
+    "repo": "https://github.com/sitonglab/CombinGym",
+    "commit": "c5dccd514a9acfe1089a5f1555faea98afd78019",
+    "commit_date_utc": "2026-09-16T07:33:53Z"
+  },
+  "conventions": {
+    "direction": "higher is better for every landscape listed",
+    "tier_ladder": [
+      0.01,
+      0.02,
+      0.05,
+      0.1
+    ],
+    "min_tier_members": 30,
+    "budgets": [
+      25,
+      50,
+      75,
+      100,
+      125
+    ],
+    "diversity_distances": [
+      1,
+      2,
+      3
+    ],
+    "shallow_shell_primary": "depth <= floor(sites/2)",
+    "min_shell_for_absolute_cut": 500
+  },
+  "landscapes": {
+    "eqfp611_blue": {
+      "key": "eqfp611_blue",
+      "protein": "eqFP611 / mTagBFP2",
+      "family": "GFP-like fluorescent protein",
+      "phenotype": "fluorescence_blue",
+      "sites": 13,
+      "level": "final_test",
+      "file": "Data/DMS/Clean/eqFP611_clean.xlsx",
+      "sheet": "genodata",
+      "rows_in_sheet": 8192,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 8192,
+      "variant_string_widths": [
+        13
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": 0.090874601246027,
+      "value_max": 1.60766512991704,
+      "distinct_values": 8074,
+      "mass_at_min": 1,
+      "frac_at_min": 0.0001220703125,
+      "mass_at_max": 1,
+      "frac_at_max": 0.0001220703125,
+      "censored_from_below": false,
+      "censored_from_above": false,
+      "tier_fraction": 0.01,
+      "tier_deepened_from_1pct": false,
+      "tier_size_nominal": 82,
+      "tier_boundary_value": 1.52480535873233,
+      "hits_strictly_above_boundary": 81,
+      "hits_including_boundary_ties": 82,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 82,
+      "diversity_adjusted_ceiling_d1": 82,
+      "diversity_adjusted_ceiling_d2": 38,
+      "diversity_adjusted_ceiling_d3": 14,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 25,
+          "fraction_of_universe": 0.0030517578125
+        },
+        "50": {
+          "raw_hits": 50,
+          "diversity_adjusted_d2": 38,
+          "fraction_of_universe": 0.006103515625
+        },
+        "75": {
+          "raw_hits": 75,
+          "diversity_adjusted_d2": 38,
+          "fraction_of_universe": 0.0091552734375
+        },
+        "100": {
+          "raw_hits": 82,
+          "diversity_adjusted_d2": 38,
+          "fraction_of_universe": 0.01220703125
+        },
+        "125": {
+          "raw_hits": 82,
+          "diversity_adjusted_d2": 38,
+          "fraction_of_universe": 0.0152587890625
+        }
+      },
+      "mean_depth_of_hit": 3.9634146341463414,
+      "max_depth_observed": 13,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 1,
+          "hit_rate": 1.0,
+          "wilson95": [
+            0.2065493117918027,
+            1.0
+          ]
+        },
+        "1": {
+          "variants": 13,
+          "hits": 4,
+          "hit_rate": 0.3076923076923077,
+          "wilson95": [
+            0.12680703567070326,
+            0.5763065701492199
+          ]
+        },
+        "2": {
+          "variants": 78,
+          "hits": 9,
+          "hit_rate": 0.11538461538461539,
+          "wilson95": [
+            0.06190510595475848,
+            0.2049701328282544
+          ]
+        },
+        "3": {
+          "variants": 286,
+          "hits": 20,
+          "hit_rate": 0.06993006993006994,
+          "wilson95": [
+            0.045721778372057195,
+            0.10553835898203744
+          ]
+        },
+        "4": {
+          "variants": 715,
+          "hits": 17,
+          "hit_rate": 0.023776223776223775,
+          "wilson95": [
+            0.014896837167429101,
+            0.03774545052169102
+          ]
+        },
+        "5": {
+          "variants": 1287,
+          "hits": 17,
+          "hit_rate": 0.01320901320901321,
+          "wilson95": [
+            0.008263257455906031,
+            0.021052084580048713
+          ]
+        },
+        "6": {
+          "variants": 1716,
+          "hits": 9,
+          "hit_rate": 0.005244755244755245,
+          "wilson95": [
+            0.002761736336834662,
+            0.009937956863667203
+          ]
+        },
+        "7": {
+          "variants": 1716,
+          "hits": 4,
+          "hit_rate": 0.002331002331002331,
+          "wilson95": [
+            0.0009068431512243556,
+            0.005978360609940064
+          ]
+        },
+        "8": {
+          "variants": 1287,
+          "hits": 1,
+          "hit_rate": 0.000777000777000777,
+          "wilson95": [
+            0.00013717288488353891,
+            0.004388137981997421
+          ]
+        },
+        "9": {
+          "variants": 715,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.005343958440118782
+          ]
+        },
+        "10": {
+          "variants": 286,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.01325365562305309
+          ]
+        },
+        "11": {
+          "variants": 78,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.04693781041791674
+          ]
+        },
+        "12": {
+          "variants": 13,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.22809537513180025
+          ]
+        },
+        "13": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 6,
+        "shell_variants": 4096,
+        "shell_hits": 77,
+        "shell_hit_rate": 0.018798828125,
+        "enrichment_vs_base_rate": 1.8780487804878048,
+        "wilson95_hit_rate": [
+          0.015068047412271846,
+          0.023431358104829648
+        ],
+        "enrichment_wilson95": [
+          1.5053346878211094,
+          2.340849824326396
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 92,
+        "shell_hits": 14,
+        "shell_hit_rate": 0.15217391304347827,
+        "enrichment_vs_base_rate": 15.20254506892895,
+        "wilson95_hit_rate": [
+          0.09286540233783813,
+          0.23936512976135593
+        ],
+        "enrichment_wilson95": [
+          9.277480194531341,
+          23.91316028054912
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 3,
+        "shell_variants": 378,
+        "shell_hits": 34,
+        "shell_hit_rate": 0.08994708994708994,
+        "enrichment_vs_base_rate": 8.985933668860497,
+        "wilson95_hit_rate": [
+          0.06508057238052181,
+          0.12306415944554616
+        ],
+        "enrichment_wilson95": [
+          6.501707913917496,
+          12.294409685096515
+        ],
+        "resolvable": false,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.010009765625,
+      "status": "ok"
+    },
+    "eqfp611_red": {
+      "key": "eqfp611_red",
+      "protein": "eqFP611 / mTagBFP2",
+      "family": "GFP-like fluorescent protein",
+      "phenotype": "fluorescence_red",
+      "sites": 13,
+      "level": "final_test",
+      "file": "Data/DMS/Clean/eqFP611_clean.xlsx",
+      "sheet": "genodata",
+      "rows_in_sheet": 8192,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 8192,
+      "variant_string_widths": [
+        13
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": 0.0252180197980133,
+      "value_max": 1.69244066323158,
+      "distinct_values": 8086,
+      "mass_at_min": 1,
+      "frac_at_min": 0.0001220703125,
+      "mass_at_max": 1,
+      "frac_at_max": 0.0001220703125,
+      "censored_from_below": false,
+      "censored_from_above": false,
+      "tier_fraction": 0.01,
+      "tier_deepened_from_1pct": false,
+      "tier_size_nominal": 82,
+      "tier_boundary_value": 1.33853908703118,
+      "hits_strictly_above_boundary": 81,
+      "hits_including_boundary_ties": 82,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 82,
+      "diversity_adjusted_ceiling_d1": 82,
+      "diversity_adjusted_ceiling_d2": 28,
+      "diversity_adjusted_ceiling_d3": 10,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 25,
+          "fraction_of_universe": 0.0030517578125
+        },
+        "50": {
+          "raw_hits": 50,
+          "diversity_adjusted_d2": 28,
+          "fraction_of_universe": 0.006103515625
+        },
+        "75": {
+          "raw_hits": 75,
+          "diversity_adjusted_d2": 28,
+          "fraction_of_universe": 0.0091552734375
+        },
+        "100": {
+          "raw_hits": 82,
+          "diversity_adjusted_d2": 28,
+          "fraction_of_universe": 0.01220703125
+        },
+        "125": {
+          "raw_hits": 82,
+          "diversity_adjusted_d2": 28,
+          "fraction_of_universe": 0.0152587890625
+        }
+      },
+      "mean_depth_of_hit": 7.109756097560975,
+      "max_depth_observed": 13,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        },
+        "1": {
+          "variants": 13,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.22809537513180025
+          ]
+        },
+        "2": {
+          "variants": 78,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.04693781041791674
+          ]
+        },
+        "3": {
+          "variants": 286,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.01325365562305309
+          ]
+        },
+        "4": {
+          "variants": 715,
+          "hits": 2,
+          "hit_rate": 0.002797202797202797,
+          "wilson95": [
+            0.0007674293504516452,
+            0.01014103841307906
+          ]
+        },
+        "5": {
+          "variants": 1287,
+          "hits": 5,
+          "hit_rate": 0.003885003885003885,
+          "wilson95": [
+            0.0016605484374564664,
+            0.009062270221692939
+          ]
+        },
+        "6": {
+          "variants": 1716,
+          "hits": 19,
+          "hit_rate": 0.011072261072261072,
+          "wilson95": [
+            0.007099759488389319,
+            0.017228912590787435
+          ]
+        },
+        "7": {
+          "variants": 1716,
+          "hits": 25,
+          "hit_rate": 0.014568764568764568,
+          "wilson95": [
+            0.009887397078249585,
+            0.021418662328132096
+          ]
+        },
+        "8": {
+          "variants": 1287,
+          "hits": 21,
+          "hit_rate": 0.016317016317016316,
+          "wilson95": [
+            0.010696826353933197,
+            0.024816023474289996
+          ]
+        },
+        "9": {
+          "variants": 715,
+          "hits": 7,
+          "hit_rate": 0.009790209790209791,
+          "wilson95": [
+            0.00475030868019183,
+            0.02006943239186868
+          ]
+        },
+        "10": {
+          "variants": 286,
+          "hits": 3,
+          "hit_rate": 0.01048951048951049,
+          "wilson95": [
+            0.003573670562297215,
+            0.0303809573204121
+          ]
+        },
+        "11": {
+          "variants": 78,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.04693781041791674
+          ]
+        },
+        "12": {
+          "variants": 13,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.22809537513180025
+          ]
+        },
+        "13": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 6,
+        "shell_variants": 4096,
+        "shell_hits": 26,
+        "shell_hit_rate": 0.00634765625,
+        "enrichment_vs_base_rate": 0.6341463414634146,
+        "wilson95_hit_rate": [
+          0.004335565767430794,
+          0.009284828933522641
+        ],
+        "enrichment_wilson95": [
+          0.4331335947169886,
+          0.9275770563831399
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 92,
+        "shell_hits": 0,
+        "shell_hit_rate": 0.0,
+        "enrichment_vs_base_rate": 0.0,
+        "wilson95_hit_rate": [
+          0.0,
+          0.04008138989259148
+        ],
+        "enrichment_wilson95": [
+          0.0,
+          4.004228609757432
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 3,
+        "shell_variants": 378,
+        "shell_hits": 0,
+        "shell_hit_rate": 0.0,
+        "enrichment_vs_base_rate": 0.0,
+        "wilson95_hit_rate": [
+          0.0,
+          0.010060350420173217
+        ],
+        "enrichment_wilson95": [
+          0.0,
+          1.0050535444153534
+        ],
+        "resolvable": false,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.010009765625,
+      "status": "ok"
+    },
+    "eqfp611_combined": {
+      "key": "eqfp611_combined",
+      "protein": "eqFP611 / mTagBFP2",
+      "family": "GFP-like fluorescent protein",
+      "phenotype": "fluorescence_combined",
+      "sites": 13,
+      "level": "final_test",
+      "file": "Data/DMS/Clean/eqFP611_clean.xlsx",
+      "sheet": "genodata",
+      "rows_in_sheet": 8192,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 8192,
+      "variant_string_widths": [
+        13
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": 0.154862624839421,
+      "value_max": 1.6924523859297,
+      "distinct_values": 8191,
+      "mass_at_min": 1,
+      "frac_at_min": 0.0001220703125,
+      "mass_at_max": 1,
+      "frac_at_max": 0.0001220703125,
+      "censored_from_below": false,
+      "censored_from_above": false,
+      "tier_fraction": 0.01,
+      "tier_deepened_from_1pct": false,
+      "tier_size_nominal": 82,
+      "tier_boundary_value": 1.52515982087415,
+      "hits_strictly_above_boundary": 81,
+      "hits_including_boundary_ties": 82,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 82,
+      "diversity_adjusted_ceiling_d1": 82,
+      "diversity_adjusted_ceiling_d2": 38,
+      "diversity_adjusted_ceiling_d3": 15,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 25,
+          "fraction_of_universe": 0.0030517578125
+        },
+        "50": {
+          "raw_hits": 50,
+          "diversity_adjusted_d2": 38,
+          "fraction_of_universe": 0.006103515625
+        },
+        "75": {
+          "raw_hits": 75,
+          "diversity_adjusted_d2": 38,
+          "fraction_of_universe": 0.0091552734375
+        },
+        "100": {
+          "raw_hits": 82,
+          "diversity_adjusted_d2": 38,
+          "fraction_of_universe": 0.01220703125
+        },
+        "125": {
+          "raw_hits": 82,
+          "diversity_adjusted_d2": 38,
+          "fraction_of_universe": 0.0152587890625
+        }
+      },
+      "mean_depth_of_hit": 3.975609756097561,
+      "max_depth_observed": 13,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 1,
+          "hit_rate": 1.0,
+          "wilson95": [
+            0.2065493117918027,
+            1.0
+          ]
+        },
+        "1": {
+          "variants": 13,
+          "hits": 4,
+          "hit_rate": 0.3076923076923077,
+          "wilson95": [
+            0.12680703567070326,
+            0.5763065701492199
+          ]
+        },
+        "2": {
+          "variants": 78,
+          "hits": 9,
+          "hit_rate": 0.11538461538461539,
+          "wilson95": [
+            0.06190510595475848,
+            0.2049701328282544
+          ]
+        },
+        "3": {
+          "variants": 286,
+          "hits": 20,
+          "hit_rate": 0.06993006993006994,
+          "wilson95": [
+            0.045721778372057195,
+            0.10553835898203744
+          ]
+        },
+        "4": {
+          "variants": 715,
+          "hits": 17,
+          "hit_rate": 0.023776223776223775,
+          "wilson95": [
+            0.014896837167429101,
+            0.03774545052169102
+          ]
+        },
+        "5": {
+          "variants": 1287,
+          "hits": 17,
+          "hit_rate": 0.01320901320901321,
+          "wilson95": [
+            0.008263257455906031,
+            0.021052084580048713
+          ]
+        },
+        "6": {
+          "variants": 1716,
+          "hits": 8,
+          "hit_rate": 0.004662004662004662,
+          "wilson95": [
+            0.0023641840874130296,
+            0.009172611225221346
+          ]
+        },
+        "7": {
+          "variants": 1716,
+          "hits": 5,
+          "hit_rate": 0.002913752913752914,
+          "wilson95": [
+            0.0012452035337567058,
+            0.0068028981152752025
+          ]
+        },
+        "8": {
+          "variants": 1287,
+          "hits": 1,
+          "hit_rate": 0.000777000777000777,
+          "wilson95": [
+            0.00013717288488353891,
+            0.004388137981997421
+          ]
+        },
+        "9": {
+          "variants": 715,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.005343958440118782
+          ]
+        },
+        "10": {
+          "variants": 286,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.01325365562305309
+          ]
+        },
+        "11": {
+          "variants": 78,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.04693781041791674
+          ]
+        },
+        "12": {
+          "variants": 13,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.22809537513180025
+          ]
+        },
+        "13": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 6,
+        "shell_variants": 4096,
+        "shell_hits": 76,
+        "shell_hit_rate": 0.0185546875,
+        "enrichment_vs_base_rate": 1.853658536585366,
+        "wilson95_hit_rate": [
+          0.014850524555966738,
+          0.02316105721964166
+        ],
+        "enrichment_wilson95": [
+          1.483603623932677,
+          2.3138461066256646
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 92,
+        "shell_hits": 14,
+        "shell_hit_rate": 0.15217391304347827,
+        "enrichment_vs_base_rate": 15.20254506892895,
+        "wilson95_hit_rate": [
+          0.09286540233783813,
+          0.23936512976135593
+        ],
+        "enrichment_wilson95": [
+          9.277480194531341,
+          23.91316028054912
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 3,
+        "shell_variants": 378,
+        "shell_hits": 34,
+        "shell_hit_rate": 0.08994708994708994,
+        "enrichment_vs_base_rate": 8.985933668860497,
+        "wilson95_hit_rate": [
+          0.06508057238052181,
+          0.12306415944554616
+        ],
+        "enrichment_wilson95": [
+          6.501707913917496,
+          12.294409685096515
+        ],
+        "resolvable": false,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.010009765625,
+      "status": "ok"
+    },
+    "creilov": {
+      "key": "creilov",
+      "protein": "CreiLOV",
+      "family": "LOV / flavin-binding photosensor",
+      "phenotype": "fluorescence",
+      "sites": 15,
+      "level": "final_test",
+      "file": "Data/DMS/Clean/CreiLOV_clean.xlsx",
+      "sheet": "Sheet1",
+      "rows_in_sheet": 165428,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 165428,
+      "variant_string_widths": [
+        120
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": 620.276332747672,
+      "value_max": 15686.304864064412,
+      "distinct_values": 165428,
+      "mass_at_min": 1,
+      "frac_at_min": 6.0449258892085985e-06,
+      "mass_at_max": 1,
+      "frac_at_max": 6.0449258892085985e-06,
+      "censored_from_below": false,
+      "censored_from_above": false,
+      "tier_fraction": 0.01,
+      "tier_deepened_from_1pct": false,
+      "tier_size_nominal": 1655,
+      "tier_boundary_value": 13253.106440775888,
+      "hits_strictly_above_boundary": 1654,
+      "hits_including_boundary_ties": 1655,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 1655,
+      "diversity_adjusted_ceiling_d1": 1655,
+      "diversity_adjusted_ceiling_d2": 647,
+      "diversity_adjusted_ceiling_d3": 188,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 25,
+          "fraction_of_universe": 0.00015112314723021497
+        },
+        "50": {
+          "raw_hits": 50,
+          "diversity_adjusted_d2": 50,
+          "fraction_of_universe": 0.00030224629446042994
+        },
+        "75": {
+          "raw_hits": 75,
+          "diversity_adjusted_d2": 75,
+          "fraction_of_universe": 0.00045336944169064485
+        },
+        "100": {
+          "raw_hits": 100,
+          "diversity_adjusted_d2": 100,
+          "fraction_of_universe": 0.0006044925889208599
+        },
+        "125": {
+          "raw_hits": 125,
+          "diversity_adjusted_d2": 125,
+          "fraction_of_universe": 0.0007556157361510748
+        }
+      },
+      "mean_depth_of_hit": 6.503323262839879,
+      "max_depth_observed": 15,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        },
+        "1": {
+          "variants": 20,
+          "hits": 1,
+          "hit_rate": 0.05,
+          "wilson95": [
+            0.008881448702335523,
+            0.23613119546428119
+          ]
+        },
+        "2": {
+          "variants": 176,
+          "hits": 17,
+          "hit_rate": 0.09659090909090909,
+          "wilson95": [
+            0.0611831709781424,
+            0.14923248688344765
+          ]
+        },
+        "3": {
+          "variants": 978,
+          "hits": 57,
+          "hit_rate": 0.05828220858895705,
+          "wilson95": [
+            0.045254887070423855,
+            0.07476597558041981
+          ]
+        },
+        "4": {
+          "variants": 3565,
+          "hits": 145,
+          "hit_rate": 0.04067321178120617,
+          "wilson95": [
+            0.0346680925890262,
+            0.04766715885512307
+          ]
+        },
+        "5": {
+          "variants": 9603,
+          "hits": 274,
+          "hit_rate": 0.02853275018223472,
+          "wilson95": [
+            0.025386711774013283,
+            0.032055836980773515
+          ]
+        },
+        "6": {
+          "variants": 19193,
+          "hits": 325,
+          "hit_rate": 0.01693325691658417,
+          "wilson95": [
+            0.015202229926479637,
+            0.01885761581855049
+          ]
+        },
+        "7": {
+          "variants": 29255,
+          "hits": 359,
+          "hit_rate": 0.012271406597162879,
+          "wilson95": [
+            0.011072322423029664,
+            0.013598560731921316
+          ]
+        },
+        "8": {
+          "variants": 34230,
+          "hits": 263,
+          "hit_rate": 0.007683318726263512,
+          "wilson95": [
+            0.0068119610466948356,
+            0.008665164402918972
+          ]
+        },
+        "9": {
+          "variants": 30925,
+          "hits": 127,
+          "hit_rate": 0.0041067097817299916,
+          "wilson95": [
+            0.003452923741166531,
+            0.004883678818747855
+          ]
+        },
+        "10": {
+          "variants": 21167,
+          "hits": 67,
+          "hit_rate": 0.0031653044833939623,
+          "wilson95": [
+            0.002493448049941535,
+            0.004017462683059618
+          ]
+        },
+        "11": {
+          "variants": 11022,
+          "hits": 14,
+          "hit_rate": 0.001270186898929414,
+          "wilson95": [
+            0.0007568006429238898,
+            0.0021310931291788973
+          ]
+        },
+        "12": {
+          "variants": 4093,
+          "hits": 5,
+          "hit_rate": 0.001221597849987784,
+          "wilson95": [
+            0.0005219029208692126,
+            0.002856665427508032
+          ]
+        },
+        "13": {
+          "variants": 1031,
+          "hits": 1,
+          "hit_rate": 0.0009699321047526673,
+          "wilson95": [
+            0.00017123735457307,
+            0.0054735489372429195
+          ]
+        },
+        "14": {
+          "variants": 159,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.0235901772661976
+          ]
+        },
+        "15": {
+          "variants": 10,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.2775328030260577
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 7,
+        "shell_variants": 62791,
+        "shell_hits": 1178,
+        "shell_hit_rate": 0.0187606504116832,
+        "enrichment_vs_base_rate": 1.875248867857359,
+        "wilson95_hit_rate": [
+          0.01772848111767842,
+          0.019851699101847163
+        ],
+        "enrichment_wilson95": [
+          1.7720768424986741,
+          1.9843062713114035
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 197,
+        "shell_hits": 18,
+        "shell_hit_rate": 0.09137055837563451,
+        "enrichment_vs_base_rate": 9.133080804208138,
+        "wilson95_hit_rate": [
+          0.058578052486517686,
+          0.139794629644036
+        ],
+        "enrichment_wilson95": [
+          5.8552568379091525,
+          13.973381264503677
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 4,
+        "shell_variants": 4740,
+        "shell_hits": 220,
+        "shell_hit_rate": 0.046413502109704644,
+        "enrichment_vs_base_rate": 4.639331013295601,
+        "wilson95_hit_rate": [
+          0.040782880623697504,
+          0.05277873241257876
+        ],
+        "enrichment_wilson95": [
+          4.07651382224594,
+          5.275577127219383
+        ],
+        "resolvable": true,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.01000435234664023,
+      "status": "ok"
+    },
+    "cr9114_h1": {
+      "key": "cr9114_h1",
+      "protein": "CR9114",
+      "family": "immunoglobulin heavy-chain variable domain",
+      "phenotype": "binding_H1",
+      "sites": 16,
+      "level": "final_test",
+      "file": "Data/DMS/Clean/bnAbs_CR9114_H1_clean.xlsx",
+      "sheet": "CR91114-h1",
+      "rows_in_sheet": 48841,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 48841,
+      "variant_string_widths": [
+        121
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": 7.0,
+      "value_max": 9.83450771611474,
+      "distinct_values": 47908,
+      "mass_at_min": 934,
+      "frac_at_min": 0.019123277574169244,
+      "mass_at_max": 1,
+      "frac_at_max": 2.047460125714052e-05,
+      "censored_from_below": false,
+      "censored_from_above": false,
+      "tier_fraction": 0.01,
+      "tier_deepened_from_1pct": false,
+      "tier_size_nominal": 489,
+      "tier_boundary_value": 9.60775502138942,
+      "hits_strictly_above_boundary": 488,
+      "hits_including_boundary_ties": 489,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 489,
+      "diversity_adjusted_ceiling_d1": 489,
+      "diversity_adjusted_ceiling_d2": 280,
+      "diversity_adjusted_ceiling_d3": 118,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 25,
+          "fraction_of_universe": 0.0005118650314285129
+        },
+        "50": {
+          "raw_hits": 50,
+          "diversity_adjusted_d2": 50,
+          "fraction_of_universe": 0.0010237300628570258
+        },
+        "75": {
+          "raw_hits": 75,
+          "diversity_adjusted_d2": 75,
+          "fraction_of_universe": 0.0015355950942855389
+        },
+        "100": {
+          "raw_hits": 100,
+          "diversity_adjusted_d2": 100,
+          "fraction_of_universe": 0.0020474601257140517
+        },
+        "125": {
+          "raw_hits": 125,
+          "diversity_adjusted_d2": 125,
+          "fraction_of_universe": 0.0025593251571425645
+        }
+      },
+      "mean_depth_of_hit": 8.91002044989775,
+      "max_depth_observed": 15,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        },
+        "1": {
+          "variants": 16,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.1936076829974049
+          ]
+        },
+        "2": {
+          "variants": 117,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.03178924614829014
+          ]
+        },
+        "3": {
+          "variants": 538,
+          "hits": 1,
+          "hit_rate": 0.0018587360594795538,
+          "wilson95": [
+            0.00032818793930361814,
+            0.010452564964611251
+          ]
+        },
+        "4": {
+          "variants": 1706,
+          "hits": 3,
+          "hit_rate": 0.0017584994138335288,
+          "wilson95": [
+            0.0005982247244893679,
+            0.005157548028696186
+          ]
+        },
+        "5": {
+          "variants": 3946,
+          "hits": 10,
+          "hit_rate": 0.002534211860111505,
+          "wilson95": [
+            0.0013771418384753368,
+            0.004658912805613734
+          ]
+        },
+        "6": {
+          "variants": 6936,
+          "hits": 38,
+          "hit_rate": 0.005478662053056517,
+          "wilson95": [
+            0.003994285691859818,
+            0.007510510109940308
+          ]
+        },
+        "7": {
+          "variants": 9367,
+          "hits": 55,
+          "hit_rate": 0.005871677164513718,
+          "wilson95": [
+            0.004514136828969729,
+            0.007634340912418348
+          ]
+        },
+        "8": {
+          "variants": 9818,
+          "hits": 95,
+          "hit_rate": 0.009676105113057649,
+          "wilson95": [
+            0.007922468340659636,
+            0.011813286883328113
+          ]
+        },
+        "9": {
+          "variants": 7984,
+          "hits": 110,
+          "hit_rate": 0.01377755511022044,
+          "wilson95": [
+            0.011444442543724011,
+            0.016578329319432768
+          ]
+        },
+        "10": {
+          "variants": 5001,
+          "hits": 80,
+          "hit_rate": 0.015996800639872025,
+          "wilson95": [
+            0.012872596847102225,
+            0.019863996355176463
+          ]
+        },
+        "11": {
+          "variants": 2365,
+          "hits": 52,
+          "hit_rate": 0.021987315010570826,
+          "wilson95": [
+            0.01680657691259076,
+            0.028718402598796624
+          ]
+        },
+        "12": {
+          "variants": 819,
+          "hits": 32,
+          "hit_rate": 0.03907203907203907,
+          "wilson95": [
+            0.027810754450241976,
+            0.054637034427011094
+          ]
+        },
+        "13": {
+          "variants": 196,
+          "hits": 9,
+          "hit_rate": 0.04591836734693878,
+          "wilson95": [
+            0.02434308700635445,
+            0.08495084531161182
+          ]
+        },
+        "14": {
+          "variants": 29,
+          "hits": 4,
+          "hit_rate": 0.13793103448275862,
+          "wilson95": [
+            0.05497439925859471,
+            0.30558993876598656
+          ]
+        },
+        "15": {
+          "variants": 2,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.6576197760453506
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 8,
+        "shell_variants": 32445,
+        "shell_hits": 202,
+        "shell_hit_rate": 0.006225920789027585,
+        "enrichment_vs_base_rate": 0.621840894185882,
+        "wilson95_hit_rate": [
+          0.005426539253017148,
+          0.007142213298537174
+        ],
+        "enrichment_wilson95": [
+          0.5419991894818211,
+          0.7133595904168796
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 134,
+        "shell_hits": 0,
+        "shell_hit_rate": 0.0,
+        "enrichment_vs_base_rate": 0.0,
+        "wilson95_hit_rate": [
+          0.0,
+          0.027868675451295993
+        ],
+        "enrichment_wilson95": [
+          0.0,
+          2.7835050669054144
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 4,
+        "shell_variants": 2378,
+        "shell_hits": 4,
+        "shell_hit_rate": 0.001682085786375105,
+        "enrichment_vs_base_rate": 0.16800562759171064,
+        "wilson95_hit_rate": [
+          0.0006543187001163333,
+          0.004317237587621516
+        ],
+        "enrichment_wilson95": [
+          0.06535292358360294,
+          0.43120286506548566
+        ],
+        "resolvable": true,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.010012080014741713,
+      "status": "ok"
+    },
+    "cr6261_h1": {
+      "key": "cr6261_h1",
+      "protein": "CR6261",
+      "family": "immunoglobulin heavy-chain variable domain",
+      "phenotype": "binding_H1",
+      "sites": 11,
+      "level": "final_test",
+      "file": "Data/DMS/Clean/bnAbs_CR6261_H1_clean.xlsx",
+      "sheet": "CR6261-h1",
+      "rows_in_sheet": 1887,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 1887,
+      "variant_string_widths": [
+        121
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": 7.0,
+      "value_max": 9.72861234084547,
+      "distinct_values": 1674,
+      "mass_at_min": 214,
+      "frac_at_min": 0.11340752517223106,
+      "mass_at_max": 1,
+      "frac_at_max": 0.0005299417064122947,
+      "censored_from_below": true,
+      "censored_from_above": false,
+      "tier_fraction": 0.02,
+      "tier_deepened_from_1pct": true,
+      "tier_size_nominal": 38,
+      "tier_boundary_value": 9.55820877800496,
+      "hits_strictly_above_boundary": 37,
+      "hits_including_boundary_ties": 38,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 38,
+      "diversity_adjusted_ceiling_d1": 38,
+      "diversity_adjusted_ceiling_d2": 18,
+      "diversity_adjusted_ceiling_d3": 9,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 18,
+          "fraction_of_universe": 0.013248542660307366
+        },
+        "50": {
+          "raw_hits": 38,
+          "diversity_adjusted_d2": 18,
+          "fraction_of_universe": 0.026497085320614733
+        },
+        "75": {
+          "raw_hits": 38,
+          "diversity_adjusted_d2": 18,
+          "fraction_of_universe": 0.0397456279809221
+        },
+        "100": {
+          "raw_hits": 38,
+          "diversity_adjusted_d2": 18,
+          "fraction_of_universe": 0.052994170641229466
+        },
+        "125": {
+          "raw_hits": 38,
+          "diversity_adjusted_d2": 18,
+          "fraction_of_universe": 0.06624271330153683
+        }
+      },
+      "mean_depth_of_hit": 7.184210526315789,
+      "max_depth_observed": 11,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        },
+        "1": {
+          "variants": 9,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.299145051727044
+          ]
+        },
+        "2": {
+          "variants": 49,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.07269782028398425
+          ]
+        },
+        "3": {
+          "variants": 149,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            1.734723475976807e-18,
+            0.025133618256545566
+          ]
+        },
+        "4": {
+          "variants": 308,
+          "hits": 2,
+          "hit_rate": 0.006493506493506494,
+          "wilson95": [
+            0.0017825636500695703,
+            0.023363095010669604
+          ]
+        },
+        "5": {
+          "variants": 430,
+          "hits": 2,
+          "hit_rate": 0.004651162790697674,
+          "wilson95": [
+            0.0012764446472243668,
+            0.0167980356053453
+          ]
+        },
+        "6": {
+          "variants": 430,
+          "hits": 7,
+          "hit_rate": 0.01627906976744186,
+          "wilson95": [
+            0.00790746651571507,
+            0.03321690856660648
+          ]
+        },
+        "7": {
+          "variants": 302,
+          "hits": 10,
+          "hit_rate": 0.033112582781456956,
+          "wilson95": [
+            0.018083729314237424,
+            0.05986992343285273
+          ]
+        },
+        "8": {
+          "variants": 150,
+          "hits": 11,
+          "hit_rate": 0.07333333333333333,
+          "wilson95": [
+            0.041438814976508705,
+            0.1265357938786716
+          ]
+        },
+        "9": {
+          "variants": 48,
+          "hits": 5,
+          "hit_rate": 0.10416666666666667,
+          "wilson95": [
+            0.0453217187550055,
+            0.22167421808754145
+          ]
+        },
+        "10": {
+          "variants": 10,
+          "hits": 1,
+          "hit_rate": 0.1,
+          "wilson95": [
+            0.017876212896074023,
+            0.4041500295247722
+          ]
+        },
+        "11": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 5,
+        "shell_variants": 946,
+        "shell_hits": 4,
+        "shell_hit_rate": 0.004228329809725159,
+        "enrichment_vs_base_rate": 0.20996995660398354,
+        "wilson95_hit_rate": [
+          0.001645506437955328,
+          0.010821267643734716
+        ],
+        "enrichment_wilson95": [
+          0.08171238548478167,
+          0.5373613695717738
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 59,
+        "shell_hits": 0,
+        "shell_hit_rate": 0.0,
+        "enrichment_vs_base_rate": 0.0,
+        "wilson95_hit_rate": [
+          0.0,
+          0.06112937143219893
+        ],
+        "enrichment_wilson95": [
+          0.0,
+          3.0355558919094574
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 3,
+        "shell_variants": 208,
+        "shell_hits": 0,
+        "shell_hit_rate": 0.0,
+        "enrichment_vs_base_rate": 0.0,
+        "wilson95_hit_rate": [
+          0.0,
+          0.01813365004934439
+        ],
+        "enrichment_wilson95": [
+          0.0,
+          0.9004788853450754
+        ],
+        "resolvable": false,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.020137784843667197,
+      "status": "ok"
+    },
+    "cr6261_h9": {
+      "key": "cr6261_h9",
+      "protein": "CR6261",
+      "family": "immunoglobulin heavy-chain variable domain",
+      "phenotype": "binding_H9",
+      "sites": 11,
+      "level": "final_test",
+      "file": "Data/DMS/Clean/bnAbs_CR6261_H9_clean.xlsx",
+      "sheet": "CR6261",
+      "rows_in_sheet": 1842,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 1842,
+      "variant_string_widths": [
+        121
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": 7.0,
+      "value_max": 10.1500004393945,
+      "distinct_values": 1471,
+      "mass_at_min": 372,
+      "frac_at_min": 0.20195439739413681,
+      "mass_at_max": 1,
+      "frac_at_max": 0.0005428881650380022,
+      "censored_from_below": true,
+      "censored_from_above": false,
+      "tier_fraction": 0.02,
+      "tier_deepened_from_1pct": true,
+      "tier_size_nominal": 37,
+      "tier_boundary_value": 10.0566618856773,
+      "hits_strictly_above_boundary": 36,
+      "hits_including_boundary_ties": 37,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 37,
+      "diversity_adjusted_ceiling_d1": 37,
+      "diversity_adjusted_ceiling_d2": 21,
+      "diversity_adjusted_ceiling_d3": 8,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 21,
+          "fraction_of_universe": 0.013572204125950055
+        },
+        "50": {
+          "raw_hits": 37,
+          "diversity_adjusted_d2": 21,
+          "fraction_of_universe": 0.02714440825190011
+        },
+        "75": {
+          "raw_hits": 37,
+          "diversity_adjusted_d2": 21,
+          "fraction_of_universe": 0.04071661237785016
+        },
+        "100": {
+          "raw_hits": 37,
+          "diversity_adjusted_d2": 21,
+          "fraction_of_universe": 0.05428881650380022
+        },
+        "125": {
+          "raw_hits": 37,
+          "diversity_adjusted_d2": 21,
+          "fraction_of_universe": 0.06786102062975027
+        }
+      },
+      "mean_depth_of_hit": 8.297297297297296,
+      "max_depth_observed": 11,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        },
+        "1": {
+          "variants": 11,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.2588329699944264
+          ]
+        },
+        "2": {
+          "variants": 54,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.06641358906903712
+          ]
+        },
+        "3": {
+          "variants": 151,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.024808981451414282
+          ]
+        },
+        "4": {
+          "variants": 290,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.013073236485828385
+          ]
+        },
+        "5": {
+          "variants": 411,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.009260065017742614
+          ]
+        },
+        "6": {
+          "variants": 419,
+          "hits": 2,
+          "hit_rate": 0.00477326968973747,
+          "wilson95": [
+            0.0013099801700446126,
+            0.01723469825870267
+          ]
+        },
+        "7": {
+          "variants": 297,
+          "hits": 7,
+          "hit_rate": 0.02356902356902357,
+          "wilson95": [
+            0.011462744211264586,
+            0.047842442472914345
+          ]
+        },
+        "8": {
+          "variants": 149,
+          "hits": 12,
+          "hit_rate": 0.08053691275167785,
+          "wilson95": [
+            0.04666884733374484,
+            0.13549022838483366
+          ]
+        },
+        "9": {
+          "variants": 48,
+          "hits": 11,
+          "hit_rate": 0.22916666666666666,
+          "wilson95": [
+            0.13307826208858892,
+            0.3653926420668379
+          ]
+        },
+        "10": {
+          "variants": 10,
+          "hits": 4,
+          "hit_rate": 0.4,
+          "wilson95": [
+            0.16818032852640696,
+            0.6873262320788046
+          ]
+        },
+        "11": {
+          "variants": 1,
+          "hits": 1,
+          "hit_rate": 1.0,
+          "wilson95": [
+            0.2065493117918027,
+            1.0
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 5,
+        "shell_variants": 918,
+        "shell_hits": 0,
+        "shell_hit_rate": 0.0,
+        "enrichment_vs_base_rate": 0.0,
+        "wilson95_hit_rate": [
+          0.0,
+          0.004167157860265708
+        ],
+        "enrichment_wilson95": [
+          0.0,
+          0.2074568859083631
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 66,
+        "shell_hits": 0,
+        "shell_hit_rate": 0.0,
+        "enrichment_vs_base_rate": 0.0,
+        "wilson95_hit_rate": [
+          0.0,
+          0.05500255783352154
+        ],
+        "enrichment_wilson95": [
+          0.0,
+          2.7382354467390995
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 3,
+        "shell_variants": 217,
+        "shell_hits": 0,
+        "shell_hit_rate": 0.0,
+        "enrichment_vs_base_rate": 0.0,
+        "wilson95_hit_rate": [
+          0.0,
+          0.017394645465373483
+        ],
+        "enrichment_wilson95": [
+          0.0,
+          0.8659712688437285
+        ],
+        "resolvable": false,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.02008686210640608,
+      "status": "ok"
+    },
+    "hiv1_protease": {
+      "key": "hiv1_protease",
+      "protein": "HIV-1 protease",
+      "family": "retroviral aspartyl protease",
+      "phenotype": "activity",
+      "sites": 11,
+      "level": "reserve",
+      "file": "Data/DMS/Clean/HIV-1_clean.xlsx",
+      "sheet": "HIV-1",
+      "rows_in_sheet": 1175,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 1175,
+      "variant_string_widths": [
+        99
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": -3.33873594581,
+      "value_max": 0.0,
+      "distinct_values": 1153,
+      "mass_at_min": 1,
+      "frac_at_min": 0.000851063829787234,
+      "mass_at_max": 1,
+      "frac_at_max": 0.000851063829787234,
+      "censored_from_below": false,
+      "censored_from_above": false,
+      "tier_fraction": 0.05,
+      "tier_deepened_from_1pct": true,
+      "tier_size_nominal": 59,
+      "tier_boundary_value": -1.79409679831,
+      "hits_strictly_above_boundary": 58,
+      "hits_including_boundary_ties": 59,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 59,
+      "diversity_adjusted_ceiling_d1": 59,
+      "diversity_adjusted_ceiling_d2": 22,
+      "diversity_adjusted_ceiling_d3": 7,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 22,
+          "fraction_of_universe": 0.02127659574468085
+        },
+        "50": {
+          "raw_hits": 50,
+          "diversity_adjusted_d2": 22,
+          "fraction_of_universe": 0.0425531914893617
+        },
+        "75": {
+          "raw_hits": 59,
+          "diversity_adjusted_d2": 22,
+          "fraction_of_universe": 0.06382978723404255
+        },
+        "100": {
+          "raw_hits": 59,
+          "diversity_adjusted_d2": 22,
+          "fraction_of_universe": 0.0851063829787234
+        },
+        "125": {
+          "raw_hits": 59,
+          "diversity_adjusted_d2": 22,
+          "fraction_of_universe": 0.10638297872340426
+        }
+      },
+      "mean_depth_of_hit": 2.23728813559322,
+      "max_depth_observed": 9,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 1,
+          "hit_rate": 1.0,
+          "wilson95": [
+            0.2065493117918027,
+            1.0
+          ]
+        },
+        "1": {
+          "variants": 13,
+          "hits": 9,
+          "hit_rate": 0.6923076923076923,
+          "wilson95": [
+            0.42369342985078007,
+            0.8731929643292967
+          ]
+        },
+        "2": {
+          "variants": 67,
+          "hits": 26,
+          "hit_rate": 0.3880597014925373,
+          "wilson95": [
+            0.28049047940749305,
+            0.5077691042194556
+          ]
+        },
+        "3": {
+          "variants": 176,
+          "hits": 21,
+          "hit_rate": 0.11931818181818182,
+          "wilson95": [
+            0.07938005826322653,
+            0.17551922450756974
+          ]
+        },
+        "4": {
+          "variants": 290,
+          "hits": 2,
+          "hit_rate": 0.006896551724137931,
+          "wilson95": [
+            0.001893325116230941,
+            0.0247926943146205
+          ]
+        },
+        "5": {
+          "variants": 305,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.01243828757709785
+          ]
+        },
+        "6": {
+          "variants": 213,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.01771551852267745
+          ]
+        },
+        "7": {
+          "variants": 86,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.04275819793144242
+          ]
+        },
+        "8": {
+          "variants": 23,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.14311662038507353
+          ]
+        },
+        "9": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 5,
+        "shell_variants": 852,
+        "shell_hits": 59,
+        "shell_hit_rate": 0.06924882629107981,
+        "enrichment_vs_base_rate": 1.3791079812206573,
+        "wilson95_hit_rate": [
+          0.05406389399736404,
+          0.08830062646015123
+        ],
+        "enrichment_wilson95": [
+          1.0766961940153008,
+          1.7585294252657235
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 81,
+        "shell_hits": 36,
+        "shell_hit_rate": 0.4444444444444444,
+        "enrichment_vs_base_rate": 8.851224105461393,
+        "wilson95_hit_rate": [
+          0.3411955242755319,
+          0.5527242630705089
+        ],
+        "enrichment_wilson95": [
+          6.794995610572034,
+          11.007644222166915
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 3,
+        "shell_variants": 257,
+        "shell_hits": 57,
+        "shell_hit_rate": 0.22178988326848248,
+        "enrichment_vs_base_rate": 4.417001912550287,
+        "wilson95_hit_rate": [
+          0.17530367993431067,
+          0.27647058703497285
+        ],
+        "enrichment_wilson95": [
+          3.4912173546239837,
+          5.505982029933781
+        ],
+        "resolvable": false,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.05021276595744681,
+      "status": "ok"
+    },
+    "rhla_rls": {
+      "key": "rhla_rls",
+      "protein": "RhlA",
+      "family": "rhamnosyltransferase",
+      "phenotype": "activity_RLs",
+      "sites": 11,
+      "level": "reserve",
+      "file": "Data/DMS/Clean/RhlA_clean.xlsx",
+      "sheet": "Sheet1",
+      "rows_in_sheet": 2346,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 2346,
+      "variant_string_widths": [
+        11
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": 0.000634382622038498,
+      "value_max": 1.63175101011397,
+      "distinct_values": 2345,
+      "mass_at_min": 1,
+      "frac_at_min": 0.00042625745950554135,
+      "mass_at_max": 1,
+      "frac_at_max": 0.00042625745950554135,
+      "censored_from_below": false,
+      "censored_from_above": false,
+      "tier_fraction": 0.02,
+      "tier_deepened_from_1pct": true,
+      "tier_size_nominal": 47,
+      "tier_boundary_value": 0.888968806028434,
+      "hits_strictly_above_boundary": 46,
+      "hits_including_boundary_ties": 47,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 47,
+      "diversity_adjusted_ceiling_d1": 47,
+      "diversity_adjusted_ceiling_d2": 23,
+      "diversity_adjusted_ceiling_d3": 7,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 23,
+          "fraction_of_universe": 0.010656436487638534
+        },
+        "50": {
+          "raw_hits": 47,
+          "diversity_adjusted_d2": 23,
+          "fraction_of_universe": 0.021312872975277068
+        },
+        "75": {
+          "raw_hits": 47,
+          "diversity_adjusted_d2": 23,
+          "fraction_of_universe": 0.0319693094629156
+        },
+        "100": {
+          "raw_hits": 47,
+          "diversity_adjusted_d2": 23,
+          "fraction_of_universe": 0.042625745950554135
+        },
+        "125": {
+          "raw_hits": 47,
+          "diversity_adjusted_d2": 23,
+          "fraction_of_universe": 0.05328218243819267
+        }
+      },
+      "mean_depth_of_hit": 1.8936170212765957,
+      "max_depth_observed": 3,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 1,
+          "hit_rate": 1.0,
+          "wilson95": [
+            0.2065493117918027,
+            1.0
+          ]
+        },
+        "1": {
+          "variants": 30,
+          "hits": 16,
+          "hit_rate": 0.5333333333333333,
+          "wilson95": [
+            0.3614229949695976,
+            0.6976761120463056
+          ]
+        },
+        "2": {
+          "variants": 356,
+          "hits": 17,
+          "hit_rate": 0.047752808988764044,
+          "wilson95": [
+            0.030025323416794057,
+            0.07513615241464727
+          ]
+        },
+        "3": {
+          "variants": 1959,
+          "hits": 13,
+          "hit_rate": 0.006636038795303726,
+          "wilson95": [
+            0.003882262478938228,
+            0.011320931210634577
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 5,
+        "shell_variants": 2346,
+        "shell_hits": 47,
+        "shell_hit_rate": 0.020034100596760442,
+        "enrichment_vs_base_rate": 1.0,
+        "wilson95_hit_rate": [
+          0.015099406569195135,
+          0.02653806582771968
+        ],
+        "enrichment_wilson95": [
+          0.7536852725815274,
+          1.3246447325921356
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 387,
+        "shell_hits": 34,
+        "shell_hit_rate": 0.08785529715762273,
+        "enrichment_vs_base_rate": 4.385287811314531,
+        "wilson95_hit_rate": [
+          0.0635503918003543,
+          0.12026188616761646
+        ],
+        "enrichment_wilson95": [
+          3.172111046034706,
+          6.002859254238898
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 3,
+        "shell_variants": 2346,
+        "shell_hits": 47,
+        "shell_hit_rate": 0.020034100596760442,
+        "enrichment_vs_base_rate": 1.0,
+        "wilson95_hit_rate": [
+          0.015099406569195135,
+          0.02653806582771968
+        ],
+        "enrichment_wilson95": [
+          0.7536852725815274,
+          1.3246447325921356
+        ],
+        "resolvable": true,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.020034100596760442,
+      "status": "ok"
+    },
+    "rhla_pct_rha": {
+      "key": "rhla_pct_rha",
+      "protein": "RhlA",
+      "family": "rhamnosyltransferase",
+      "phenotype": "activity_%Rha-(C8-C10)",
+      "sites": 11,
+      "level": "reserve",
+      "file": "Data/DMS/Clean/RhlA_clean.xlsx",
+      "sheet": "Sheet1",
+      "rows_in_sheet": 2346,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 2346,
+      "variant_string_widths": [
+        11
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": 0.191051508626425,
+      "value_max": 5.94910604665439,
+      "distinct_values": 2346,
+      "mass_at_min": 1,
+      "frac_at_min": 0.00042625745950554135,
+      "mass_at_max": 1,
+      "frac_at_max": 0.00042625745950554135,
+      "censored_from_below": false,
+      "censored_from_above": false,
+      "tier_fraction": 0.02,
+      "tier_deepened_from_1pct": true,
+      "tier_size_nominal": 47,
+      "tier_boundary_value": 5.25763903151457,
+      "hits_strictly_above_boundary": 46,
+      "hits_including_boundary_ties": 47,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 47,
+      "diversity_adjusted_ceiling_d1": 47,
+      "diversity_adjusted_ceiling_d2": 22,
+      "diversity_adjusted_ceiling_d3": 7,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 22,
+          "fraction_of_universe": 0.010656436487638534
+        },
+        "50": {
+          "raw_hits": 47,
+          "diversity_adjusted_d2": 22,
+          "fraction_of_universe": 0.021312872975277068
+        },
+        "75": {
+          "raw_hits": 47,
+          "diversity_adjusted_d2": 22,
+          "fraction_of_universe": 0.0319693094629156
+        },
+        "100": {
+          "raw_hits": 47,
+          "diversity_adjusted_d2": 22,
+          "fraction_of_universe": 0.042625745950554135
+        },
+        "125": {
+          "raw_hits": 47,
+          "diversity_adjusted_d2": 22,
+          "fraction_of_universe": 0.05328218243819267
+        }
+      },
+      "mean_depth_of_hit": 2.893617021276596,
+      "max_depth_observed": 3,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        },
+        "1": {
+          "variants": 30,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.11351339476145206
+          ]
+        },
+        "2": {
+          "variants": 356,
+          "hits": 5,
+          "hit_rate": 0.014044943820224719,
+          "wilson95": [
+            0.006013684844798726,
+            0.032451751918178603
+          ]
+        },
+        "3": {
+          "variants": 1959,
+          "hits": 42,
+          "hit_rate": 0.021439509954058193,
+          "wilson95": [
+            0.015900242739601188,
+            0.028851949794257585
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 5,
+        "shell_variants": 2346,
+        "shell_hits": 47,
+        "shell_hit_rate": 0.020034100596760442,
+        "enrichment_vs_base_rate": 1.0,
+        "wilson95_hit_rate": [
+          0.015099406569195135,
+          0.02653806582771968
+        ],
+        "enrichment_wilson95": [
+          0.7536852725815274,
+          1.3246447325921356
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 387,
+        "shell_hits": 5,
+        "shell_hit_rate": 0.012919896640826873,
+        "enrichment_vs_base_rate": 0.6448952663697839,
+        "wilson95_hit_rate": [
+          0.005530892918712548,
+          0.0298836174070711
+        ],
+        "enrichment_wilson95": [
+          0.27607393164467314,
+          1.4916375837657192
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 3,
+        "shell_variants": 2346,
+        "shell_hits": 47,
+        "shell_hit_rate": 0.020034100596760442,
+        "enrichment_vs_base_rate": 1.0,
+        "wilson95_hit_rate": [
+          0.015099406569195135,
+          0.02653806582771968
+        ],
+        "enrichment_wilson95": [
+          0.7536852725815274,
+          1.3246447325921356
+        ],
+        "resolvable": true,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.020034100596760442,
+      "status": "ok"
+    },
+    "rhla_rha": {
+      "key": "rhla_rha",
+      "protein": "RhlA",
+      "family": "rhamnosyltransferase",
+      "phenotype": "activity_Rha-(C8-C10)",
+      "sites": 11,
+      "level": "reserve",
+      "file": "Data/DMS/Clean/RhlA_clean.xlsx",
+      "sheet": "Sheet1",
+      "rows_in_sheet": 2346,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 2346,
+      "variant_string_widths": [
+        11
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": 0.000982873195998275,
+      "value_max": 7.41530060418173,
+      "distinct_values": 2346,
+      "mass_at_min": 1,
+      "frac_at_min": 0.00042625745950554135,
+      "mass_at_max": 1,
+      "frac_at_max": 0.00042625745950554135,
+      "censored_from_below": false,
+      "censored_from_above": false,
+      "tier_fraction": 0.02,
+      "tier_deepened_from_1pct": true,
+      "tier_size_nominal": 47,
+      "tier_boundary_value": 3.51625753550088,
+      "hits_strictly_above_boundary": 46,
+      "hits_including_boundary_ties": 47,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 47,
+      "diversity_adjusted_ceiling_d1": 47,
+      "diversity_adjusted_ceiling_d2": 27,
+      "diversity_adjusted_ceiling_d3": 10,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 25,
+          "fraction_of_universe": 0.010656436487638534
+        },
+        "50": {
+          "raw_hits": 47,
+          "diversity_adjusted_d2": 27,
+          "fraction_of_universe": 0.021312872975277068
+        },
+        "75": {
+          "raw_hits": 47,
+          "diversity_adjusted_d2": 27,
+          "fraction_of_universe": 0.0319693094629156
+        },
+        "100": {
+          "raw_hits": 47,
+          "diversity_adjusted_d2": 27,
+          "fraction_of_universe": 0.042625745950554135
+        },
+        "125": {
+          "raw_hits": 47,
+          "diversity_adjusted_d2": 27,
+          "fraction_of_universe": 0.05328218243819267
+        }
+      },
+      "mean_depth_of_hit": 2.8085106382978724,
+      "max_depth_observed": 3,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        },
+        "1": {
+          "variants": 30,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.11351339476145206
+          ]
+        },
+        "2": {
+          "variants": 356,
+          "hits": 9,
+          "hit_rate": 0.025280898876404494,
+          "wilson95": [
+            0.013356250957508791,
+            0.04734119882828988
+          ]
+        },
+        "3": {
+          "variants": 1959,
+          "hits": 38,
+          "hit_rate": 0.019397651863195507,
+          "wilson95": [
+            0.014164801836106692,
+            0.026511666719229877
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 5,
+        "shell_variants": 2346,
+        "shell_hits": 47,
+        "shell_hit_rate": 0.020034100596760442,
+        "enrichment_vs_base_rate": 1.0,
+        "wilson95_hit_rate": [
+          0.015099406569195135,
+          0.02653806582771968
+        ],
+        "enrichment_wilson95": [
+          0.7536852725815274,
+          1.3246447325921356
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 387,
+        "shell_hits": 9,
+        "shell_hit_rate": 0.023255813953488372,
+        "enrichment_vs_base_rate": 1.160811479465611,
+        "wilson95_hit_rate": [
+          0.012282244589105935,
+          0.04360092334249662
+        ],
+        "enrichment_wilson95": [
+          0.613066932043458,
+          2.176335450244619
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 3,
+        "shell_variants": 2346,
+        "shell_hits": 47,
+        "shell_hit_rate": 0.020034100596760442,
+        "enrichment_vs_base_rate": 1.0,
+        "wilson95_hit_rate": [
+          0.015099406569195135,
+          0.02653806582771968
+        ],
+        "enrichment_wilson95": [
+          0.7536852725815274,
+          1.3246447325921356
+        ],
+        "resolvable": true,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.020034100596760442,
+      "status": "ok"
+    },
+    "sacas9": {
+      "key": "sacas9",
+      "protein": "SaCas9 (KKH)",
+      "family": "Cas9 endonuclease",
+      "phenotype": "activity",
+      "sites": 8,
+      "level": "reserve",
+      "file": "Data/DMS/Clean/SaCas9_clean.xlsx",
+      "sheet": "Sheet1",
+      "rows_in_sheet": 1296,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 1296,
+      "variant_string_widths": [
+        1053
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": -0.3803415164300452,
+      "value_max": 1.3813045982331253,
+      "distinct_values": 1296,
+      "mass_at_min": 1,
+      "frac_at_min": 0.0007716049382716049,
+      "mass_at_max": 1,
+      "frac_at_max": 0.0007716049382716049,
+      "censored_from_below": false,
+      "censored_from_above": false,
+      "tier_fraction": 0.05,
+      "tier_deepened_from_1pct": true,
+      "tier_size_nominal": 65,
+      "tier_boundary_value": 0.1109477998593556,
+      "hits_strictly_above_boundary": 64,
+      "hits_including_boundary_ties": 65,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 65,
+      "diversity_adjusted_ceiling_d1": 65,
+      "diversity_adjusted_ceiling_d2": 35,
+      "diversity_adjusted_ceiling_d3": 17,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 25,
+          "fraction_of_universe": 0.019290123456790122
+        },
+        "50": {
+          "raw_hits": 50,
+          "diversity_adjusted_d2": 35,
+          "fraction_of_universe": 0.038580246913580245
+        },
+        "75": {
+          "raw_hits": 65,
+          "diversity_adjusted_d2": 35,
+          "fraction_of_universe": 0.05787037037037037
+        },
+        "100": {
+          "raw_hits": 65,
+          "diversity_adjusted_d2": 35,
+          "fraction_of_universe": 0.07716049382716049
+        },
+        "125": {
+          "raw_hits": 65,
+          "diversity_adjusted_d2": 35,
+          "fraction_of_universe": 0.09645061728395062
+        }
+      },
+      "mean_depth_of_hit": 3.6615384615384614,
+      "max_depth_observed": 8,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 1,
+          "hit_rate": 1.0,
+          "wilson95": [
+            0.2065493117918027,
+            1.0
+          ]
+        },
+        "1": {
+          "variants": 12,
+          "hits": 6,
+          "hit_rate": 0.5,
+          "wilson95": [
+            0.2537815961625239,
+            0.7462184038374762
+          ]
+        },
+        "2": {
+          "variants": 62,
+          "hits": 13,
+          "hit_rate": 0.20967741935483872,
+          "wilson95": [
+            0.12683989238428597,
+            0.3263921499842839
+          ]
+        },
+        "3": {
+          "variants": 180,
+          "hits": 12,
+          "hit_rate": 0.06666666666666667,
+          "wilson95": [
+            0.03854407477140861,
+            0.1128986903737095
+          ]
+        },
+        "4": {
+          "variants": 321,
+          "hits": 14,
+          "hit_rate": 0.04361370716510903,
+          "wilson95": [
+            0.026154824631960987,
+            0.07186671175367489
+          ]
+        },
+        "5": {
+          "variants": 360,
+          "hits": 5,
+          "hit_rate": 0.013888888888888888,
+          "wilson95": [
+            0.005946705683246461,
+            0.032095849785430355
+          ]
+        },
+        "6": {
+          "variants": 248,
+          "hits": 9,
+          "hit_rate": 0.036290322580645164,
+          "wilson95": [
+            0.019207866706394416,
+            0.06751915186440748
+          ]
+        },
+        "7": {
+          "variants": 96,
+          "hits": 5,
+          "hit_rate": 0.052083333333333336,
+          "wilson95": [
+            0.022449600332132842,
+            0.11618478097986756
+          ]
+        },
+        "8": {
+          "variants": 16,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.1936076829974049
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 4,
+        "shell_variants": 576,
+        "shell_hits": 46,
+        "shell_hit_rate": 0.0798611111111111,
+        "enrichment_vs_base_rate": 1.5923076923076922,
+        "wilson95_hit_rate": [
+          0.0604054824544054,
+          0.10488359340126995
+        ],
+        "enrichment_wilson95": [
+          1.2043923886293753,
+          2.091217493046859
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 75,
+        "shell_hits": 20,
+        "shell_hit_rate": 0.26666666666666666,
+        "enrichment_vs_base_rate": 5.316923076923077,
+        "wilson95_hit_rate": [
+          0.179763135738092,
+          0.37630799109511226
+        ],
+        "enrichment_wilson95": [
+          3.584200367947188,
+          7.5030024070656225
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 2,
+        "shell_variants": 75,
+        "shell_hits": 20,
+        "shell_hit_rate": 0.26666666666666666,
+        "enrichment_vs_base_rate": 5.316923076923077,
+        "wilson95_hit_rate": [
+          0.179763135738092,
+          0.37630799109511226
+        ],
+        "enrichment_wilson95": [
+          3.584200367947188,
+          7.5030024070656225
+        ],
+        "resolvable": false,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.05015432098765432,
+      "status": "ok"
+    },
+    "spcas9": {
+      "key": "spcas9",
+      "protein": "SpCas9",
+      "family": "Cas9 endonuclease",
+      "phenotype": "activity",
+      "sites": 8,
+      "level": "reserve",
+      "file": "Data/DMS/Clean/SpCas9_clean.xlsx",
+      "sheet": "SpCas9",
+      "rows_in_sheet": 5748,
+      "dropped_missing_or_unparseable": 5151,
+      "eligible_universe": 597,
+      "variant_string_widths": [
+        1368
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": -2.0999594667454007,
+      "value_max": 2.0848975557899267,
+      "distinct_values": 597,
+      "mass_at_min": 1,
+      "frac_at_min": 0.0016750418760469012,
+      "mass_at_max": 1,
+      "frac_at_max": 0.0016750418760469012,
+      "censored_from_below": false,
+      "censored_from_above": false,
+      "tier_fraction": 0.05,
+      "tier_deepened_from_1pct": true,
+      "tier_size_nominal": 30,
+      "tier_boundary_value": 1.1064772480602698,
+      "hits_strictly_above_boundary": 29,
+      "hits_including_boundary_ties": 30,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 30,
+      "diversity_adjusted_ceiling_d1": 30,
+      "diversity_adjusted_ceiling_d2": 15,
+      "diversity_adjusted_ceiling_d3": 9,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 15,
+          "fraction_of_universe": 0.04187604690117253
+        },
+        "50": {
+          "raw_hits": 30,
+          "diversity_adjusted_d2": 15,
+          "fraction_of_universe": 0.08375209380234507
+        },
+        "75": {
+          "raw_hits": 30,
+          "diversity_adjusted_d2": 15,
+          "fraction_of_universe": 0.12562814070351758
+        },
+        "100": {
+          "raw_hits": 30,
+          "diversity_adjusted_d2": 15,
+          "fraction_of_universe": 0.16750418760469013
+        },
+        "125": {
+          "raw_hits": 30,
+          "diversity_adjusted_d2": 15,
+          "fraction_of_universe": 0.20938023450586266
+        }
+      },
+      "mean_depth_of_hit": 3.2,
+      "max_depth_observed": 8,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 1,
+          "hit_rate": 1.0,
+          "wilson95": [
+            0.2065493117918027,
+            1.0
+          ]
+        },
+        "1": {
+          "variants": 7,
+          "hits": 1,
+          "hit_rate": 0.14285714285714285,
+          "wilson95": [
+            0.02567962405782387,
+            0.5131278321392249
+          ]
+        },
+        "2": {
+          "variants": 23,
+          "hits": 8,
+          "hit_rate": 0.34782608695652173,
+          "wilson95": [
+            0.18811275843801456,
+            0.5510966477661382
+          ]
+        },
+        "3": {
+          "variants": 54,
+          "hits": 6,
+          "hit_rate": 0.1111111111111111,
+          "wilson95": [
+            0.051930224666595554,
+            0.2219470112759889
+          ]
+        },
+        "4": {
+          "variants": 115,
+          "hits": 10,
+          "hit_rate": 0.08695652173913043,
+          "wilson95": [
+            0.04791849719329924,
+            0.15269717267246607
+          ]
+        },
+        "5": {
+          "variants": 162,
+          "hits": 3,
+          "hit_rate": 0.018518518518518517,
+          "wilson95": [
+            0.006317629796363942,
+            0.053024943210909226
+          ]
+        },
+        "6": {
+          "variants": 138,
+          "hits": 1,
+          "hit_rate": 0.007246376811594203,
+          "wilson95": [
+            0.0012803107696838997,
+            0.03990270389589839
+          ]
+        },
+        "7": {
+          "variants": 80,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.04581813022522419
+          ]
+        },
+        "8": {
+          "variants": 17,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.18431813738065556
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 4,
+        "shell_variants": 200,
+        "shell_hits": 26,
+        "shell_hit_rate": 0.13,
+        "enrichment_vs_base_rate": 2.5869999999999997,
+        "wilson95_hit_rate": [
+          0.09028202253521181,
+          0.18366351919982074
+        ],
+        "enrichment_wilson95": [
+          1.796612248450715,
+          3.6549040320764328
+        ],
+        "resolvable": false,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 31,
+        "shell_hits": 10,
+        "shell_hit_rate": 0.3225806451612903,
+        "enrichment_vs_base_rate": 6.419354838709677,
+        "wilson95_hit_rate": [
+          0.18569426482301724,
+          0.49858990830886185
+        ],
+        "enrichment_wilson95": [
+          3.695315869978043,
+          9.92193917534635
+        ],
+        "resolvable": false,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 2,
+        "shell_variants": 31,
+        "shell_hits": 10,
+        "shell_hit_rate": 0.3225806451612903,
+        "enrichment_vs_base_rate": 6.419354838709677,
+        "wilson95_hit_rate": [
+          0.18569426482301724,
+          0.49858990830886185
+        ],
+        "enrichment_wilson95": [
+          3.695315869978043,
+          9.92193917534635
+        ],
+        "resolvable": false,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.05025125628140704,
+      "status": "ok"
+    },
+    "gb1_combingym": {
+      "key": "gb1_combingym",
+      "protein": "GB1",
+      "family": "immunoglobulin-binding protein G domain B1",
+      "phenotype": "binding",
+      "sites": 4,
+      "level": "development",
+      "file": "Data/DMS/Clean/GB1_clean.xlsx",
+      "sheet": "GB1_clean",
+      "rows_in_sheet": 149361,
+      "dropped_missing_or_unparseable": 0,
+      "eligible_universe": 149361,
+      "variant_string_widths": [
+        56
+      ],
+      "variant_width_uniform": true,
+      "duplicate_variant_ids": 0,
+      "value_min": 0.0,
+      "value_max": 8.76196565571,
+      "distinct_values": 37521,
+      "mass_at_min": 29477,
+      "frac_at_min": 0.19735406163590227,
+      "mass_at_max": 1,
+      "frac_at_max": 6.695188168263469e-06,
+      "censored_from_below": true,
+      "censored_from_above": false,
+      "tier_fraction": 0.01,
+      "tier_deepened_from_1pct": false,
+      "tier_size_nominal": 1494,
+      "tier_boundary_value": 2.15265451282,
+      "hits_strictly_above_boundary": 1493,
+      "hits_including_boundary_ties": 1494,
+      "boundary_tie_mass": 1,
+      "hit_count_ceiling": 1494,
+      "diversity_adjusted_ceiling_d1": 1494,
+      "diversity_adjusted_ceiling_d2": 146,
+      "diversity_adjusted_ceiling_d3": 24,
+      "achievable_at_budget": {
+        "25": {
+          "raw_hits": 25,
+          "diversity_adjusted_d2": 25,
+          "fraction_of_universe": 0.00016737970420658673
+        },
+        "50": {
+          "raw_hits": 50,
+          "diversity_adjusted_d2": 50,
+          "fraction_of_universe": 0.00033475940841317346
+        },
+        "75": {
+          "raw_hits": 75,
+          "diversity_adjusted_d2": 75,
+          "fraction_of_universe": 0.0005021391126197602
+        },
+        "100": {
+          "raw_hits": 100,
+          "diversity_adjusted_d2": 100,
+          "fraction_of_universe": 0.0006695188168263469
+        },
+        "125": {
+          "raw_hits": 125,
+          "diversity_adjusted_d2": 125,
+          "fraction_of_universe": 0.0008368985210329336
+        }
+      },
+      "mean_depth_of_hit": 3.5896921017402943,
+      "max_depth_observed": 4,
+      "depth_profile": {
+        "0": {
+          "variants": 1,
+          "hits": 0,
+          "hit_rate": 0.0,
+          "wilson95": [
+            0.0,
+            0.7934506882081973
+          ]
+        },
+        "1": {
+          "variants": 76,
+          "hits": 6,
+          "hit_rate": 0.07894736842105263,
+          "wilson95": [
+            0.03668400501896438,
+            0.16172743564431596
+          ]
+        },
+        "2": {
+          "variants": 2091,
+          "hits": 66,
+          "hit_rate": 0.03156384505021521,
+          "wilson95": [
+            0.024886816069486298,
+            0.03995888301928348
+          ]
+        },
+        "3": {
+          "variants": 26019,
+          "hits": 463,
+          "hit_rate": 0.017794688496867675,
+          "wilson95": [
+            0.016258030024804474,
+            0.01947371204304538
+          ]
+        },
+        "4": {
+          "variants": 121174,
+          "hits": 959,
+          "hit_rate": 0.00791423902817436,
+          "wilson95": [
+            0.007430692318322621,
+            0.008428984960492623
+          ]
+        }
+      },
+      "shallow_shell_primary": {
+        "depth_cut": 2,
+        "shell_variants": 2168,
+        "shell_hits": 72,
+        "shell_hit_rate": 0.033210332103321034,
+        "enrichment_vs_base_rate": 3.3201662739518962,
+        "wilson95_hit_rate": [
+          0.026454949508196532,
+          0.04161698929595925
+        ],
+        "enrichment_wilson95": [
+          2.6448043597682345,
+          4.160612542325147
+        ],
+        "resolvable": true,
+        "definition": "depth <= floor(sites/2)"
+      },
+      "shallow_shell_absolute_d2": {
+        "depth_cut": 2,
+        "shell_variants": 2168,
+        "shell_hits": 72,
+        "shell_hit_rate": 0.033210332103321034,
+        "enrichment_vs_base_rate": 3.3201662739518962,
+        "wilson95_hit_rate": [
+          0.026454949508196532,
+          0.04161698929595925
+        ],
+        "enrichment_wilson95": [
+          2.6448043597682345,
+          4.160612542325147
+        ],
+        "resolvable": true,
+        "definition": "depth <= 2 (absolute)"
+      },
+      "shallow_shell_quarter": {
+        "depth_cut": 1,
+        "shell_variants": 77,
+        "shell_hits": 6,
+        "shell_hit_rate": 0.07792207792207792,
+        "enrichment_vs_base_rate": 7.7901736817399465,
+        "wilson95_hit_rate": [
+          0.03620095484247757,
+          0.15975615801166937
+        ],
+        "enrichment_wilson95": [
+          3.6191504794024714,
+          15.971445459692736
+        ],
+        "resolvable": false,
+        "definition": "depth <= round(sites/4)"
+      },
+      "base_rate": 0.010002611123385623,
+      "status": "ok"
+    }
+  }
+}
