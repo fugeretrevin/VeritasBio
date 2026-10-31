@@ -224,6 +224,125 @@ property of the landscape.
 
 ---
 
+## 3C. AMENDMENT 2026-10-31 — per-landscape budgets, fixed before the arms run
+
+§3A recorded that five of nine landscapes fail the endpoint gate. The gate applies two
+independent checks, and they need different remedies:
+
+- **informativeness** — the d≥2 ceiling must differ materially from the raw hit count.
+  A property of the library; no budget change affects it.
+- **saturation** — the budget must be strictly smaller than the hit tier, or an arm can
+  measure the whole tier and no endpoint separates two arms. This is a budget choice.
+
+Measured per landscape:
+
+| landscape | raw tier | d≥2 ceiling | removed | verdict | max budget |
+| --- | --- | --- | --- | --- | --- |
+| trpb | 1600 | 166 | 89.6% | USABLE | 1599 |
+| creilov | 1655 | 647 | 60.9% | USABLE | 1654 |
+| gb1 | 1494 | 146 | 90.2% | USABLE | 1493 |
+| cr9114_h1 | 651 | 365 | 43.9% | USABLE | 650 |
+| eqfp611_red | 82 | 28 | 65.9% | USABLE | **81** |
+| eqfp611_blue | 82 | 39 | 52.4% | USABLE | **81** |
+| cr6261_h1 | 19 | 10 | 47.4% | USABLE | **18** |
+| cr6261_h9 | 19 | 13 | 31.6% | USABLE | **18** |
+| her2 | 113 | 113 | **0.0%** | **DEGENERATE** | — |
+
+Every landscape except HER2 passes informativeness comfortably — 32% to 90% of the
+tier removed, against a 5% floor. HER2 fails it with a ceiling equal to its raw count,
+which is a library property and is why no budget rescues it.
+
+### Registered budgets
+
+Fixed now, before the arms they enable are run. Four rounds in every case, with the
+budget split as evenly as it allows:
+
+| landscape | budget | initial | batch × 4 | status |
+| --- | --- | --- | --- | --- |
+| trpb, gb1, creilov, cr9114_h1 | 125 | 25 | 25 | unchanged |
+| eqfp611_blue, eqfp611_red | **81** | 17 | 16 | **workable** |
+| cr6261_h1, cr6261_h9 | **18** | 6 | 3 | **low power** |
+
+No new mechanism: these are passed through the existing `--initial-size`,
+`--batch-size` and `--rounds` flags. A rule of the form
+`budget = min(125, tier - 1)` reproduces the table, and is stated here so the value
+cannot be chosen after seeing which one yields a result.
+
+### What this actually buys — less than first claimed
+
+An earlier estimate in conversation said this takes the testable set from three
+landscapes to seven. That was wrong, for two reasons:
+
+1. **CR6261 is low power, not merely smaller.** A budget of 18 over four rounds is
+   **three variants per round**. Paired comparison over 48 seeds can still detect a
+   large effect, but a null there is uninformative and must not be reported as evidence
+   against the prediction.
+2. **Neither addition is an independent landscape.** `eqfp611_blue` and `eqfp611_red`
+   share one source table and differ only in endpoint column, as do `cr6261_h1` and
+   `cr6261_h9` (§6). Each pair counts once.
+
+So the honest accounting of landscapes carrying a **narrow** prediction and able to
+test it:
+
+| landscape | status |
+| --- | --- |
+| trpb | excluded — the prediction was derived on it |
+| gb1 | **tested, confirmed** (+6.25, t = 3.92) |
+| creilov | **running** |
+| eqfp611 (one of the pair) | newly enabled, workable |
+| cr6261 (one of the pair) | newly enabled, low power |
+| cr9114_h1 | ambiguous band — carries no prediction |
+| her2 | diffuse, and permanently untestable at this endpoint |
+
+**Three solid tests and one low-power test**, all on concentrated landscapes. The
+diffuse arm remains untestable, so §4's falsification condition is still unavailable
+and no confirmation count is claimed.
+
+---
+
+## 3D. DECISION 2026-10-31 — the held-out arms were stopped deliberately
+
+The CreiLOV, CR9114 and eqFP611 arms registered in §3C were launched and then
+**stopped before any comparison existed**. No held-out landscape has been spent.
+
+Reason. Under the corpus freeze, `creilov`, `eqfp611_*`, `cr6261_*` and `cr9114_h1`
+are all `final_test` level; only `trpb`, `gb1` and `her2` are development data. Rule
+2.4 reclassifies a held-out target as development *if the algorithm changes because of
+what was seen on it*. Confirming the k-DPP prediction there and then shipping the
+removal would do exactly that, and would spend four landscapes — the entire
+independent pool — on an **internal engineering question** rather than on the headline
+comparison, which is where `docs/HANDOFF.md` §8 says independent evidence is needed.
+
+TrpB and GB1, both development data, already answer it: +2.54 (t = 2.37) and +6.25
+(t = 3.92). That is sufficient to ship a default change and does not require held-out
+evidence.
+
+What was and was not consumed:
+
+| landscape | state |
+| --- | --- |
+| creilov | baseline arm completed (4.1158 / 2.60 top-1%); **no dpp arm**, so no comparison exists |
+| cr9114_h1 | not started |
+| eqfp611_blue, eqfp611_red | not started |
+| cr6261_h1, cr6261_h9 | not started |
+
+A single baseline arm is not a result about k-DPP, so CreiLOV remains usable. Its
+baseline figure is recorded here for provenance, not as a finding.
+
+**Consequence for this registration.** The narrow-band prediction stands tested on two
+development landscapes and untested on every held-out one, by choice. §3C's budgets
+stay registered and the arms remain available, but running them should be weighed
+against spending the landscape — and if the answer is already known from development
+data, the held-out run buys confirmation at the price of independence.
+
+One observation for whoever runs them later: CreiLOV's baseline reaches **2.60** of a
+1,655-variant hit tier, against TrpB's 45.60 of 1,600. It is a far harder landscape at
+this budget, so a small true effect may not reach significance there even if the
+direction is right. A null on CreiLOV would be weak evidence, and should be
+pre-committed as such before the arm runs.
+
+---
+
 ## 4. What falsifies this
 
 The prediction is wrong if **any** of the following holds:

@@ -1485,6 +1485,28 @@ PRIOR_CALIBRATION_ENABLED: bool = False
 #   pareto    - non-domination rank weighting of acquisition value
 #   dkl       - the two-stage deep-feature GP; falls back to a plain Matern GP
 #   prior     - the hand-built biophysical prior mean
+# Two selector stages are shipped OFF because each is measured to HURT top-1% yield.
+# Paired, 48 identical seeds per landscape:
+#
+#   trpb  dpp off   45.60 -> 48.15   +2.54   t = +2.37   significant
+#   gb1   dpp off   14.65 -> 20.90   +6.25   t = +3.92   significant
+#   trpb  dkl off   45.60 -> 48.04   +2.44   t = +2.56   significant
+#
+# k-DPP maximises batch diversity, which is the wrong objective where a landscape's
+# tail is concentrated - budget spent spreading is budget spent leaving the only
+# productive region. Both measured landscapes are concentrated (tail-motif z of 20.7
+# and 15.0); whether the sign flips on a diffuse landscape is registered as an open
+# prediction in docs/preregistration-motif-narrowness.md and is currently untestable
+# for want of a landscape that is diffuse AND large enough for the budget.
+#
+# Both landscapes are DEVELOPMENT data under docs/HANDOFF.md rule 2.4, so this is an
+# engineering decision on development evidence, not generalisation evidence.
+#
+# Setting either True restores the previous behaviour, which is what a benchmark arm
+# comparing against it must do. An explicit ablate={...} still forces a stage off.
+DPP_DIVERSITY_ENABLED: bool = False
+TWO_STAGE_GP_ENABLED: bool = False
+
 ABLATABLE_COMPONENTS: Set[str] = {"dpp", "gflownet", "pareto", "dkl", "prior"}
 
 
@@ -1881,7 +1903,7 @@ def select_next_micro_batch(
 
     # Step 2: Fit the two-stage deep-feature GP surrogate on residuals (Pillar 2)
     # Incorporates heteroscedastic noise modeling from experimental replicates
-    if "dkl" in ablated:
+    if "dkl" in ablated or not TWO_STAGE_GP_ENABLED:
         # Plain Matern GP, fitted WITHOUT sample_variance: GaussianProcessRegressor
         # does not accept that keyword, so passing it would land in the except branch
         # below and the arm would be measuring an error path rather than an ablation.
@@ -2167,7 +2189,7 @@ def select_next_micro_batch(
 
     # Phase 1 / Pillar 1: Determinantal Point Process (k-DPP) Orthogonal Batch Diversity
     # Maximizes the determinant volume det(L_B) to guarantee mutually orthogonal biophysical coverage
-    if "dpp" in ablated:
+    if "dpp" in ablated or not DPP_DIVERSITY_ENABLED:
         # Top-n by quality score, with no diversity term. The engine's low variance
         # is widely attributed to this stage, so removing it is the direct test.
         #
