@@ -128,9 +128,16 @@ than one phenotype. `Data/Data_summary.xlsx` has **9 rows, one per protein**;
 collection size is describing a different version of CombinGym and **must not be mixed with
 this pin**; reconcile it against the table above first.
 
-Note that `Clean/` at this pin holds **CR9114 H1 only**. The CR9114 H3 and B landscapes
-from the upstream publication are not in the frozen corpus, so this protocol cannot use
-them.
+Note that `Clean/` at this pin holds **CR9114 H1 only**. The CR9114 H3 and influenza B
+landscapes from the upstream publication are not in the frozen corpus, so this protocol
+cannot use them.
+
+**There is no CR9114/H9 landscape, and there never was.** Phillips et al. assayed CR9114
+against H1, H3 and influenza B; **H9 was measured for CR6261 only**. This is recorded
+explicitly because the CR6261 H1/H9 pair invites the symmetric assumption, and a missing
+landscape that was never measured is a different thing from one that exists upstream and is
+absent from the pin. Nothing in this protocol may list a CR9114/H9 cell as unobtainable,
+pending or absent: the experiment was not performed.
 
 ### 3.3 Curation, and what this protocol reads
 
@@ -283,6 +290,41 @@ on HER2 (§4.2), before any cross-protein arm ran; it is not hypothetical.
 
 Reclassification events are appended to §16 with a date and the change that caused them.
 
+### 4.5 Suitability finding: CR6261 is excluded from the pooled aggregate
+
+A target can be legitimately held out and still be the wrong instrument. CR6261 is
+**unsuitable for pooled performance comparison** on three independent grounds, all computable
+before any arm runs and all recorded here rather than discovered in the results:
+
+1. **Budget-to-library ratio.** 125 measurements is **6.63% of its 1,886 mutants**, against
+   **0.08%** on TrpB — a factor of 83. A difference measured while a campaign has consumed
+   one variant in fifteen is not the same quantity as one measured at one in twelve hundred.
+2. **The budget exceeds the hit set.** Its entire top-1% tier is **19 variants**, so a
+   125-measurement campaign could in principle measure every hit several times over. At that
+   ratio **an oracle scores identically to a merely good method**, and the endpoint stops
+   discriminating between them. This is why the tier ladder of §9.1 deepens CR6261 to 2%, and
+   deepening mitigates but does not remove the problem: at 2% the tier is 38 and the d ≥ 2
+   ceiling is 18 (§9.3), still below the budget.
+3. **Its H9 covariate is degenerate at zero** under both cut definitions — 0.000x at
+   floor(S/2) and 0.000x at depth ≤ 2 (§6.3) — so it contributes a tied value to the H1
+   ordering rather than a measurement.
+
+**Disposition, fixed in advance.** CR6261 H1 and H9 are **excluded from the
+equal-protein-weighted pooled aggregate** of §12.2 item 5, and are analysed instead as a
+**separate fixed-fraction stratum** (§8.2). They are **retained in full** for everything else,
+and specifically retained as:
+
+- the **qualitative demonstration that the covariate can invert** — H9 has zero top-1% hits
+  anywhere in its shallow shell while its hit rate rises to 22.9% at depth 9 and 40.0% at
+  depth 10, which is the most extreme depletion in the corpus and is genuinely valuable as a
+  structural contrast;
+- the **replication instance for H2** (§6.7.5), where its weaknesses are already stated.
+
+Excluding it from the pooled aggregate reduces that aggregate to **3 proteins** — eqFP611,
+CreiLOV, CR9114 — and that figure, not 4, is what any pooled number reports. The H1 ordering
+still uses all four proteins, because an ordering tolerates a tied endpoint where a
+pooled mean does not; §6.4's power statement already accounts for the tie.
+
 ---
 
 ## 5. The independent target set, and an honest count
@@ -332,6 +374,38 @@ At n = 4 proteins the across-protein statistics in §6.4 and §12 have very litt
 For the primary per-protein analyses the four rows are: eqFP611/mTagBFP2 (3 landscapes),
 CreiLOV (1), CR9114 (1), CR6261 (2). All four are present and characterised; nothing in the
 final test level is outstanding.
+
+### 5.3 The whole study: seven proteins, five structural families
+
+The count above is about **held-out evidence**. The count across the whole study, development
+and final test together, is different and is recorded separately so neither can be quoted for
+the other:
+
+| structural family | proteins | level |
+|---|---|---|
+| tryptophan synthase β subunit | TrpB | development |
+| protein G domain B1 | GB1 | development |
+| **immunoglobulin V-domain** | **trastuzumab, CR9114, CR6261** — three proteins, **one family** | trastuzumab development (§4.2); CR9114 and CR6261 final test |
+| GFP-like fluorescent protein | eqFP611 / mTagBFP2 | final test |
+| LOV / flavin-binding photosensor | CreiLOV | final test |
+
+**Seven proteins, five families.** The CombinGym acquisition contributes **+2 families** the
+project previously had no data in at all — GFP-like fluorescent protein and LOV photosensor —
+taking the study from three families to five.
+
+**And one caveat that the three-family figure in §5.2 hides.** Of those three independent
+families, the immunoglobulin V-domain is **already represented in development data** by
+trastuzumab (§4.2). CR9114 and CR6261 are different proteins from trastuzumab, so they are
+held out at the **protein** level; they are **not** held out at the **family** level. The
+practical reading:
+
+- **2 families** are genuinely new to the project — eqFP611 and CreiLOV.
+- **1 family** — immunoglobulin V-domain — carries held-out proteins but has a development
+  sibling whose inspection drove an algorithm change (the pool-restricted path, §4.2).
+
+Any claim of transfer to a *new* protein family therefore rests on **two** families, not
+three. The antibody results remain held-out evidence at the protein level and are reported as
+such, with this caveat attached.
 
 ---
 
@@ -555,10 +629,14 @@ Four proteins, a strict ordering, no ties — and, unlike the landscape-level or
 that is **unchanged** by the depth-0 convention.
 
 **Required alongside this ordering, every time it is reported: each target's library site
-count.** Width runs 4–16 across the corpus and covaries with the enrichment ordering, so an
-H1 result could reflect either. Whether the policy's depth bias scales with width is
-unmeasured and is resolved from the §10.1 read-out before this ordering is interpreted
-(§16 O-12).
+count** — 16 for CR9114, 15 for CreiLOV, 13 for eqFP611, 11 for CR6261. This is disclosure,
+not a correction: the Spearman correlation between site count and enrichment across the four
+proteins is only **rho_s = +0.400 (exact one-sided p = 9/24 = 0.3750)**, because CR9114 is the
+widest library in the corpus yet third of four in enrichment, and that single inversion
+decorrelates the two. **Width is not a serious confound for H1.** The reason width still
+matters is different and more serious — under a proportional depth bias the policy would not
+be a shallow exploiter on any of these libraries at all, which would make the mechanism
+inapplicable to every independent target. See §16 O-12, resolved from the §10.1 read-out.
 
 **The prediction this forces, stated plainly.** Every independent enrichment measured
 (≤ 1.88x) sits **below GB1's 3.32x**, where reliability already lost to ridge by 22.49 raw
@@ -1066,8 +1144,11 @@ Pre-specified, from the universe sizes above rather than from any result:
 - **`spcas9` (reserve, 597 variants).** 125 measurements is 20.9% of the universe. The
   absolute-budget protocol is **not** run; only the fixed-fraction analysis is, and the
   target is excluded from the equal-protein-weighted aggregate of §12.2.
-- **`cr6261_h1` and `cr6261_h9` (1,887 and 1,842).** Run under both schedules. The absolute
-  results are reported with the share-of-universe figure attached in the same table.
+- **`cr6261_h1` and `cr6261_h9` (1,887 and 1,842 rows; 1,886 and 1,841 mutants).** Run under
+  both schedules, with the share-of-universe figure attached in the same table. Under §4.5
+  they are **excluded from the pooled aggregate** and analysed as a separate fixed-fraction
+  stratum: at 6.63% of the library the absolute schedule's budget exceeds CR6261's entire
+  top-1% hit set of 19 variants, so the endpoint cannot separate an oracle from a good method.
 - **`sacas9` (reserve, 1,296).** Same treatment as CR6261, at 9.65%.
 
 ---
@@ -1361,7 +1442,10 @@ how a practitioner would read it. It rewards trivial wins and conceals severe lo
    and the worst one named in the summary sentence. Not a count of regressions: their sizes.
 5. **An equal-protein-weighted aggregate effect**, computed on **yield as a share of the
    achievable ceiling** (§9.3) because tiers and library geometries differ across targets
-   (§9.1, §9.3). One protein, one weight.
+   (§9.1, §9.3). One protein, one weight. **CR6261 is excluded from this aggregate** on the
+   suitability grounds of §4.5, so the aggregate is over **3 proteins** — eqFP611, CreiLOV,
+   CR9114 — and every pooled number states that denominator. CR6261 is reported separately as
+   a fixed-fraction stratum.
 6. **Uncertainty intervals on all of the above**, from the seed cluster bootstrap, and the
    pre-specified sensitivity analyses: both shell definitions (§6.3), both budget schedules
    (§8), rank-based and value-based normalizers on censored targets (§9.4), and
@@ -1601,7 +1685,7 @@ step 6's eqFP611 cells.
 | O-9 | **A8 is a budget-matched re-implementation, not MULTI-evolve** (§7.5). The published schedule assumes a singles screen plus ~100–200 pairwise measurements; this protocol's entire budget is 125. The adaptation rule is fixed on first use but has not been written or tested. | A8 results are evidence about a fixed depth schedule at a 125-measurement budget, never a reproduction of the published result. |
 | O-10 | **ALDE runs at 26% of its own demonstrated budget here** (§7.6): 125 against 96 + 4×96 = 480, and at batch 25 rather than 96. ALDE publishes no batch-size sensitivity analysis, so a deficit at these budgets is partly a statement about the budget. | ALDE must not carry the claim; ridge is the reference baseline. Mitigation is the 480-measurement development runs on TrpB and GB1, which have not been run. |
 | O-11 | **The CR6261 H1/H9 genotype intersection has not been computed** (§6.7.5). H2's replication instance needs it, because the two antigens have 1,887 and 1,842 rows and the shared-initial-sample construction applies only to genotypes present in both. | Compute and record before running the replication contrast. |
-| O-12 | **Whether the policy's selection depth scales with library width is unmeasured, and it bears on H1 at least as much as on H2.** The depth bias (reliability 2.63 / 2.56; baselines 3.48–3.60) was measured on **two libraries of identical four-site width**, which cannot distinguish an absolute constant from a proportion of sites. Library width here runs **4 to 16**. If the bias is **absolute**, the policy gets effectively shallower as libraries widen — 2.6 of 4 sites is 65% of positions, 2.6 of 16 is 16% — so performance should **degrade monotonically with site count**, which is a confound entangled with every cross-protein comparison in this document, H1 included: the covariate (shallow-shell enrichment) and site count both vary across the independent targets, and the H1 ordering could reflect either. If the bias is **proportional**, then on wide libraries the policy is not a shallow exploiter at all and H1's mechanism story does not apply to any library wider than four sites. Either answer changes the interpretation. | **Testable from the §10 rows at no extra compute**, by the read-out pre-specified in §10.1, and it must be done before P2 (§6.7.4) is scored and before the H1 ordering is interpreted. Site count must also be reported alongside enrichment in every H1 table so the two cannot be silently conflated. |
+| O-12 | **Whether the policy's selection depth scales with library width is unmeasured — and this matters because it governs whether the mechanism means anything beyond four sites at all, not because it confounds H1.** The depth bias (reliability 2.63 / 2.56; baselines 3.48–3.60) was measured on **two libraries of identical four-site width**, which cannot distinguish an absolute constant from a proportion of sites. **The serious branch: under the proportional reading** (~65% of sites) the policy selects near depth 8.5 of 13 on eqFP611 and 10.4 of 16 on CR9114, i.e. it is **not a shallow exploiter on any library wider than four sites**. The shallow-exploitation mechanism would then describe **only TrpB and GB1 — both development data — and would not apply to a single independent target.** That is a more serious threat to the project than the generalization result itself, because it would void the mechanism's relevance rather than merely weaken the evidence for it. Under the **absolute** reading the policy instead gets effectively shallower as libraries widen (2.6 of 4 sites is 65% of positions, 2.6 of 16 is 16%) and performance should degrade monotonically with site count. **Correction to an earlier draft of this item:** it claimed site count covaries with the enrichment ordering strongly enough to confound H1. Checked against the frozen per-protein values — CR9114 16 sites / 0.622x, CreiLOV 15 / 1.875x, eqFP611 13 / 1.439x, CR6261 11 / 0.105x — the Spearman correlation between site count and enrichment is **rho_s = +0.400, exact one-sided p = 9/24 = 0.3750**. The two orderings differ at one position and it is the decisive one: **CR9114 is the widest library in the corpus (16 sites) yet only third of four in enrichment.** That single inversion decorrelates width from the covariate enough that **H1 is not seriously confounded by it**. The confound framing was an overstatement and is withdrawn; the premise-undercutting branch above is the reason this item is a priority. | **Testable from the §10 rows at zero extra compute**, by the read-out pre-specified in §10.1, and it must be done before P2 (§6.7.4) is scored. Site count is still reported alongside enrichment in every H1 table (§6.5) — as disclosure, not as a correction for a confound that the data does not support. |
 | O-7 | **The size of the mode effect is still unknown** (§7.3). The mitigation — running reliability and frontier pool-restricted on TrpB and GB1 — is **now in progress on held-out seeds 48–95**, against the fixed GFlowNet-enabled anchors of §7.4 (TrpB 45.21 / 40.50, GB1 15.02 / 37.21). | Until those runs land, the aggregate, the H1 test and the gate decision are all blocked by §7.4. |
 | O-8 | **No wet-lab validation of anything here.** Every figure is a retrospective simulation over a fully-measured library. | Nothing in this study is evidence about a real campaign. |
 
@@ -1621,7 +1705,11 @@ written after cross-protein results have been examined must say so in its first 
 | 2026-10-31 | §6.7, §6.8, §6.4, §11.3 | added **H2**, the within-protein mechanism hypothesis (eqFP611 blue against red, difference of differences paired over 48 seeds, with CR6261 H1/H9 as a weaker replication), a fixed interpretation order for H1 against H2, and the statement that H1's power is marginal by construction with the rank-1/2 flip as its demonstration | H1 needs a perfect ordering of four items whose top three move on one-row conventions, so it will probably be unresolved either way; the within-protein contrast was already identified as the cleanest covariate manipulation in the corpus and was a remark rather than a test. H2 is exempt from the §7.4 block because the mode effect cancels in its difference of differences |
 | 2026-10-31 | §7, §7.5, §13.5, §12.2 | added arm **A8**, the published MULTI-evolve fixed depth schedule (Tran et al., Science 2026, 10.1126/science.aea1820), budget-matched to this protocol, with the registered caveat that it is not a reproduction of the published result | §13.5 item 4 kills depth-adaptive allocation if a simpler fixed-depth heuristic matches it, and the strongest such heuristic is already published; it belongs in the grid before the adaptive version is measured, not after it wins |
 | 2026-10-31 | §6.7.4, §6.7.5, §6.5, §10.1 | split H2's prediction into **P1** (directional, robust, H2's actual claim) and **P2** (the near-point prediction on red, now explicitly **conditional** on the depth bias being absolute rather than proportional to library width); softened the falsification clause that had made a healthy red yield fatal to the mechanism regardless of blue; required mean selected depth to be reported in both absolute and fractional units for every arm and target, with a pre-specified read-out that settles absolute-versus-proportional before P2 is scored; required site count alongside the H1 enrichment ordering | the premise "the policy selects at mean depth ~2.6" was measured only on two **four-site** libraries. eqFP611 has thirteen. Absolute (~2.6, 20% of sites) and proportional (~8.5, 65% of sites) readings make **opposite** predictions about red, whose hits peak at depth 8, and nothing measured distinguishes them. As written, a width-transfer effect would have been misrecorded as a refutation of the mechanism |
-| 2026-10-31 | §16 O-12 | added: whether selection depth scales with library width is unmeasured, testable from the §10 rows at no extra compute, and a confound for **H1** as much as for H2 — width runs 4–16 and covaries with the enrichment ordering | if the bias is absolute the policy gets effectively shallower as libraries widen and should degrade monotonically with site count; if proportional, it is not a shallow exploiter on any library wider than four sites and H1's mechanism story does not apply there. Either answer changes the interpretation |
+| 2026-10-31 | §16 O-12 | added: whether selection depth scales with library width is unmeasured, testable from the §10 rows at no extra compute | if the bias is absolute the policy gets effectively shallower as libraries widen; if proportional, it is not a shallow exploiter on any library wider than four sites. Either answer changes the interpretation |
+| 2026-10-31 | §16 O-12, §6.5 | **corrected**: the claim that site count covaries with the enrichment ordering strongly enough to confound H1 was an overstatement and is withdrawn. Measured on the frozen per-protein values, rho_s = **+0.400**, exact one-sided p = **9/24 = 0.3750**, because CR9114 is the widest library (16 sites) yet third of four in enrichment. O-12 now leads with the premise-undercutting branch instead: under a proportional depth bias the policy is not a shallow exploiter on any library wider than four sites, so the mechanism would describe only TrpB and GB1 — both development data — and no independent target | the confound risk and the premise-undercutting risk are not the same risk, and the item led with the weaker one. The first is not supported by the data; the second is unmeasured and would void the mechanism's relevance rather than merely weaken its evidence |
+| 2026-10-31 | §3.2 | recorded that **no CR9114/H9 landscape exists** — Phillips et al. assayed CR9114 against H1, H3 and influenza B, and H9 for CR6261 only — and that it may not be listed as unobtainable, pending or absent | the CR6261 H1/H9 pair invites the symmetric assumption; an experiment never performed is not a missing file |
+| 2026-10-31 | §5.3 | added the whole-study count: **seven proteins, five structural families**, with trastuzumab, CR9114 and CR6261 as three proteins in **one** immunoglobulin V-domain family, and the acquisition contributing **+2** families the project had no data in. Also recorded that of §5.2's three independent families, the Ig V-domain is **already represented in development data** by trastuzumab, so transfer to a *new* family rests on **two** families, not three | the earlier count did not place trastuzumab in the same family as the two bnAbs, which both understated the study-wide family count and overstated the independence of the antibody results at the family level |
+| 2026-10-31 | §4.5, §8.3, §12.2 | added: **CR6261 is excluded from the pooled aggregate** on three pre-computable grounds — 125 measurements is 6.63% of its 1,886 mutants against 0.08% on TrpB; its top-1% tier is 19 variants so the budget exceeds the hit set and an oracle scores like a good method; and its H9 covariate is degenerate at zero under both cut definitions. Retained in full as the qualitative demonstration that the covariate can invert, and as H2's replication instance. The pooled aggregate is now over **3 proteins** | a target can be legitimately held out and still be the wrong instrument; the ratio and the tier size are properties of the dataset, not of any result |
 | 2026-10-31 | §7.6 | added the named threat that ALDE runs at 26% of its own demonstrated budget (125 against 96 + 4×96 = 480, batch 25 rather than 96, no published batch-size sensitivity), with the mitigation of also running the grid at 96 + 4×96 on TrpB and GB1 | both are development data, so the mitigation costs nothing held-out, and without it an ALDE deficit cannot be attributed to the method rather than the budget |
 
 No cross-protein arm had been run and no cross-protein performance figure had been examined
