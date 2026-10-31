@@ -52,6 +52,62 @@
       "sha256_status": "recorded"
     },
     {
+      "path": "Data/DMS/Raw/bnAbs_CR6261_raw.csv",
+      "git_blob_sha1": "1158a5dcfcc54a66467056ce096ecfbe13a06c36",
+      "size_bytes": 358244,
+      "sha256": "6acc7dc8352d694db5f3aedb36e8c4216f61d400b4d85828c056f08580e9c61e",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Raw/CreiLOV_raw.xlsx",
+      "git_blob_sha1": "300672c721f1fc1a5398f689c9c961dd6eaa9df0",
+      "size_bytes": 22619510,
+      "sha256": "02b314ba88bec25a6a814d04294ad415f4b150b6285b6d5a4ec0a848df5f8b70",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Raw/eqFP611_raw.xlsx",
+      "git_blob_sha1": "0028edb5b41202512bfd26ca37bb14be25dd4875",
+      "size_bytes": 737089,
+      "sha256": "d893d36645d10334b326696e98edbb7222b15bbeb946176482ed83637120904b",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Raw/GB1_raw.xlsx",
+      "git_blob_sha1": "08b80e4367dcbe8ea8bfa70dff5d0908380c1581",
+      "size_bytes": 6633543,
+      "sha256": "ac9a16295cd24110ad3ef4bcc57741f023ff9f3f5c3d9f5fdc0a94b996dca9b7",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Raw/HIV-1_raw.tsv",
+      "git_blob_sha1": "4611f98454408f6edfdacb570be57e3b34147ec6",
+      "size_bytes": 68024,
+      "sha256": "0a174f172af42840463c94c80f29fe52c29926cab03524e9db9f1688f781f386",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Raw/RhlA_raw.xlsx",
+      "git_blob_sha1": "a8704f81527fbd089bac63847fb734c0fa2c87a8",
+      "size_bytes": 287545,
+      "sha256": "8302186312185d94062872198a144e493879875442d3b53bc6a33b347128ad0d",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Raw/SaCas9_raw.xlsx",
+      "git_blob_sha1": "f7fafde24a570a11143452de5e808d933ea1cd35",
+      "size_bytes": 242262,
+      "sha256": "ebdcc3edaf51821e6160db6760d1262145e66b43257dcebb46c18e1d123c7686",
+      "sha256_status": "recorded"
+    },
+    {
+      "path": "Data/DMS/Raw/SpCas9_raw.xlsx",
+      "git_blob_sha1": "072d1c0064647fda885652c788dd82d899859776",
+      "size_bytes": 112221,
+      "sha256": "2832e7f18f82b5b0a5769c0152505b2fdf15f8c0b720824d31c26603b89d80a3",
+      "sha256_status": "recorded"
+    },
+    {
       "path": "Data/DMS/Clean/CreiLOV_clean.xlsx",
       "git_blob_sha1": "9ad0d8ff3cf7c742280c84befcd33780a575b31d",
       "size_bytes": 26263997,

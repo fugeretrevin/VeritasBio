@@ -89,11 +89,37 @@ PINNED_FILES: Tuple[Tuple[str, str, int], ...] = (
      "97f2a084427e67b4d017654bb7ad158f55a2c9cc", 149858),
     ("Data/DMS/Clean/bnAbs_CR9114_H1_clean.xlsx",
      "d9895e1f7e6a25fba4c6e2aced9843f7ad4a7000", 4403699),
-    # Added after the clean workbook was found to drop a whole quadrant of the CR9114 space
-    # (see the LANDSCAPES note for cr9114_h1). Same pinned commit; this EXTENDS hash coverage
-    # to the file now actually scored against, and alters no existing entry.
+    # --- The nine raw tables ------------------------------------------------------
+    # bnAbs_CR9114_raw.csv is pinned because CR9114 is SCORED against it: the clean
+    # workbook drops a whole quadrant of the space (see the LANDSCAPES note for cr9114_h1).
+    #
+    # The other eight are pinned because they are the EVIDENCE THAT THE CLEAN TABLES ARE
+    # FAITHFUL. docs/corpus-audit.md establishes clean - raw = 0 recoverable rows on every
+    # landscape but CR9114, which is what licenses scoring the other landscapes from their
+    # clean workbooks at all. An unpinned raw table means that evidence is unpinned: a later
+    # audit could run against different bytes while `verify` still exited 0, which is exactly
+    # the hole the CR9114 episode exposed.
+    #
+    # All nine are at the SAME pinned commit, cross-checked against the tree SHA recorded in
+    # CORPUS above. Pinning them EXTENDS hash coverage and alters no existing entry.
     ("Data/DMS/Raw/bnAbs_CR9114_raw.csv",
      "8ac7352f539a9b4d33330dc3764b0ff5e86a094d", 12258680),
+    ("Data/DMS/Raw/bnAbs_CR6261_raw.csv",
+     "1158a5dcfcc54a66467056ce096ecfbe13a06c36", 358244),
+    ("Data/DMS/Raw/CreiLOV_raw.xlsx",
+     "300672c721f1fc1a5398f689c9c961dd6eaa9df0", 22619510),
+    ("Data/DMS/Raw/eqFP611_raw.xlsx",
+     "0028edb5b41202512bfd26ca37bb14be25dd4875", 737089),
+    ("Data/DMS/Raw/GB1_raw.xlsx",
+     "08b80e4367dcbe8ea8bfa70dff5d0908380c1581", 6633543),
+    ("Data/DMS/Raw/HIV-1_raw.tsv",
+     "4611f98454408f6edfdacb570be57e3b34147ec6", 68024),
+    ("Data/DMS/Raw/RhlA_raw.xlsx",
+     "a8704f81527fbd089bac63847fb734c0fa2c87a8", 287545),
+    ("Data/DMS/Raw/SaCas9_raw.xlsx",
+     "f7fafde24a570a11143452de5e808d933ea1cd35", 242262),
+    ("Data/DMS/Raw/SpCas9_raw.xlsx",
+     "072d1c0064647fda885652c788dd82d899859776", 112221),
     ("Data/DMS/Clean/CreiLOV_clean.xlsx",
      "9ad0d8ff3cf7c742280c84befcd33780a575b31d", 26263997),
     ("Data/DMS/Clean/eqFP611_clean.xlsx",

@@ -179,34 +179,60 @@ against.
 | `Data/DMS/Clean/RhlA_clean.xlsx` | 287,350 | `0cb393531ab6fff5fa8f037221d50cf543429dcd` | `d63fdd66be2a9394a89e8321a4e4553d30b2f8b553773d6faddfb5c114c0f876` |
 | `Data/DMS/Clean/SaCas9_clean.xlsx` | 126,881 | `76b854e6ec16c09c99efd2e153f6f2a10154f280` | `8f74ec4bfce62a15e53bde8c381803e6f29bad6603614073233c47bc6f5d8648` |
 | `Data/DMS/Clean/SpCas9_clean.xlsx` | 113,908 | `00ae9e52824b835ddbd09c569630d813df7414b0` | `48283f3ea546aecf67ed00e64831c69a62f6ba858ca5df018a7ce5d49f74c103` |
-| `Data/DMS/Raw/bnAbs_CR9114_raw.csv` | 12,258,680 | `8ac7352f539a9b4d33330dc3764b0ff5e86a094d` | `ee31f8fc26fce2730d2ae772e7a095aa334b4c6c5d8e7fbfe4b4a5a1c9a794fe` |
+All **nine raw tables** under `Data/DMS/Raw/` are pinned as well, on the same terms:
+
+| raw table | bytes | git blob SHA-1 | SHA-256 |
+|---|---|---|---|
+| `bnAbs_CR9114_raw.csv` | 12,258,680 | `8ac7352f539a9b4d33330dc3764b0ff5e86a094d` | `ee31f8fc26fce2730d2ae772e7a095aa334b4c6c5d8e7fbfe4b4a5a1c9a794fe` |
+| `bnAbs_CR6261_raw.csv` | 358,244 | `1158a5dcfcc54a66467056ce096ecfbe13a06c36` | `6acc7dc8352d694db5f3aedb36e8c4216f61d400b4d85828c056f08580e9c61e` |
+| `CreiLOV_raw.xlsx` | 22,619,510 | `300672c721f1fc1a5398f689c9c961dd6eaa9df0` | `02b314ba88bec25a6a814d04294ad415f4b150b6285b6d5a4ec0a848df5f8b70` |
+| `eqFP611_raw.xlsx` | 737,089 | `0028edb5b41202512bfd26ca37bb14be25dd4875` | `d893d36645d10334b326696e98edbb7222b15bbeb946176482ed83637120904b` |
+| `GB1_raw.xlsx` | 6,633,543 | `08b80e4367dcbe8ea8bfa70dff5d0908380c1581` | `ac9a16295cd24110ad3ef4bcc57741f023ff9f3f5c3d9f5fdc0a94b996dca9b7` |
+| `HIV-1_raw.tsv` | 68,024 | `4611f98454408f6edfdacb570be57e3b34147ec6` | `0a174f172af42840463c94c80f29fe52c29926cab03524e9db9f1688f781f386` |
+| `RhlA_raw.xlsx` | 287,545 | `a8704f81527fbd089bac63847fb734c0fa2c87a8` | `8302186312185d94062872198a144e493879875442d3b53bc6a33b347128ad0d` |
+| `SaCas9_raw.xlsx` | 242,262 | `f7fafde24a570a11143452de5e808d933ea1cd35` | `ebdcc3edaf51821e6160db6760d1262145e66b43257dcebb46c18e1d123c7686` |
+| `SpCas9_raw.xlsx` | 112,221 | `072d1c0064647fda885652c788dd82d899859776` | `2832e7f18f82b5b0a5769c0152505b2fdf15f8c0b720824d31c26603b89d80a3` |
 
 Nine wild-type FASTA files are pinned on the same terms; their hashes are in the lock file
 rather than inline here because nothing in the analysis depends on reading them by hand.
 
-All **21 pinned files were fetched and verified**: every one matches both the git blob SHA-1
+All **29 pinned files were fetched and verified**: every one matches both the git blob SHA-1
 published by GitHub's tree API for the pinned commit and the SHA-256 recorded in the lock
 file. `verify` exits 0 on the frozen corpus and exits 1 on a single altered byte.
 
-**The last row was added on 2026-10-31 and the pin did not change.** CR9114 is now scored
-against the **raw** table rather than the curated workbook (D-8, §6.9). The raw table sits at
-the **same already-pinned commit** `c5dccd51`, so the amendment changes *which pinned file is
-read*, not what the corpus is. Concretely, and stated this precisely so nobody later suspects
-the freeze was quietly broken:
+**Why the raw tables are pinned, and why only one of them is read.** CR9114 is **scored**
+against its raw table because the clean workbook is defective (D-8). The other eight are
+pinned for a different reason: they are **the evidence that the clean tables are faithful**.
+`docs/corpus-audit.md` establishes `clean − raw = 0` recoverable rows on every landscape but
+CR9114, and that negative result is what licenses scoring the other landscapes from their
+clean workbooks at all (§3.7). An unpinned raw table leaves that evidence unpinned — a later
+audit could run against different bytes while `verify` still exited 0, which is precisely the
+hole the CR9114 episode exposed. Pinning the evidence costs nothing and closes it.
 
-- the **commit, date and tree SHA of §3.1 are unchanged**;
+**Both extensions were additive and the pin never changed.** The raw CR9114 table was pinned
+first (21 files), then the remaining eight (29 files). On each occasion:
+
+- the **commit, date and tree SHA of §3.1 are untouched** — every raw table's blob SHA-1 was
+  cross-checked against the tree SHA `911f19c7…` recorded there;
 - the lock's `corpus` block is **byte-identical** to the version committed at the freeze;
-- **no existing lock entry changed** — all 20 were recomputed from the same local files and
-  came out identical;
-- the lock **gained exactly one entry**, for a file at the same commit, taking it from 20 to
-  21.
+- **no existing entry changed and none was removed** — all were recomputed from the same local
+  files and came out identical;
+- the lock grew **20 → 21 → 29**, by addition only.
 
-Leaving it out was the alternative, and it would have been worse: the lock as frozen recorded
-only the 20 upstream blobs and **no hash of any derived table**, so a landscape repointed at an
-unlisted file would have been scored against bytes outside the freeze while `verify` still
-passed, because `verify` only walked the lock. That hole is now closed in two ways — the raw
-table is pinned, and `verify` fails if `PINNED_FILES` or any landscape's source file is absent
-from the lock (§3.5).
+Stated this precisely so nobody later suspects the freeze was quietly broken: CR9114 being
+scored against the raw table changes **which pinned file is read**, not what the corpus is.
+
+Leaving the raw tables out was the alternative and it would have been worse. The lock as
+originally frozen recorded only the 20 clean-and-metadata blobs and **no hash of any raw or
+derived table**, so a landscape repointed at an unlisted file would have been scored against
+bytes outside the freeze while `verify` still passed, because `verify` only walked the lock.
+That hole is closed in two ways — the raw tables are pinned, and `verify` now fails if
+`PINNED_FILES` or any landscape's source file is absent from the lock (§3.5).
+
+One honest note on process: "no lock change" was the instruction on both occasions and was
+wrong on both. The rule that survives is narrower and worth keeping — **the pin must not
+change; the lock may only grow.** A frozen *pin* is the scientific commitment; a lock that
+refuses to cover a file someone is about to read is not protecting anything.
 
 ### 3.5 Making the freeze checkable
 
@@ -256,6 +282,56 @@ file is what is read — **except for CR9114**, where D-8 showed the clean file 
 defective artifact and the raw table is read instead. That exception is the only one, and it
 is a reminder that "the file we read wins" is a tie-breaking rule, not a guarantee that the
 file we read is correct.
+
+### 3.7 The clean-versus-raw audit: D-8 is unique, and no covariate moves
+
+O-14 asked whether a second silent exclusion of the D-8 kind lurked in the other nine clean
+workbooks, four of them final-test targets whose covariates this protocol has already
+pre-registered. It does not. Full detail in `docs/corpus-audit.md`.
+
+> **The D-8 defect is unique to CR9114. Not one pre-registered covariate moves. The freeze
+> holds. No landscape needs re-preparing.**
+
+**The reasoning, which is what makes the negative meaningful.** A verdict of "we looked and
+found nothing" is worth little; what makes this one load-bearing is the quantity it turns on.
+
+The decisive quantity is **recoverable rows** — rows missing from a clean table yet carrying a
+**real measurement** in the raw table. That count is **16,253 for CR9114 and exactly 0 for
+every other landscape.** The argument is then closed rather than statistical: a row with no
+measurement **can never enter the eligible universe** under the curation rule of §3.3, so its
+absence cannot shift a covariate **however depth-correlated the absence looks**. Recomputing
+every covariate over the raw universe gives a delta of **exactly 0.0000** except for CR9114.
+
+So the clean workbooks are faithful **on row membership, value fidelity and depth structure**
+for all nine, and the eight non-CR9114 landscapes may be scored from them.
+
+**Why the audit's negatives are credible: the same code demonstrably finds the positive.** A
+null from an instrument never shown to detect anything is not evidence. This one:
+
+- reproduced all **seven frozen §6.5 covariates digit for digit**;
+- **re-derived CR9114's filter independently** at 0 false positives and 0 false negatives;
+- reproduced the documented **reweighting bound at 0.5622x** (§6.9.1).
+
+A composite sweep over every single-site and site-pair rule of the CR9114 form found nothing
+at 0 FP / 0 FN anywhere else: CR6261's best candidate misses by **423 kept rows** and
+SpCas9's by **361**. And **eqFP611 and SaCas9 are combinatorially complete** — every genotype
+of their design space is present — so there is no room for a filter to hide in either.
+
+#### 3.7.1 Scope caveat, which bounds the clean bill of health
+
+The audit examined **row membership, value fidelity and depth structure**. It did **not**
+examine each clean table's **column choices** against its upstream publication.
+
+That distinction is not hypothetical: the SaCas9 phenotype divergence recorded in §6.10
+surfaced **incidentally** rather than by design. So more of that kind may exist, particularly
+in the reserve landscapes nobody has had reason to read closely.
+
+> **A clean bill on row membership is not a clean bill on phenotype definition.**
+
+Phenotype-column provenance is therefore a **precondition on promotion**, alongside the
+anticipation audit (§6.5, O-15). For the four final-test targets the columns in use are the
+ones the registry names and the §9.4 censoring figures describe, which is a weaker check than
+a publication comparison and is recorded as such in O-16.
 
 ---
 
@@ -801,6 +877,10 @@ promoted test reports **how many of its n positions are blind** alongside the p-
 p-value from an ordering with zero blind positions is reported as what it is: a measure of how
 well published figures agree with each other.
 
+**A promoted protein needs two clearances, not one:** the anticipation audit above, **and** a
+provenance check of the kind §3.7.1 shows is still outstanding. The two reserve findings in
+§6.10 are why.
+
 Their covariates are already computed and frozen alongside the others, so promoting them
 later is not a fresh look: HIV-1 protease 1.357x, SaCas9 1.560x, SpCas9 2.500x, RhlA
 undefined. Note that SpCas9's 2.50x is the highest independent value in the whole corpus and
@@ -1115,9 +1195,58 @@ Both statements hold at once and neither cancels the other:
   power statement alone implies.
 
 Whether the other three positions are likewise recoverable from published depth-versus-fitness
-figures has not been checked and is recorded as **O-13**. It should be checked before the H1
-ordering is interpreted, because an ordering every position of which is anticipated is not a
-test of anything.
+figures was recorded as O-13 and is now **answered — §6.5.1**. All four are anticipated, so
+the caveat above understated the problem rather than overstating it.
+
+### 6.10 Two reserve-landscape findings, recorded as preconditions on promotion
+
+Both come from the clean-versus-raw audit (§3.7). Neither affects any pre-registered covariate
+today, because neither landscape is in the final test level. Both would matter the moment one
+is promoted, and both would be easy to miss then — which is why they are written down beside
+the promotion prohibition of §6.5 rather than left in the audit document.
+
+#### 6.10.1 SpCas9's attrition *is* strongly depth-correlated — and harmless
+
+| | |
+|---|---|
+| retention at depth 2 | 95.8% |
+| retention at depth 8 | 47.2% |
+| spread | **48.6 points, monotone** |
+| cause, at 0 FP / 0 FN | `RFPsg5 ON present AND RFPsg8 ON present` |
+| enrichment effect | **none** |
+
+This is the same *shape* as D-8 and emphatically **not** the same *defect*. All 355 missing
+rows **lack an on-target value**, so **none are recoverable** (§3.7), and an unmeasured row can
+never enter the eligible universe. The covariate is unchanged.
+
+The reason to record it anyway: a depth-correlated retention curve with a 48.6-point spread is
+exactly what would be noticed after a surprising SpCas9 result and read as an explanation. It
+is not one, and that is settled here rather than argued later.
+
+Two further SpCas9 facts belonging with it, both already load-bearing in §8.3 and §9.1: its
+clean sheet is **597 real rows plus 5,151 wholly empty padding rows**, and its library is only
+**3.44% saturated**. The padding is why the drop count matters in §3.3, and the saturation is
+why §8.3 refuses to run the absolute-budget protocol on it.
+
+#### 6.10.2 SaCas9's clean phenotype is a 3-of-6 average, undocumented upstream
+
+The clean table's `Mean` column was verified as `mean(sg1, sg2, sg3)` on **all 1,296 rows** —
+it silently averages **three of the six sgRNAs** the raw table reports.
+
+Row-complete and depth-blind, so there is **no covariate effect**. But it is a
+**phenotype-definition divergence from the upstream publication**, not a row-membership
+question, and it is a different species of problem from D-8: D-8 changed *which variants* were
+present; this changes *what the number means*.
+
+It is also the only instance of its kind anyone has found, and it was found **incidentally**
+(§3.7.1). That is the uncomfortable part: the audit was not looking for it, which gives no
+information about how many more there are.
+
+**Precondition on promotion, fixed here:** a reserve protein requires **both** the anticipation
+audit of §6.5 **and** a check that each clean phenotype column means what its upstream
+publication says it means. SaCas9 specifically may not be promoted until the 3-of-6 average is
+either justified against the publication or replaced with the full 6-sgRNA definition, with the
+choice stated in advance of any run.
 
 ---
 
@@ -1483,14 +1612,26 @@ and must be carried into interpretation:
 | GB1 (dev) | 0.00 | **19.74%** | 8.762 | 0.0007% | censored from below |
 | HER2 (dev) | 0.10 | **51.7%** | — | — | heavily censored from below |
 
-**Correction to a claim about these floors, recorded 2026-10-31.** It has been stated
-elsewhere that the raw bnAb tables encode non-binders at 6.0 and that CombinGym's cleaning
-step therefore changes the censoring value. **That is false for H1.** Raw `h1_mean` has a
-minimum of **7.0 with 1,675 rows at the floor — identical to clean**. The 6.0 floor applies
-to `h3_mean` and `fluB_mean` only, which is exactly what the paper's titration boundaries
-require. Nothing in this protocol depends on the false version, and the H1 censoring figures
-in the table above are the raw table's own. The earlier "cleaning changed the censoring value"
-caveat does not apply to any landscape this protocol scores.
+**Correction to a claim about these floors — now settled per column.** It has been stated
+elsewhere that "the raw bnAb tables" encode non-binders at 6.0 and that CombinGym's cleaning
+step therefore changes the censoring value. **The plural was wrong twice over, and so was the
+claim:**
+
+| column | 6.0 floor? | minimum | raw vs clean | curated / scored here? |
+|---|---|---|---|---|
+| `h1_mean`, CR9114 | **no — zero rows at 6.0** | 7.0 | **agree** on floor and mass | scored |
+| `h1_mean`, CR6261 | **no — zero rows at 6.0** | 7.0 | **agree** on floor and mass | scored |
+| `h9_mean`, CR6261 | no | 7.0 | agree | scored |
+| `h3_mean`, CR9114 | yes | 6.0 | — | **not curated, not scored** |
+| `fluB_mean`, CR9114 | yes | 6.0 | — | **not curated, not scored** |
+| any such column, CR6261 | **column does not exist** — `bnAbs_CR6261_raw.csv` has none | — | — | — |
+
+So: the 6.0 floor exists **only** in CR9114's `h3_mean` and `fluB_mean`, neither of which is
+curated or scored, and `bnAbs_CR6261_raw.csv` has no such column at all. **No cleaning step
+changes any censoring value on any bnAb landscape**, and the H1 and H9 figures in the table
+above are the raw tables' own. The "cleaning changed the censoring value" caveat applies to
+nothing this protocol scores, and it is one of the two citation failures the methods note in
+§6.9.2 was written about.
 
 **All observed censoring in this corpus is from below.** That matters for which endpoints
 survive:
@@ -1884,8 +2025,9 @@ of order.
 
 1. Freeze this document and `scripts/freeze_cross_protein_corpus.py`. **Commit before any
    cross-protein arm runs.** ← this step
-2. `fetch`, `record`, `verify` the corpus; commit the lock file. **Done; 21/21 files verified
-   (20 at the 2026-10-31 freeze, plus the raw CR9114 table on 2026-10-31 — same pin, §3.4).**
+2. `fetch`, `record`, `verify` the corpus; commit the lock file. **Done; 29/29 files verified
+   — 20 at the freeze, plus the raw CR9114 table, plus the remaining eight raw tables, all at
+   the same unchanged pin (§3.4).**
 3. `stats` on every target; the covariates of §6.5 and the ceilings of §9.3 are published
    above. Label-only, no arms. **Done 2026-10-31.** Recompute TrpB's anchor with the same
    code path (§16 O-4).
@@ -1916,7 +2058,7 @@ step 6's eqFP611 cells.
 | O-3 | **ALDE compatibility on this corpus is unprobed.** The binary per-site alphabets and the 121-/1,053-residue genotype representations are not the saturated-site encoding its published code assumes. | Likely absent cells, to be documented per §7.2 rather than substituted. |
 | O-4 | ~~TrpB's shallow-shell figures were not recomputed here.~~ **Resolved on 2026-10-31.** TrpB has now been reproduced by a **second, independent implementation** — a parallel agent's own genotype canonicalisation and shell profiler, run against the real landscape files — giving shallow 168/2,242 = **7.4933%**, deep 1,432/157,757 = **0.9077%**, per-depth 15.79% / 7.20% / 2.33% / 0.608% at depths 1–4 and a depth-4 maximum of 1.0000. The same implementation gives GB1 shallow 72/2,167 = **3.3226%**, deep 1,422/147,193 = **0.9661%**, depth-4 maximum 8.7620. `freeze_cross_protein_corpus.py stats` reproduces GB1's figures **exactly** under the §6.3 depth-0 convention. Both anchors now come from agreeing implementations; the earlier 2,168 / 3.3210% was the depth-0 convention difference and nothing else. | none |
 | O-5 | **The upstream corpus has seven recorded discrepancies or inconsistencies** (§3.6, D-1 to D-7), two of them unexplained one-row differences and one — SpCas9, 948 claimed against 597 usable — a factor of 1.6. | The clean file wins where they disagree; D-5 means RhlA's provenance is unestablished. |
-| O-15 | **Whether the four reserve proteins' positions are also pre-published is unchecked**, and §6.5's standing prohibition blocks promoting any of them into the H1 test until it is. Promoting four pre-published positions would move the exact attainable one-sided p from 1/24 to 1/5,040 while adding **zero** blind predictions. | The only sanctioned route to n = 7 runs the §6.5.1 audit first and records each verdict. A promoted test must report how many of its n positions are blind alongside its p-value. |
+| O-15 | **Whether the four reserve proteins' positions are also pre-published is unchecked**, and §6.5's standing prohibition blocks promoting any of them into the H1 test until it is. Promoting four pre-published positions would move the exact attainable one-sided p from 1/24 to 1/5,040 while adding **zero** blind predictions. | The only sanctioned route to n = 7 runs the §6.5.1 audit first and records each verdict. A promoted test must report how many of its n positions are blind alongside its p-value. **A promoted protein now needs two clearances**: that audit *and* the phenotype-provenance check of O-16 (§6.10). SaCas9 specifically is blocked until its 3-of-6 sgRNA average is justified or replaced. |
 | O-6 | **H1's power is marginal by construction and it will probably be recorded as unresolved** (§6.4). With n = 4 proteins the smallest attainable exact one-sided p is 0.042, so only a perfect ordering reaches alpha; the covariate's top three landscape values are a near-tie; and the demonstration is that excluding one wild-type row from a denominator swapped ranks 1 and 2 on a 0.02x margin. H1 is additionally ranking the *magnitudes of four losses*, since every independent value sits below GB1's 3.32x — and, per O-13, at most one of those four positions is blind. | H1 is kept but is no longer the only formal test of the mechanism: **H2 (§6.7)** tests the mechanism at n = 48 seeds on a design where only the covariate moves, and now carries more of the study's weight (§6.8). Expanding to the reserve proteins would take H1 to n = 7 **only subject to the §6.5 anticipation prohibition** (O-15). |
 | O-9 | **A8 is a budget-matched re-implementation, not MULTI-evolve** (§7.5). The published schedule assumes a singles screen plus ~100–200 pairwise measurements; this protocol's entire budget is 125. The adaptation rule is fixed on first use but has not been written or tested. | A8 results are evidence about a fixed depth schedule at a 125-measurement budget, never a reproduction of the published result. |
 | O-10 | **ALDE runs at 26% of its own demonstrated budget here** (§7.6): 125 against 96 + 4×96 = 480, and at batch 25 rather than 96. ALDE publishes no batch-size sensitivity analysis, so a deficit at these budgets is partly a statement about the budget. | ALDE must not carry the claim; ridge is the reference baseline. Mitigation is the 480-measurement development runs on TrpB and GB1, which have not been run. |
@@ -1924,7 +2066,8 @@ step 6's eqFP611 cells.
 | O-12 | **Whether the policy's selection depth scales with library width is unmeasured — and this matters because it governs whether the mechanism means anything beyond four sites at all, not because it confounds H1.** The depth bias (reliability 2.63 / 2.56; baselines 3.48–3.60) was measured on **two libraries of identical four-site width**, which cannot distinguish an absolute constant from a proportion of sites. **The serious branch: under the proportional reading** (~65% of sites) the policy selects near depth 8.5 of 13 on eqFP611 and 10.4 of 16 on CR9114, i.e. it is **not a shallow exploiter on any library wider than four sites**. The shallow-exploitation mechanism would then describe **only TrpB and GB1 — both development data — and would not apply to a single independent target.** That is a more serious threat to the project than the generalization result itself, because it would void the mechanism's relevance rather than merely weaken the evidence for it. Under the **absolute** reading the policy instead gets effectively shallower as libraries widen (2.6 of 4 sites is 65% of positions, 2.6 of 16 is 16%) and performance should degrade monotonically with site count. **Correction to an earlier draft of this item:** it claimed site count covaries with the enrichment ordering strongly enough to confound H1. Checked against the frozen per-protein values — CR9114 16 sites / **0.584x**, CreiLOV 15 / 1.875x, eqFP611 13 / 1.439x, CR6261 11 / 0.105x — the Spearman correlation between site count and enrichment is **rho_s = +0.400, exact one-sided p = 9/24 = 0.3750**. (The CR9114 re-preparation of §6.9 moved that value from 0.622x to 0.584x and left the rank pattern, and therefore rho_s and p, **unchanged**.) The two orderings differ at one position and it is the decisive one: **CR9114 is the widest library in the corpus (16 sites) yet only third of four in enrichment.** That single inversion decorrelates width from the covariate enough that **H1 is not seriously confounded by it**. The confound framing was an overstatement and is withdrawn; the premise-undercutting branch above is the reason this item is a priority. | **Testable from the §10 rows at zero extra compute**, by the read-out pre-specified in §10.1, and it must be done before P2 (§6.7.4) is scored. Site count is still reported alongside enrichment in every H1 table (§6.5) — as disclosure, not as a correction for a confound that the data does not support. |
 | O-7 | **The size of the mode effect is still unknown** (§7.3). The mitigation — running reliability and frontier pool-restricted on TrpB and GB1 — is **now in progress on held-out seeds 48–95**, against the fixed GFlowNet-enabled anchors of §7.4 (TrpB 45.21 / 40.50, GB1 15.02 / 37.21). | Until those runs land, the aggregate, the H1 test and the gate decision are all blocked by §7.4. |
 | O-13 | ~~How much of the H1 ordering is recoverable from published literature is unchecked.~~ **Answered, before any run** (`docs/ordering-anticipation.md`, §6.5.1). **At most one of H1's four positions is genuinely blind, and arguably zero.** eqFP611 — Poelwijk Fig 6a, anticipated. CreiLOV — Chen Fig 3c, which publishes the fraction of each depth shell beating WT and is the only published object of this protocol's own statistic type found in the audit, anticipated. CR6261 — Phillips Fig 1E/1F, partly anticipated. CR9114 — anticipated, on **Fig 1D scoped to H1**, after the Fig 5A citation was withdrawn as wrong and pointing the other way (§6.9.2). TrpB and GB1 are **clean negatives**, so the derivation could not have been read off the literature; only the test set could. | H1 is **not void**: the covariate column is published, the outcome column is not, so the relationship and the §6.5 across-the-board-loss prediction remain blind. What is struck is any presentation of **the ordering itself** as a finding of this project. Consequences recorded: anticipation columns in §6.5, the standing prohibition on n-expansion without an audit (§6.5), and H2 carrying more weight (§6.8). |
-| O-14 | **The clean/raw divergence was only checked for CR9114.** D-8's filter was found because a depth-correlated retention pattern was noticed in one landscape. The other nine CombinGym clean workbooks have **not** been diffed against their raw counterparts, and four of them — CreiLOV, eqFP611, CR6261 H1 and H9 — are final-test targets whose covariates this protocol has pre-registered. | A second silent exclusion of the D-8 kind would move a pre-registered covariate after the freeze. Diff every clean workbook against its raw table, and record the result, before the arms are interpreted. Cheap: the raw tables are at the same pin. |
+| O-14 | ~~The clean/raw divergence was only checked for CR9114.~~ **Closed, before any run** (`docs/corpus-audit.md`, §3.7). **The D-8 defect is unique to CR9114. Not one pre-registered covariate moves. The freeze holds. No landscape needs re-preparing.** The decisive quantity is **recoverable rows** — missing from clean yet carrying a real measurement in raw — which is **16,253 for CR9114 and exactly 0 everywhere else**; an unmeasured row can never enter the eligible universe (§3.3), so its absence cannot shift a covariate however depth-correlated it looks, and recomputing every covariate over the raw universe gives a delta of **exactly 0.0000** bar CR9114. A composite sweep over every single-site and site-pair rule of the CR9114 form found nothing at 0 FP / 0 FN elsewhere (CR6261's best candidate off by 423 kept rows, SpCas9's by 361), and **eqFP611 and SaCas9 are combinatorially complete**, so no filter can hide in either. The negatives are credible because the same code finds the positive: it reproduced all seven frozen §6.5 covariates digit for digit, re-derived CR9114's filter at 0 FP / 0 FN, and reproduced the 0.5622x reweighting bound. | None for the final-test set. Two reserve findings became promotion preconditions (§6.10). **Scope caveat: the audit covered row membership, value fidelity and depth structure, not phenotype-column choices** — see O-16. |
+| O-16 | **No clean table's phenotype *column* choice has been checked against its upstream publication** (§3.7.1). The audit covered row membership, value fidelity and depth structure only. The one divergence found — SaCas9's `Mean` silently averaging 3 of the 6 sgRNAs the raw table reports (§6.10.2) — surfaced **incidentally**, which gives no information about how many more exist. For the four final-test targets the columns in use are the ones the registry names and the §9.4 figures describe, which is a weaker check than a publication comparison. | **A clean bill on row membership is not a clean bill on phenotype definition.** A phenotype-provenance check is a precondition on promoting any reserve protein (§6.5, §6.10.2), and should also be run on the four final-test columns before the results are written up. It would not move a covariate, but it could change what a covariate *means*. |
 | O-8 | **No wet-lab validation of anything here.** Every figure is a retrospective simulation over a fully-measured library. | Nothing in this study is evidence about a real campaign. |
 
 ---
@@ -1957,6 +2100,11 @@ written after cross-protein results have been examined must say so in its first 
 | **2026-10-31** | §6.7.1 | **re-framed eqFP611 blue-versus-red as a natural experiment Poelwijk built**, not a manipulation this protocol selected: the library is the complete 2^13 space **between two named parents**, mTagBFP2 (blue, depth 0) and mKate2 (red, depth 13) — the pinned WT file being `eqFP611(mTagBFP2).fasta` — and Fig 6a's published colour switch at step ~6 lands exactly on the independently derived floor(13/2) = 6 cut | stronger provenance, not weaker: a covariate manipulation fixed by a 2019 publication **cannot have been chosen after seeing our results**. H2's content was never the ordering but the effect-size difference, which no figure publishes |
 | **2026-10-31** | §6.5, §16 O-15 | added a **standing prohibition**: no reserve protein may be promoted into the H1 test until the §6.5.1 anticipation audit has been run on it and its verdict recorded; a promoted test reports how many of its n positions are blind alongside its p-value | promoting four more pre-published positions would move the exact attainable one-sided p from **1/24 to 1/5,040 while adding not a single blind prediction**. It would read as a decisive power gain and be nothing of the kind. The audit is a literature read, not a compute job, and must precede promotion because afterwards the number looks authoritative and the question stops being asked |
 | **2026-10-31** | §6.5, §6.8 | recorded that §6.5's across-the-board-failure prediction is **not weakened by the anticipation audit and is not to be softened in response to it** — it is now the main thing H1 tests — and that **H2 carries more of the study's weight** than when the reporting order was fixed | no published figure says anything about how the reliability policy performs against one-hot ridge, so that prediction stays blind. H2 first was already right for power; it is now also right for originality |
+| **2026-10-31** | §3.7, §16 O-14 | **O-14 closed, before any run: a clean bill of health.** The D-8 defect is **unique to CR9114**; not one pre-registered covariate moves; the freeze holds; no landscape needs re-preparing. Recorded the reasoning and not just the verdict: the decisive quantity is **recoverable rows** (missing from clean, real measurement in raw) = **16,253 for CR9114, exactly 0 everywhere else**, and an unmeasured row can never enter the eligible universe, so its absence cannot shift a covariate however depth-correlated it looks — recomputing every covariate over the raw universe gives a delta of **exactly 0.0000** bar CR9114. Composite sweep over all single-site and site-pair rules found nothing at 0 FP / 0 FN elsewhere (CR6261 off by 423 kept rows, SpCas9 by 361); eqFP611 and SaCas9 are combinatorially complete, so no filter can hide. Negatives credible because the same code reproduced all seven frozen covariates digit for digit, re-derived CR9114's filter at 0 FP / 0 FN, and reproduced the 0.5622x bound | a null from an instrument never shown to detect anything is not evidence; this instrument demonstrably finds the positive. And the recoverable-rows argument closes the question deductively rather than statistically, which is what makes a negative result load-bearing |
+| **2026-10-31** | §3.4, §3.5, `cross_protein_corpus.lock.json`, `freeze_cross_protein_corpus.py` | **extended the lock to all nine raw tables, 21 → 29 files.** Additive only: `corpus` block byte-identical, **no existing entry changed or removed**, and every raw table's blob SHA-1 independently cross-checked against the tree SHA `911f19c7…` of §3.1. The commit, date and tree SHA are untouched. `verify` reports 29/29 | the nine raw tables are now **the evidence that the clean tables are faithful** (§3.7). Unpinned, that evidence is unpinned, and a later audit could run against different bytes while `verify` still exited 0 — the same hole the CR9114 episode exposed. Also recorded the narrower rule that survives: **the pin must not change; the lock may only grow** |
+| **2026-10-31** | §3.7.1, §16 O-16 | recorded the audit's **scope caveat**: it covered row membership, value fidelity and depth structure, **not** each clean table's phenotype-**column** choices against its upstream publication. **A clean bill on row membership is not a clean bill on phenotype definition** | the one divergence found, SaCas9's 3-of-6 sgRNA average, surfaced **incidentally** rather than by design, which gives no information about how many more exist |
+| **2026-10-31** | §6.10, §6.5, §16 O-15 | recorded the two reserve findings as **preconditions on promotion**. **SpCas9**: attrition *is* strongly depth-correlated — 95.8% retention at depth 2 falling monotonically to 47.2% at depth 8, a 48.6-point spread, cause named exactly as `RFPsg5 ON present AND RFPsg8 ON present` at 0 FP / 0 FN — yet **harmless**, because all 355 missing rows lack an on-target value so none are recoverable; also 597 real rows plus **5,151 wholly empty padding rows** against a library 3.44% saturated. **SaCas9**: the clean `Mean` is `mean(sg1,sg2,sg3)` on all 1,296 rows, silently averaging **3 of the 6** sgRNAs the raw table reports — row-complete and depth-blind, so no covariate effect, but a phenotype-definition divergence from the upstream publication. A promoted protein now needs **two** clearances, anticipation and provenance; SaCas9 is blocked until the 3-of-6 average is justified or replaced | both would matter only on promotion and would be easy to miss then. SpCas9's 48.6-point curve is exactly what would be noticed after a surprising result and read as an explanation — it is not one, and that is settled now rather than argued later. SaCas9's is a different species from D-8: D-8 changed which variants were present, this changes what the number means |
+| **2026-10-31** | §9.4 | **settled the bnAb floor claim per column**, and the plural was wrong twice over: `h1_mean` has **zero rows at 6.0** on both CR9114 and CR6261 with a minimum of 7.0, and raw agrees with clean on floor and mass; the 6.0 floor exists **only** in CR9114's `h3_mean` and `fluB_mean`, neither curated nor scored; and `bnAbs_CR6261_raw.csv` has **no such column at all**. **No cleaning step changes any censoring value on any bnAb landscape** | an earlier version of this row said only "false for H1", which left the impression that some bnAb landscape somewhere was affected. None is |
 | **2026-10-31** | §9.4, §16 O-14 | **corrected an inventory claim**: the raw bnAb tables do **not** floor H1 at 6.0. Raw `h1_mean` has a minimum of 7.0 with 1,675 rows at the floor, identical to clean; the 6.0 floor applies to `h3_mean` and `fluB_mean` only. The "cleaning changed the censoring value" caveat is false for H1 and applies to no landscape this protocol scores. Also opened O-14: the other nine clean workbooks have not been diffed against their raw counterparts | a false caveat about censoring would have been carried into the censored-endpoint reasoning of §9.4; and D-8 was found in the one landscape anyone looked at, which says nothing about the other nine |
 | 2026-10-31 | §4.5, §8.3, §12.2 | added: **CR6261 is excluded from the pooled aggregate** on three pre-computable grounds — 125 measurements is 6.63% of its 1,886 mutants against 0.08% on TrpB; its top-1% tier is 19 variants so the budget exceeds the hit set and an oracle scores like a good method; and its H9 covariate is degenerate at zero under both cut definitions. Retained in full as the qualitative demonstration that the covariate can invert, and as H2's replication instance. The pooled aggregate is now over **3 proteins** | a target can be legitimately held out and still be the wrong instrument; the ratio and the tier size are properties of the dataset, not of any result |
 | 2026-10-31 | §7.6 | added the named threat that ALDE runs at 26% of its own demonstrated budget (125 against 96 + 4×96 = 480, batch 25 rather than 96, no published batch-size sensitivity), with the mitigation of also running the grid at 96 + 4×96 on TrpB and GB1 | both are development data, so the mitigation costs nothing held-out, and without it an ALDE deficit cannot be attributed to the method rather than the budget |
