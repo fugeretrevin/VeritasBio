@@ -44,6 +44,20 @@ Protocol (shared by every method):
       ranked list and the next eligible picks are taken, up to a bounded number of attempts.
       It is never padded with random draws, and any secondary rule is named in the manifest
       and in the round metrics. A batch that still cannot fill stays short, loudly.
+    - A DEGENERATE arm - one that cannot propose distinct candidates - is NOT backfilled.
+      An eligibility shortfall is recoverable and a collapsed proposer is a null arm, and
+      topping the second one up would turn a detectable null arm into a plausible result.
+      The two are separate statuses ('short_batch' and 'degenerate_proposals').
+
+Availability is not compatibility:
+    An external arm can be fully installed, importable and runnable and still be
+    incomputable on a given library, completing without error and returning a null
+    trajectory. Before an external arm is handed an encoded design space it is checked for
+    constant columns, which are what make a per-column min-max normaliser divide by zero;
+    an incompatible arm is reported as an ABSENT cell and is not run, and nothing is
+    substituted for it. A post-hoc check classifies any run that completed every round and
+    still measured far below budget. See check_external_arm_compatibility and
+    docs/alde-compatibility.md.
 
 Selection modes (kept explicit and distinct per library):
     POOL-RESTRICTED - the selector is handed the enumerated untested measured variants and
@@ -4427,10 +4441,20 @@ def build_manifest(
     # This is deliberately independent of the pre-flight check: the pre-flight knows one
     # named mechanism, and this catches any arm that stops proposing distinct candidates
     # for any reason.
+    # The signature is "ran every round AND still measured far below budget". Requiring the
+    # full schedule is what separates a degenerate arm from a run that simply stopped
+    # early: a crash or an abort is already reported as a failure, and calling it
+    # degenerate as well would be two names for one event. It does not weaken the
+    # detector - the HER2 ALDE run completed all four rounds and wrote a full-length
+    # trajectory; measuring 26 of 125 while completing every round IS the signature.
     degenerate_runs: List[Dict[str, Any]] = []
     nominal_budget = int(args.initial_size + args.rounds * args.batch_size)
+    expected_rounds = int(args.rounds)
     for outcome in outcomes:
-        if not outcome.rounds:
+        if not outcome.rounds or outcome.status != "completed":
+            continue
+        selection_rounds = [m for m in outcome.rounds if m.round_index > 0]
+        if len(selection_rounds) < expected_rounds:
             continue
         measured = int(outcome.rounds[-1].n_measurements)
         if measured < nominal_budget * DEGENERATE_RUN_BUDGET_FRACTION:
