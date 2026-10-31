@@ -2345,6 +2345,16 @@ def execute(args: argparse.Namespace) -> int:
     write_trace_csv(run_dir / "selection_trace.csv", outcomes, stamp)
     write_round_metrics_csv(run_dir / "round_metrics.csv", outcomes, stamp)
     write_summary_csv(run_dir / "summary.csv", summary_rows, stamp)
+    # Candidate-GENERATION diagnostics. One hook: it derives the library from the
+    # eligible ids, writes generation_coverage.{csv,json} and depth_returns.csv beside
+    # the files above, warns on an arm whose generator collapsed, and never raises.
+    # `evaluator.is_top1` is consulted here, after the run, over variants the campaigns
+    # already paid to measure; it is never handed to a selector.
+    from veritas.diagnostics.benchmark_hook import emit_coverage_artifacts
+
+    emit_coverage_artifacts(run_dir, outcomes, eligible_ids=universe.variant_ids,
+                            stamp=stamp, top1_predicate=evaluator.is_top1, run_id=run_id)
+
     plot_note = write_plot(run_dir / "best_fitness_vs_measurements.png", outcomes, stamp,
                            universe.synthetic, cache_dir)
     if plot_note:

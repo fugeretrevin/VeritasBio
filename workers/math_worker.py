@@ -1625,6 +1625,7 @@ def select_next_micro_batch(
     aromatic_tolerant_positions: Optional[Set[int]] = None,
     apply_auxiliary_objective_weights: bool = False,
     ablate: Optional[Set[str]] = None,
+    candidate_trace: Optional[Any] = None,
 ) -> SelectedBatch:
     """
     Executes the Gaussian Process active learning selection (Phases 1-4):
@@ -1634,6 +1635,15 @@ def select_next_micro_batch(
       4. Generates combinatorial candidates & epistatic recombinants (capped at 3 mutations).
       5. Predicts mean mu(x) = m(x) + mu_res(x) and uncertainty sigma(x).
       6. Evaluates hybrid Thompson sampling & Expected Improvement with batch position diversity.
+
+    `candidate_trace` is an optional, write-only diagnostics sink (see
+    `veritas.diagnostics.trace.BoundedCandidateTrace`). It is duck-typed on purpose:
+    this module does not import the diagnostics package, so the production selector
+    keeps no dependency on it. One call hands over the scored pool - identifier,
+    generating stage, mu(x), sigma(x), the per-candidate prior, acquisition value, the
+    Pareto multiplier, the pre-diversity quality score and which indices the batch
+    stage committed to - and the sink decides what it keeps. Passing None changes
+    nothing about selection.
     """
     invariants_set: Set[int] = set(catalytic_invariants) if catalytic_invariants is not None else set(strategy.forbidden_positions)
 
@@ -1800,6 +1810,11 @@ def select_next_micro_batch(
         lead_variants=lead_variants,
         catalytic_invariants=invariants_set,
     )
+
+    # Which stage generated which candidate. Recorded before the sampler extends the
+    # pool, because candidate GENERATION is the stage that failed on TrpB and a trace
+    # that cannot attribute a candidate to its generator cannot show that.
+    combinatorial_notations: Set[str] = {c.notation for c in candidates}
 
     # Phase 3 / Pillar 3: policy-gradient multi-mutant candidate sampler
     # Enriches candidate pool by sampling discrete trajectories proportional to DKL posterior reward R(x)
@@ -2053,6 +2068,29 @@ def select_next_micro_batch(
     selected_means = [round(float(means[i]), 4) for i in selected_indices]
     selected_stds = [round(float(stds[i]), 4) for i in selected_indices]
     selected_pareto_ranks = [int(candidate_pareto_ranks[i]) for i in selected_indices]
+
+    # Diagnostics sink. Write-only, failure-isolated: a trace that cannot be written
+    # must never cost a selection round, so nothing here can propagate.
+    if candidate_trace is not None:
+        try:
+            candidate_trace.record_round(
+                round_index=None,  # the sink numbers its own rounds
+                candidates=[c.notation for c in novel_candidates],
+                sources=[
+                    "combinatorial" if c.notation in combinatorial_notations else "gflownet"
+                    for c in novel_candidates
+                ],
+                predicted_fitness=[float(v) for v in means],
+                posterior_uncertainty=[float(v) for v in stds],
+                prior_contribution=[float(v) for v in cand_priors],
+                acquisition_score=[float(v) for v in acquisition_scores],
+                pareto_rank=[int(v) for v in candidate_pareto_ranks],
+                pareto_contribution=[float(v) for v in pareto_weights],
+                quality_score=[float(v) for v in quality_scores],
+                selected_indices=[int(i) for i in selected_indices],
+            )
+        except Exception as trace_err:
+            logger.warning("candidate trace sink failed (selection unaffected): %s", trace_err)
 
     logger.info(
         "Quant Engine selected %d variants (Max EI: %.4f, Mean predicted: %.4f, f_best: %.4f, Diversity Spread: %d positions)",
