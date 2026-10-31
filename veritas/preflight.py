@@ -478,6 +478,21 @@ def check_corpus_integrity(
 
     from veritas.calibration.landscapes import REGISTRY
 
+    def _digests(path: Path) -> Tuple[str, str]:
+        """(raw sha256, LF-normalised sha256) for a prepared text table.
+
+        The prepared tables are text and have no .gitattributes entry, so git applies
+        core.autocrlf and a Windows checkout materialises them with CRLF. Hashing the
+        bytes as they sit on disk therefore fails on content that is correct - the
+        surplus is exactly one byte per line. The pins describe LF content, which is
+        what docs/cr9114-reprep.md records, so compare against the normalised digest
+        and keep the raw one for the report.
+        """
+        data = path.read_bytes()
+        normalised = data.replace(b"\r\n", b"\n")
+        return (hashlib.sha256(data).hexdigest(),
+                hashlib.sha256(normalised).hexdigest())
+
     checked: Dict[str, str] = {}
     mismatched: Dict[str, Dict[str, str]] = {}
     missing: List[str] = []
@@ -487,21 +502,29 @@ def check_corpus_integrity(
         if not table.is_file():
             missing.append(f"{key}: {table}")
             continue
-        observed = hashlib.sha256(table.read_bytes()).hexdigest()
-        checked[key] = observed
-        if observed != pinned:
-            mismatched[key] = {"pinned": pinned, "observed": observed,
-                               "path": str(table)}
+        observed_raw, observed_lf = _digests(table)
+        checked[key] = observed_lf
+        if observed_lf != pinned:
+            mismatched[key] = {
+                "pinned": pinned,
+                "observed": observed_lf,
+                "observed_raw_bytes": observed_raw,
+                "path": str(table),
+                # A real content change differs after normalisation too. If only the
+                # raw digest differs the file is correct and the checkout mode is not.
+                "newline_only": observed_raw != observed_lf,
+            }
     bad = bool(mismatched or missing)
     results.append(CheckResult(
         check="corpus.prepared",
         status=FAIL if bad else PASS,
         measured=len(mismatched) + len(missing),
         expected=0,
-        summary=(f"{len(checked)} prepared table(s) match their pinned sha256"
+        summary=(f"{len(checked)} prepared table(s) match their pinned sha256 "
+                 f"(LF-normalised)"
                  if not bad else
-                 f"{len(mismatched)} prepared table(s) do not match their pinned sha256 "
-                 f"and {len(missing)} are absent"),
+                 f"{len(mismatched)} prepared table(s) do not match their pinned "
+                 f"LF-normalised sha256 and {len(missing)} are absent"),
         detail={"checked": checked, "mismatched": mismatched, "missing": missing},
     ))
     return results

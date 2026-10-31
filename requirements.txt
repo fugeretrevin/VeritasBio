@@ -42,3 +42,8 @@ firebase-admin>=6.5,<8
 # the local mock pipeline run without them. Install with:
 #     pip install -r requirements-cloud.txt
 
+
+# Test runner. Seven test modules under tests/ import pytest directly, so the suite
+# cannot be collected without it; it was previously undeclared, which meant a clean
+# clone could not reproduce the documented suite count.
+pytest>=8,<10
