@@ -660,14 +660,16 @@ class SeedContext:
 
 def build_seed_context(args: argparse.Namespace) -> SeedContext:
     """Loads the dataset and derives the library scope. Deterministic for fixed args."""
+    library = iso.resolve_library(args.library)
     universe = iso.load_universe(
+        library=library,
         dataset_path=Path(args.dataset),
         provenance_mode=args.provenance_mode,
         imputed_ids_path=Path(args.imputed_ids) if args.imputed_ids else None,
         max_variants=args.max_variants,
         subsample_seed=args.subsample_seed,
     )
-    metadata, wt_sequence, pdb_path = iso._load_panoptes_context(pdb=True)
+    metadata, wt_sequence, pdb_path, _design = iso._load_panoptes_context(library, pdb=True)
     return SeedContext(
         universe=universe,
         evaluator=iso.Evaluator(universe),
@@ -676,6 +678,7 @@ def build_seed_context(args: argparse.Namespace) -> SeedContext:
             one_hot=universe.one_hot,
             index_of=dict(universe.index_of),
             combos=dict(universe.combos),
+            library=library,
             batch_size=args.batch_size,
             n_rounds=args.rounds,
         ),
@@ -917,9 +920,15 @@ def _limitations(
 ) -> List[str]:
     items: List[str] = []
     if universe.provenance_status == "UNVERIFIED_INCLUDES_IMPUTED":
+        # The imputed count belongs to the library that was loaded, which the universe
+        # carries. It used to come from a module global that only ever held TrpB's.
+        imputed = universe.library.published_imputed_count
         items.append(
-            f"Measurement provenance is UNVERIFIED: up to {iso.PUBLISHED_IMPUTED_COUNT} published "
+            f"Measurement provenance is UNVERIFIED: up to {imputed} published "
             "KNN-imputed values may be included in the eligible set."
+            if imputed else
+            f"Measurement provenance is UNVERIFIED for library "
+            f"{universe.library.key!r}: {universe.library.provenance_note}"
         )
     if args.dry_run:
         items.append(
@@ -979,8 +988,14 @@ def build_parser() -> argparse.ArgumentParser:
         description="End-to-end production campaign benchmarked against the same baselines.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("--library", choices=tuple(sorted(iso.LIBRARIES)),
+                        default=iso.DEFAULT_LIBRARY_KEY,
+                        help="Which registered library to run (default: %(default)s). The "
+                             "library is threaded through every call path; nothing is read "
+                             "from module state.")
     parser.add_argument("--dataset", default=str(iso.DEFAULT_DATASET))
-    parser.add_argument("--accession", default=iso.PARENT_ACCESSION)
+    parser.add_argument("--accession",
+                        default=iso.LIBRARIES[iso.DEFAULT_LIBRARY_KEY].accession)
     parser.add_argument("--methods", default="random,ridge,random_forest,panoptes_end_to_end",
                         help="Comma-separated. Default: %(default)s")
     parser.add_argument("--seeds", type=int, default=3)
@@ -1047,7 +1062,9 @@ def execute(args: argparse.Namespace) -> int:
     logging.getLogger().addHandler(handler)
     logger.info("Run %s -> %s", run_id, out_dir)
 
+    library = iso.resolve_library(args.library)
     universe = iso.load_universe(
+        library=library,
         dataset_path=Path(args.dataset),
         provenance_mode=args.provenance_mode,
         imputed_ids_path=Path(args.imputed_ids) if args.imputed_ids else None,
@@ -1056,7 +1073,7 @@ def execute(args: argparse.Namespace) -> int:
     )
     evaluator = iso.Evaluator(universe)
 
-    metadata, wt_sequence, pdb_path = iso._load_panoptes_context(pdb=True)
+    metadata, wt_sequence, pdb_path, _design = iso._load_panoptes_context(library, pdb=True)
     scope = derive_library_scope(universe.variant_ids, wt_sequence)
     logger.info("Derived library scope: %s", scope.as_sorted())
 
@@ -1065,6 +1082,7 @@ def execute(args: argparse.Namespace) -> int:
         one_hot=universe.one_hot,
         index_of=dict(universe.index_of),
         combos=dict(universe.combos),
+        library=library,
         batch_size=args.batch_size,
         n_rounds=args.rounds,
     )
@@ -1216,6 +1234,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         ("--parallel-timeout", args.parallel_timeout)):
         if value < 1:
             parser.error(f"{name} must be >= 1")
+
+    # --dataset and --accession still carry the default library's values, so a user who
+    # named a library without naming a file gets that library's own dataset and parent
+    # rather than one library's variants scored against another's table.
+    default_spec = iso.LIBRARIES[iso.DEFAULT_LIBRARY_KEY]
+    if args.library != iso.DEFAULT_LIBRARY_KEY:
+        chosen = iso.LIBRARIES[args.library]
+        if args.dataset == str(default_spec.dataset):
+            args.dataset = str(chosen.dataset)
+        if args.accession == default_spec.accession:
+            args.accession = chosen.accession
 
     try:
         return execute(args)
