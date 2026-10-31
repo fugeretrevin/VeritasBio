@@ -1336,6 +1336,11 @@ class Selector:
         self.model_calls = 0
         self.token_usage: Optional[int] = None  # None == unknown, never guessed
         self.notes: List[str] = []
+        # Optional, write-only diagnostics sink set by the harness
+        # (veritas.diagnostics.benchmark_hook.CandidatePoolRecorder.attach). A selector
+        # that has no scoring stage simply ignores it; nothing here reads it back, so
+        # it cannot influence a selection.
+        self.candidate_trace: Optional[Any] = None
 
     def propose(self, round_index: int, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
         raise NotImplementedError
@@ -2532,6 +2537,7 @@ class PanoptesSelector(Selector):
         scan_slot = min(range(len(positions)), key=lambda s: len(seen_at[s]))
 
         proposals: List[str] = []
+        ballot: List[str] = []
         for residue in AA_ALPHABET:
             if residue == background[scan_slot]:
                 continue
@@ -2539,10 +2545,12 @@ class PanoptesSelector(Selector):
             combo[scan_slot] = residue
             vid = _canonical_variant_id("".join(combo), self.library)
             if vid and vid in view.index_of and vid not in revealed.measured:
+                ballot.append(vid)
                 if vid not in proposals:
                     proposals.append(vid)
             if len(proposals) >= n:
                 break
+        self._note_ballot(ballot, "conditional_probe_scan")
         if proposals:
             self.notes.append(
                 f"conditional probe: background {best_id or 'WT'} "
@@ -2600,7 +2608,25 @@ class PanoptesSelector(Selector):
             order = np.argsort(-model.predict(X))
         else:
             order = np.arange(len(neighbours))
+        self._note_ballot([vid for vid, _ in neighbours], "frontier_hamming1")
         return [neighbours[int(i)][0] for i in order[:n]]
+
+    def _note_ballot(self, candidates: Sequence[str], source: str) -> None:
+        """
+        Records a post-qualification ballot for coverage.
+
+        These generators never reach `select_next_micro_batch`, so without this their
+        candidates are invisible to the coverage diagnostic and the arm's ballot is
+        under-counted - the same error as computing coverage from committed picks.
+        Coverage only: there is no acquisition value here to trace per candidate.
+        """
+        sink = self.candidate_trace
+        if sink is None:
+            return
+        try:
+            sink.note_pool(candidates, source=source)
+        except Exception as exc:
+            logger.debug("ballot note skipped (%s): %s", source, exc)
 
     def propose(self, round_index: int, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
         from workers.math_worker import select_next_micro_batch
@@ -2665,6 +2691,11 @@ class PanoptesSelector(Selector):
             apply_auxiliary_objective_weights=self.ablation in ("aux-weighted", "legacy"),
             ablate=self.ablate_components or None,
             candidate_pool=candidate_pool,
+            # Write-only diagnostics sink, attached by the harness. This is what
+            # captures the engine's REAL ballot: the selection trace holds committed
+            # picks plus harness rejections only, which cannot separate a narrow
+            # generator from acquisition re-ranking the same shallow candidates.
+            candidate_trace=self.candidate_trace,
         )
         self.last_batch_predictions = {}
         proposals: List[str] = []
@@ -4744,6 +4775,13 @@ def _execute_run(
         raise
 
     # ---- Run -------------------------------------------------------------------------------
+    # Captures each arm's REAL candidate pool, so coverage is not computed from the
+    # selection trace alone (which holds committed picks plus harness rejections and is
+    # a lower bound on the ballot). Write-only from the selector's side.
+    from veritas.diagnostics.benchmark_hook import CandidatePoolRecorder
+
+    pool_recorder = CandidatePoolRecorder()
+
     outcomes: List[RunOutcome] = []
     for seed in seeds:
         initial_ids = initial_sets[seed]  # shared across methods within a seed
@@ -4754,6 +4792,7 @@ def _execute_run(
             logger.info("seed %d | %s", seed, method)
             try:
                 selector = factory(seed)
+                pool_recorder.attach(selector, method=method, seed=seed)
                 outcome = run_single(selector, evaluator, view, initial_ids, seed)
             except Exception as exc:
                 logger.error("%s seed %d could not start: %s", method, seed, exc)
@@ -4777,6 +4816,17 @@ def _execute_run(
     write_trace_csv(run_dir / "selection_trace.csv", outcomes, stamp)
     write_round_metrics_csv(run_dir / "round_metrics.csv", outcomes, stamp)
     write_summary_csv(run_dir / "summary.csv", summary_rows, stamp)
+    # Candidate-GENERATION diagnostics. One hook: it derives the library from the
+    # eligible ids, writes generation_coverage.{csv,json} and depth_returns.csv beside
+    # the files above, warns on an arm whose generator collapsed, and never raises.
+    # `evaluator.is_top1` is consulted here, after the run, over variants the campaigns
+    # already paid to measure; it is never handed to a selector.
+    from veritas.diagnostics.benchmark_hook import emit_coverage_artifacts
+
+    emit_coverage_artifacts(run_dir, outcomes, eligible_ids=universe.variant_ids,
+                            stamp=stamp, top1_predicate=evaluator.is_top1, run_id=run_id,
+                            proposed_pools=pool_recorder)
+
     plot_note = write_plot(run_dir / "best_fitness_vs_measurements.png", outcomes, stamp,
                            universe.synthetic, cache_dir, library.label)
     if plot_note:
