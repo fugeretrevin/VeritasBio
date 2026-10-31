@@ -1,4 +1,4 @@
-"""
+﻿"""
 benchmark_panoptes_isolated.py - Standalone comparison benchmark on a combinatorial library.
 
 Purpose:
@@ -26,8 +26,9 @@ Methods compared:
     B. ridge           - one-hot (4 positions x 20 AA = 80 features) ridge regression, refit each round.
     C. random_forest   - same encoding, RandomForestRegressor, refit each round.
     D. alde            - the published ALDE implementation (jsunn-y/ALDE). Availability-probed;
-                         marked UNAVAILABLE with a precise reason when the checkout or its
-                         dependencies are absent. Never silently replaced by a homemade method.
+                         never silently replaced by a homemade method. Requesting it when the
+                         checkout, interpreter or dependencies are absent ABORTS the run (exit 4)
+                         rather than printing an UNAVAILABLE row, which once cost two runs.
     E. panoptes_default- the real production planning + selection path with its supported default
                          (non-Muse) strategy.
     F. panoptes_muse   - the same production path with live Muse planning and reflection feedback.
@@ -69,6 +70,24 @@ Provenance (read this before quoting any number from this benchmark):
     See --provenance-mode. Each library carries its own provenance record; nothing quotes
     one library's published split while loading another's.
 
+    Every run resolves its labels onto the explicit `LabelProvenance` vocabulary
+    (HISTORICAL_MEASURED / HISTORICAL_IMPUTED / HISTORICAL_UNKNOWN_PROVENANCE /
+    SIMULATED_NOISY_OUTCOME / PROSPECTIVE_PHYSICAL_MEASUREMENT / MODEL_PREDICTION) and records
+    it in the manifest together with the legacy stamp. An acknowledged-unflagged TrpB run is
+    HISTORICAL_UNKNOWN_PROVENANCE, not 'measured with a caveat', and it carries the
+    differential-bias limitation verbatim: a shared contaminated universe does NOT make the
+    comparison between methods unbiased.
+
+The run manifest is the record:
+    manifest.json is authoritative and machine-readable. Its `configuration` subtree states
+    what was run - acquisition policy, components enabled AND disabled, dataset identity and
+    eligibility rules, model and acquisition hyperparameters, seed block, commit and dirty
+    state, environment, budget and schedule, label provenance, assay transformation and
+    threshold definition - and carries a sha256 `configuration_fingerprint`. It contains no
+    outcome, deliberately: 62 completed arms once had to be told apart by fingerprinting their
+    RESULTS, which cannot be allowed to identify a configuration. Outcomes live under
+    `results`. The console transcript, the CLI string and report.txt are convenience.
+
 Usage:
     python benchmark_panoptes_isolated.py --help
     python benchmark_panoptes_isolated.py --smoke-test
@@ -85,6 +104,7 @@ sys.dont_write_bytecode = True  # no __pycache__ anywhere, including under the p
 import argparse
 import csv
 import hashlib
+import inspect
 import json
 import logging
 import os
@@ -96,6 +116,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
@@ -110,6 +131,25 @@ AA_ALPHABET = "ACDEFGHIKLMNPQRSTVWY"
 AA_INDEX = {aa: i for i, aa in enumerate(AA_ALPHABET)}
 
 BENCHMARK_VERSION = "1.0.0"
+
+# Bumped whenever the manifest's shape changes. A consumer reads this first.
+#   2.0.0 - the manifest became the authoritative, machine-readable record of a run:
+#           a self-contained `configuration` subtree with a fingerprint, the explicit
+#           label-provenance vocabulary, component ablation state, seed-block identity,
+#           code/environment identity, run state and warnings.
+MANIFEST_SCHEMA_VERSION = "2.0.0"
+
+# The selector components `--ablate-components` may disable. Mirrors
+# workers.math_worker.ABLATABLE_COMPONENTS; run_self_checks asserts the two agree, so a
+# name this CLI accepts can never be one the engine rejects half way through a round.
+ABLATABLE_COMPONENTS: Tuple[str, ...] = ("dkl", "dpp", "gflownet", "pareto", "prior")
+
+# Process exit codes. Distinct so CI can tell a configuration refusal from a crash.
+EXIT_OK = 0
+EXIT_ERROR = 1
+EXIT_REPOSITORY_CHANGED = 2
+EXIT_PROVENANCE = 3
+EXIT_BASELINE_UNAVAILABLE = 4
 
 logger = logging.getLogger("panoptes_isolated_benchmark")
 
@@ -414,6 +454,145 @@ class ProvenanceError(BenchmarkError):
     """Raised when measurement provenance cannot be established for the eligible dataset."""
 
 
+class ConfigurationError(BenchmarkError):
+    """
+    Raised for a CLI configuration that cannot mean what it appears to mean.
+
+    Specifically: an `--ablate-components` value that names no component, names an empty
+    one, or names something the production engine does not recognise. Each of those used
+    to run the full unablated engine - or to fail inside the first round - while the run
+    folder was labelled as an ablation arm.
+    """
+
+
+class BaselineUnavailableError(BenchmarkError):
+    """
+    Raised when a method that was explicitly requested cannot run.
+
+    This is deliberately fatal. A requested ALDE baseline was once reported as a single
+    'UNAVAILABLE' row in a report because ALDE_PATH was unset, and two complete benchmark
+    runs were published from that report before anyone read the row. A comparison that is
+    missing a requested arm is not a comparison.
+    """
+
+
+class ManifestIncompleteError(BenchmarkError):
+    """Raised when a manifest is missing a field the schema requires."""
+
+
+# ==============================================================================================
+# Label provenance: an explicit, non-interchangeable vocabulary
+# ==============================================================================================
+class LabelProvenance(Enum):
+    """
+    Where the number a run optimises against actually came from.
+
+    Deliberately NOT a `str` subclass: these must never compare equal to a bare string
+    or to each other, because the whole failure mode being fixed is one opaque stamp
+    ('UNVERIFIED_INCLUDES_IMPUTED') standing in for six materially different claims.
+    Serialise with `.value`; parse with `LabelProvenance(value)`.
+    """
+
+    HISTORICAL_MEASURED = "HISTORICAL_MEASURED"
+    HISTORICAL_IMPUTED = "HISTORICAL_IMPUTED"
+    HISTORICAL_UNKNOWN_PROVENANCE = "HISTORICAL_UNKNOWN_PROVENANCE"
+    SIMULATED_NOISY_OUTCOME = "SIMULATED_NOISY_OUTCOME"
+    PROSPECTIVE_PHYSICAL_MEASUREMENT = "PROSPECTIVE_PHYSICAL_MEASUREMENT"
+    MODEL_PREDICTION = "MODEL_PREDICTION"
+
+
+LABEL_PROVENANCE_DEFINITIONS: Dict[LabelProvenance, str] = {
+    LabelProvenance.HISTORICAL_MEASURED: (
+        "A value physically measured in a previously published or previously run experiment, "
+        "and identified as measured by the dataset itself (a provenance column) or by an "
+        "external list of the records that were not measured."
+    ),
+    LabelProvenance.HISTORICAL_IMPUTED: (
+        "A value filled in by a model from neighbouring records in a historical dataset - for "
+        "the TrpB landscape, the scikit-learn KNN imputer the authors used. Not a measurement."
+    ),
+    LabelProvenance.HISTORICAL_UNKNOWN_PROVENANCE: (
+        "A historical dataset whose records cannot be separated into measured and imputed. "
+        "The universe is known to contain both and no per-record flag exists, so no individual "
+        "label can be claimed as measured."
+    ),
+    LabelProvenance.SIMULATED_NOISY_OUTCOME: (
+        "A generated value from a simulator or synthetic landscape. Useful for validating "
+        "mechanism; says nothing about biological performance."
+    ),
+    LabelProvenance.PROSPECTIVE_PHYSICAL_MEASUREMENT: (
+        "A value measured physically after this system selected the variant - the only kind "
+        "that supports a prospective claim. No run in this benchmark produces one."
+    ),
+    LabelProvenance.MODEL_PREDICTION: (
+        "A model's own prediction (for example an ESM pseudo-likelihood) used in place of an "
+        "outcome. Never comparable with a measurement."
+    ),
+}
+
+# The legacy strings this benchmark has written into traces, reports and plots. They are
+# KEPT alongside the new vocabulary - existing run folders and the greps in docs/545.md
+# still carry them - and mapped forwards rather than reinterpreted.
+LEGACY_PROVENANCE_STATUS_TO_ENUM: Dict[str, LabelProvenance] = {
+    "VERIFIED_COLUMN": LabelProvenance.HISTORICAL_MEASURED,
+    "VERIFIED_EXTERNAL_LIST": LabelProvenance.HISTORICAL_MEASURED,
+    "UNVERIFIED_INCLUDES_IMPUTED": LabelProvenance.HISTORICAL_UNKNOWN_PROVENANCE,
+    "SYNTHETIC_NOT_BIOLOGICAL": LabelProvenance.SIMULATED_NOISY_OUTCOME,
+}
+
+# Why HISTORICAL_UNKNOWN_PROVENANCE is not a bookkeeping detail. This text goes into the
+# manifest verbatim, so no run can be read without it.
+DIFFERENTIAL_BIAS_WARNING = (
+    "Do NOT assume that because every method searches the same contaminated universe the "
+    "comparison between methods is unbiased. The contamination is not independent of the "
+    "methods: the published KNN-imputed values sit wherever sequencing coverage was poorest, "
+    "which is not uniform over the landscape. If imputed records cluster in the region one "
+    "method prefers to explore, that method is scored against model output while another is "
+    "scored against measurements, and the bias is DIFFERENTIAL, not common-mode. Nothing in "
+    "this run bounds that effect, and no shared-universe argument removes it."
+)
+
+# Kept until both are closed; the manifest names them so a reader of any single run folder
+# learns the state of the open work, not just the stamp.
+PROVENANCE_OPEN_BLOCKERS: Tuple[str, ...] = (
+    "TrpB: the published imputed-variant identifiers (Johnston et al. 2024, SI Appendix) have "
+    "not been obtained, so the 871 KNN-imputed records cannot be excluded or even located. "
+    "Supply them with --imputed-ids to move this run to HISTORICAL_MEASURED.",
+    "GB1: label provenance is unresolved - the held GB1 dataset has not been checked for "
+    "imputed or inferred labels, so it must not be run under a measured-provenance claim.",
+)
+
+
+def map_legacy_provenance_status(status: str) -> LabelProvenance:
+    """
+    Maps a legacy provenance string onto the explicit vocabulary.
+
+    Unknown strings raise: guessing is exactly how one stamp came to stand for six claims.
+    """
+    try:
+        return LEGACY_PROVENANCE_STATUS_TO_ENUM[status]
+    except KeyError:
+        raise ProvenanceError(
+            f"no mapping from legacy provenance status '{status}' onto the explicit "
+            f"vocabulary {[m.value for m in LabelProvenance]}. Add one deliberately in "
+            "LEGACY_PROVENANCE_STATUS_TO_ENUM; it must not be inferred."
+        ) from None
+
+
+def provenance_stamp(universe: "Universe") -> str:
+    """
+    The one-line stamp written into every CSV, plot and report.
+
+    Carries BOTH vocabularies: the new enum leads, and the legacy string is retained so
+    existing run folders and documented greps keep matching.
+    """
+    resolved = map_legacy_provenance_status(universe.provenance_status)
+    stamp = f"provenance={resolved.value} legacy={universe.provenance_status}"
+    if universe.synthetic:
+        stamp += " SYNTHETIC_NOT_BIOLOGICAL-mechanism-validation-only"
+    return stamp
+
+
 # ==============================================================================================
 # Dataset loading, provenance and the eligible universe
 # ==============================================================================================
@@ -472,6 +651,15 @@ class Universe:
     # landscape whose answer it had been handed, which is the failure mode the
     # synthetic landscapes exist to avoid.
     planted_interaction: Optional[Dict[str, Any]] = None
+    # The two remaining silent drops, counted rather than only logged, because 'any
+    # excluded records' is part of what the manifest has to state: a drop changes the
+    # eligible universe, and the eligible universe defines the top-1% threshold.
+    # `unmapped_dropped` is only reachable under --lenient-rows, where a record that
+    # does not match the declared design is counted instead of refused; it must not
+    # then vanish. `malformed_rows_dropped` covers blank and non-finite scores, which
+    # were skipped with a bare `continue`.
+    unmapped_dropped: int = 0
+    malformed_rows_dropped: int = 0
 
     def __len__(self) -> int:
         return len(self.variant_ids)
@@ -640,8 +828,10 @@ How to fix it (pick one):
   4. Acknowledge the limitation explicitly and proceed anyway:
        --provenance-mode acknowledge-unflagged
      Every output file, the plot and the report are then stamped
-     'provenance=UNVERIFIED_INCLUDES_IMPUTED'. Results from such a run must not be described
-     as a clean experimentally-grounded comparison.
+     'provenance=HISTORICAL_UNKNOWN_PROVENANCE legacy=UNVERIFIED_INCLUDES_IMPUTED', and the
+     manifest records the differential-bias limitation in full. Results from such a run must
+     not be described as a clean experimentally-grounded comparison, and must not be defended
+     on the grounds that every method saw the same contaminated universe.
 """
 
 
@@ -687,6 +877,7 @@ def load_universe(
     sha, size = _sha256_file(dataset_path)
 
     rows: List[Tuple[str, float, Optional[str]]] = []
+    malformed_rows = 0
     provenance_column: Optional[str] = None
     unlabelled_skipped = 0
     required_stage = library.labelled_stage
@@ -736,12 +927,15 @@ def load_universe(
             notation = (row.get("mutant") or "").strip()
             raw_score = (row.get("DMS_score") or "").strip()
             if not notation or not raw_score:
+                malformed_rows += 1
                 continue
             try:
                 score = float(raw_score)
             except ValueError:
+                malformed_rows += 1
                 continue
             if not np.isfinite(score):
+                malformed_rows += 1
                 continue
             flag = (row.get(provenance_column) or "").strip() if provenance_column else None
             rows.append((notation, score, flag))
@@ -886,6 +1080,8 @@ def load_universe(
         unlabelled_excluded=unlabelled_skipped,
         censored_at_floor=censored_at_floor,
         censored_at_ceiling=censored_at_ceiling,
+        unmapped_dropped=unmapped,
+        malformed_rows_dropped=malformed_rows,
     )
 
     best_id = max(universe.fitness, key=lambda v: universe.fitness[v])
@@ -1358,7 +1554,142 @@ print("ALDE_WORKER_OK", len(queried))
 '''
 
 
-def probe_alde(checkout: Optional[Path], python_exe: Optional[Path]) -> Dict[str, Any]:
+def _repository_family_roots() -> List[Path]:
+    """
+    Directories that could hold sibling checkouts of this repository.
+
+    A git worktree lives at `<repo>/.claude/worktrees/<name>`, so `REPO_ROOT.parent` is
+    the worktrees folder, not the directory the real checkout sits in. An agent running
+    in a worktree therefore looked for a sibling ALDE clone two levels too deep,
+    concluded it was "not on disk anywhere" and skipped the arm. This walks back out to
+    the real checkout's parent as well, so the search covers both layouts.
+    """
+    roots: List[Path] = [REPO_ROOT.parent]
+    parts = REPO_ROOT.parts
+    if ".claude" in parts and "worktrees" in parts:
+        index = parts.index(".claude")
+        if index >= 1:
+            roots.append(Path(*parts[:index]).parent)
+    seen: Set[str] = set()
+    ordered: List[Path] = []
+    for root in roots:
+        key = str(root).lower()
+        if key not in seen:
+            seen.add(key)
+            ordered.append(root)
+    return ordered
+
+
+def resolve_alde_paths(args: argparse.Namespace) -> Dict[str, Any]:
+    """
+    Resolves the ALDE checkout and interpreter, RECORDING every path it looked at.
+
+    ALDE is not vendored into this repository: it is a separate clone with its own
+    interpreter, so "unavailable" can mean an unset variable, a path that does not exist,
+    or a missing environment. An overnight agent hit exactly this and reported ALDE "not
+    on disk anywhere" when it was present at a path the search never considered - which
+    is a silent environment problem dressed up as a result.
+
+    Every candidate and its outcome is returned, so the fatal message can say "looked in
+    X, Y, Z; not found" instead of a bare refusal, and so a discovered path is marked as
+    discovered rather than passing for one the operator pinned.
+    """
+    def _record(source: str, value: Optional[Any], explicit: bool, is_dir: bool) -> Dict[str, Any]:
+        if value is None or str(value).strip() == "":
+            return {"source": source, "path": None, "exists": False, "explicit": explicit,
+                    "note": "not set"}
+        path = Path(str(value)).expanduser()
+        try:
+            path = path.resolve()
+        except OSError:
+            pass
+        exists = path.is_dir() if is_dir else path.is_file()
+        return {
+            "source": source,
+            "path": str(path),
+            "exists": exists,
+            "explicit": explicit,
+            "note": "" if exists else ("no such directory" if is_dir else "no such file"),
+        }
+
+    def _select(candidates: Sequence[Dict[str, Any]]) -> Tuple[Optional[Path], str, str]:
+        """
+        First existing candidate wins - but an EXPLICIT candidate that does not exist
+        stops the search.
+
+        Falling through from a missing `--alde-path` to a discovered sibling clone would
+        silently run a different checkout from the one the operator named, and report it
+        as though it were theirs. An operator who names a path gets that path or a
+        refusal, never a substitute.
+        """
+        for candidate in candidates:
+            if candidate["exists"]:
+                candidate["selected"] = True
+                return Path(candidate["path"]), candidate["source"], ""
+            if candidate["explicit"] and candidate["path"] is not None:
+                candidate["blocking"] = True
+                return None, "none", (
+                    f"{candidate['source']} was set to {candidate['path']} but "
+                    f"{candidate['note']}; refusing to fall back to a discovered path, "
+                    f"because that would run a different checkout than the one named"
+                )
+        return None, "none", ""
+
+    candidates: List[Dict[str, Any]] = [
+        _record("--alde-path", getattr(args, "alde_path", None), True, True),
+        _record("ALDE_PATH", os.getenv("ALDE_PATH"), True, True),
+    ]
+    for root in _repository_family_roots():
+        candidates.append(
+            _record(f"sibling of the repository ({root})", root / "ALDE", False, True)
+        )
+    checkout, checkout_source, checkout_block = _select(candidates)
+
+    interpreters: List[Dict[str, Any]] = [
+        _record("--alde-python", getattr(args, "alde_python", None), True, False),
+        _record("ALDE_PYTHON", os.getenv("ALDE_PYTHON"), True, False),
+    ]
+    if checkout is not None:
+        for parent in (checkout.parent, checkout):
+            for relative in (Path(".venv-alde") / "Scripts" / "python.exe",
+                             Path(".venv-alde") / "bin" / "python",
+                             Path(".venv") / "Scripts" / "python.exe",
+                             Path(".venv") / "bin" / "python"):
+                interpreters.append(_record(
+                    f"{parent / relative.parts[0]} convention", parent / relative, False, False,
+                ))
+    python_exe, interpreter_source, interpreter_block = _select(interpreters)
+
+    return {
+        "checkout": checkout,
+        "checkout_source": checkout_source,
+        "python_exe": python_exe,
+        "interpreter_source": interpreter_source,
+        "searched_checkouts": candidates,
+        "searched_interpreters": interpreters,
+        "blocked": "; ".join(b for b in (checkout_block, interpreter_block) if b),
+    }
+
+
+def _searched_summary(entries: Sequence[Dict[str, Any]]) -> str:
+    """One line naming every path that was tried and why it did not qualify."""
+    parts = []
+    for entry in entries:
+        if entry.get("path") is None:
+            parts.append(f"{entry['source']}: not set")
+        else:
+            parts.append(
+                f"{entry['source']}: {entry['path']}"
+                + ("" if entry["exists"] else f" ({entry['note']})")
+            )
+    return "; ".join(parts) or "nothing to search"
+
+
+def probe_alde(
+    checkout: Optional[Path],
+    python_exe: Optional[Path],
+    resolution: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """
     Reports precisely what is and is not available for running the authors' ALDE implementation
     (https://github.com/jsunn-y/ALDE, Nat Commun 2025, doi:10.1038/s41467-025-55987-8).
@@ -1367,10 +1698,23 @@ def probe_alde(checkout: Optional[Path], python_exe: Optional[Path]) -> Dict[str
     deliberately separate, so importing torch here would prove nothing. No part of ALDE is
     reimplemented: when something is missing, the method is reported UNAVAILABLE with the
     specific cause (checkout, dependency, data or adapter) and nothing is substituted.
+
+    `resolution` carries the record of every path that was searched (see
+    `resolve_alde_paths`). It goes into the reason verbatim, because "not found" without
+    the list of places looked is unactionable - and because ALDE lives outside this
+    repository, which is how a worktree run came to report it missing when it was there.
     """
+    searched_checkouts = list((resolution or {}).get("searched_checkouts") or [])
+    searched_interpreters = list((resolution or {}).get("searched_interpreters") or [])
+    blocked = str((resolution or {}).get("blocked") or "")
     report: Dict[str, Any] = {
         "checkout_path": str(checkout) if checkout else None,
+        "checkout_source": (resolution or {}).get("checkout_source", "unknown"),
         "python_exe": str(python_exe) if python_exe else None,
+        "interpreter_source": (resolution or {}).get("interpreter_source", "unknown"),
+        "searched_checkouts": searched_checkouts,
+        "searched_interpreters": searched_interpreters,
+        "blocked": blocked,
         "checkout_present": False,
         "interpreter_present": False,
         "missing_files": [],
@@ -1382,16 +1726,26 @@ def probe_alde(checkout: Optional[Path], python_exe: Optional[Path]) -> Dict[str
         "available": False,
         "reason": "",
         "pinned_versions": "alde.yml pins python=3.11, pytorch=2.1.1, gpytorch==1.11, botorch==0.9.4",
+        "note": (
+            "ALDE is NOT vendored into this repository: it is a separate clone with its "
+            "own interpreter, so every path below is outside this tree."
+        ),
     }
 
     if checkout is None:
         report["reason"] = (
-            "No ALDE checkout supplied. Pass --alde-path /path/to/ALDE (clone of "
-            "https://github.com/jsunn-y/ALDE) or set ALDE_PATH."
+            (blocked + ". " if blocked else "")
+            + "No usable ALDE checkout. ALDE is a separate clone of "
+            "https://github.com/jsunn-y/ALDE, not part of this repository. Looked in: "
+            + _searched_summary(searched_checkouts)
+            + ". Pass --alde-path /path/to/ALDE or set ALDE_PATH."
         )
         return report
     if not checkout.is_dir():
-        report["reason"] = f"--alde-path {checkout} is not a directory."
+        report["reason"] = (
+            f"ALDE checkout {checkout} (from {report['checkout_source']}) is not a "
+            f"directory. Looked in: {_searched_summary(searched_checkouts)}."
+        )
         return report
 
     report["checkout_present"] = True
@@ -1406,8 +1760,12 @@ def probe_alde(checkout: Optional[Path], python_exe: Optional[Path]) -> Dict[str
 
     if python_exe is None or not Path(python_exe).is_file():
         report["reason"] = (
-            f"ALDE interpreter not found at {python_exe}. Create an isolated environment for the "
-            "checkout and point --alde-python at its python executable."
+            (blocked + ". " if blocked else "")
+            + f"ALDE's own interpreter was not found (checkout {checkout} came from "
+            f"{report['checkout_source']}). Looked in: "
+            + _searched_summary(searched_interpreters)
+            + ". Create an isolated environment for the checkout and point --alde-python "
+              "at its python executable, or set ALDE_PYTHON."
         )
         return report
     report["interpreter_present"] = True
@@ -1741,9 +2099,129 @@ class _AnnotationDrivenPlanner:
         )
 
 
-def _parse_components(spec: str) -> Set[str]:
-    """Parse --ablate-components; unknown names are rejected by select_next_micro_batch."""
-    return {tok.strip() for tok in (spec or "").split(",") if tok.strip()}
+def parse_ablate_components(spec: Optional[str]) -> Tuple[str, ...]:
+    """
+    Parses --ablate-components into a normalised, validated tuple.
+
+    The old implementation was `{tok.strip() for tok in (spec or "").split(",") if tok.strip()}`,
+    which silently swallowed every malformed value:
+      * '--ablate-components ,'  and  '--ablate-components " "'  produced the empty set, so a
+        folder labelled as an ablation arm actually ran the complete engine;
+      * 'dpp,,gflownet' quietly dropped the empty token, hiding a typo;
+      * an unknown name was passed straight through to select_next_micro_batch, which raises -
+        but only once the first round of the first seed was already running, by which time the
+        run folder existed and the failure surfaced as a per-seed 'failed' row.
+
+    Rules now:
+      * None, or the argument's own default empty string, means ablate nothing;
+      * any other value that names no component is a hard error;
+      * empty tokens (leading, trailing or doubled separators) are a hard error;
+      * unknown names are rejected here, before anything runs, naming the valid set;
+      * names are de-duplicated and sorted so the manifest's arm identity is canonical.
+    """
+    if spec is None:
+        return ()
+    raw = str(spec)
+    if raw == "":
+        return ()  # the parser default: explicitly 'disable no components'
+    if not raw.strip():
+        raise ConfigurationError(
+            "--ablate-components was given a whitespace-only value, which names no component. "
+            "Omit the flag (or pass an empty string) to ablate nothing, or name components "
+            f"from: {', '.join(ABLATABLE_COMPONENTS)}."
+        )
+
+    names: List[str] = []
+    for token in raw.split(","):
+        name = token.strip()
+        if not name:
+            raise ConfigurationError(
+                f"--ablate-components {raw!r} contains an empty component name. Remove the "
+                "stray separator; an empty entry used to be dropped silently, so a typo "
+                "produced an unablated run reported as an ablation arm."
+            )
+        names.append(name)
+
+    unknown = sorted({n for n in names if n not in ABLATABLE_COMPONENTS})
+    if unknown:
+        raise ConfigurationError(
+            f"unknown --ablate-components name(s) {unknown}. Recognised components: "
+            f"{', '.join(ABLATABLE_COMPONENTS)}. (Names are case-sensitive and must match "
+            "workers.math_worker.ABLATABLE_COMPONENTS.)"
+        )
+    return tuple(sorted(set(names)))
+
+
+def component_states(disabled: Sequence[str]) -> Dict[str, bool]:
+    """Maps every ablatable component to whether it was ENABLED in this run."""
+    disabled_set = set(disabled)
+    return {name: name not in disabled_set for name in ABLATABLE_COMPONENTS}
+
+
+def resolve_ablate_components(args: argparse.Namespace) -> Tuple[str, ...]:
+    """
+    Returns the validated component list for a parsed argument namespace.
+
+    main() parses once, before any folder is created, and caches the result on the
+    namespace; everything downstream reads that cache so the value cannot drift.
+    """
+    cached = getattr(args, "ablate_components_resolved", None)
+    if cached is None:
+        cached = parse_ablate_components(getattr(args, "ablate_components", ""))
+        args.ablate_components_resolved = cached
+    return tuple(cached)
+
+
+def enforce_requested_methods_available(
+    methods: Sequence[str],
+    method_status: Dict[str, Dict[str, Any]],
+    allow_unavailable: bool = False,
+) -> None:
+    """
+    Fails the run when a method that was explicitly requested cannot execute.
+
+    This is the fix for the incident that cost two benchmark runs: `--methods ... ,alde`
+    with ALDE_PATH unset produced `status=UNAVAILABLE` as one row of a report, the run
+    completed, and the comparison was quoted as though the baseline had been there. Any
+    requested method whose status is not 'available' - UNAVAILABLE, UNSUPPORTED or SKIPPED
+    - now aborts before a single measurement is spent.
+
+    `allow_unavailable` (--allow-unavailable-baselines) restores the report-only behaviour
+    for the one legitimate use: probing an environment to see what it can run.
+    """
+    broken: List[Tuple[str, str, str]] = []
+    for method in methods:
+        status = method_status.get(method, {"status": "UNSUPPORTED", "detail": "no status recorded"})
+        state = str(status.get("status", "unknown"))
+        if state.lower() != "available":
+            broken.append((method, state, str(status.get("detail", "")).strip()))
+    if not broken:
+        return
+
+    lines = [
+        f"{len(broken)} requested method(s) cannot run, so this comparison would be missing "
+        "an arm it claims to measure:",
+        "",
+    ]
+    for method, state, detail in broken:
+        lines.append(f"  {method}: {state}")
+        for chunk in (detail.split("; ") if detail else []):
+            if chunk.strip():
+                lines.append(f"      - {chunk.strip()}")
+    lines += [
+        "",
+        "Fix the environment, or drop the method from --methods. To probe availability",
+        "without running a comparison, pass --allow-unavailable-baselines, which restores",
+        "the old behaviour of reporting the arm as a row instead of failing.",
+    ]
+    message = "\n".join(lines)
+    if allow_unavailable:
+        logger.warning(
+            "--allow-unavailable-baselines: continuing without %s. THIS RUN IS NOT A "
+            "COMPLETE COMPARISON.", ", ".join(m for m, _, _ in broken),
+        )
+        return
+    raise BaselineUnavailableError(message)
 
 
 class PanoptesSelector(Selector):
@@ -2509,7 +2987,1046 @@ def run_self_checks(library: LibrarySpec) -> List[Tuple[str, bool, str]]:
     check("top-1% threshold is evaluator-side",
           evaluator.top1_threshold > min(universe.fitness.values()),
           f"threshold {evaluator.top1_threshold:.4g}")
+
+    # 6. The CLI's ablation vocabulary must match the engine's, or a name this parser
+    # accepts fails inside the first round instead of at the prompt.
+    try:
+        from workers.math_worker import ABLATABLE_COMPONENTS as _engine_components
+
+        check("ablation vocabulary matches the engine",
+              set(ABLATABLE_COMPONENTS) == set(_engine_components),
+              f"cli={sorted(ABLATABLE_COMPONENTS)} engine={sorted(_engine_components)}")
+    except Exception as exc:
+        check("ablation vocabulary matches the engine", False, f"{type(exc).__name__}: {exc}")
+
+    # 7. Every legacy provenance stamp this benchmark can emit maps onto the explicit
+    # vocabulary, and every member of that vocabulary is defined.
+    check("legacy provenance stamps all map onto the vocabulary",
+          all(isinstance(map_legacy_provenance_status(s), LabelProvenance)
+              for s in LEGACY_PROVENANCE_STATUS_TO_ENUM),
+          f"{len(LEGACY_PROVENANCE_STATUS_TO_ENUM)} mapped")
+    check("every provenance kind is defined",
+          all(m in LABEL_PROVENANCE_DEFINITIONS for m in LabelProvenance),
+          f"{len(LABEL_PROVENANCE_DEFINITIONS)} definitions")
+
+    # 8. A malformed ablation request is refused rather than running the full engine.
+    refused = []
+    for spec in (",", "  ", "dpp,,prior", "not_a_component"):
+        try:
+            parse_ablate_components(spec)
+        except ConfigurationError:
+            refused.append(spec)
+    check("malformed --ablate-components values are refused", len(refused) == 4,
+          f"refused {refused}")
+    check("empty --ablate-components means no ablation", parse_ablate_components("") == (),
+          "the parser default")
+
+    # 9. The manifest's library identity is taken from the universe that was scored, not
+    # from the library that was requested. With no active-library state there is nothing
+    # to drift, but a manifest describing a different library from the one the universe
+    # was built on would misattribute every number in the run.
+    identity = _library_identity(universe.library)
+    check("manifest library identity comes from the scored universe",
+          identity["key"] == universe.library.key == library.key
+          and identity["positions"] == list(library.positions)
+          and identity["parent_residues"] == library.parent_residues,
+          f"{identity['key']} / {identity['positions']} / {identity['parent_residues']}")
     return results
+
+
+# ==============================================================================================
+# The run manifest: the authoritative, machine-readable record of what was run
+# ==============================================================================================
+# Every path below must be present in a manifest. The list is the contract: a consumer can
+# assert against it, and validate_manifest() refuses to write a manifest that breaks it.
+#
+# The split that matters: CONFIGURATION (what was run) must be complete and must contain
+# nothing derived from the outcomes. The run that forced this rule reconstructed which of 62
+# completed arms was which configuration by fingerprinting their RESULTS, which is
+# scientifically indefensible - the identity of a configuration cannot depend on what it
+# produced. Outcome-derived values live under `results`.
+MANIFEST_REQUIRED_PATHS: Tuple[str, ...] = (
+    "manifest_schema_version",
+    "run_id",
+    "configuration_fingerprint",
+    "run.state",
+    "run.state_reason",
+    "run.abort_reason",
+    "run.started_utc",
+    "run.finished_utc",
+    "run.timezone",
+    "run.duration_seconds",
+    "run.seeds_attempted",
+    "run.seeds_completed",
+    "run.arms_requested",
+    "run.arms_completed",
+    "run.failures",
+    "run.warnings",
+    "configuration.acquisition_policy.policy_id",
+    "configuration.acquisition_policy.formula",
+    "configuration.acquisition_policy.parameters",
+    "configuration.components.ablatable",
+    "configuration.components.enabled",
+    "configuration.components.disabled",
+    "configuration.components.states",
+    "configuration.components.requested_spec",
+    "configuration.model.surrogate",
+    "configuration.model.hyperparameters",
+    "configuration.dataset.name",
+    "configuration.dataset.source",
+    "configuration.dataset.version",
+    "configuration.dataset.sha256",
+    "configuration.dataset.unique_variants",
+    "configuration.dataset.eligibility_rules",
+    "configuration.dataset.excluded_records",
+    "configuration.dataset.library",
+    "configuration.dataset.library.key",
+    "configuration.dataset.library.positions",
+    "configuration.dataset.library.parent_residues",
+    "configuration.dataset.library.labelled_stage",
+    "configuration.dataset.library.pool_restricted",
+    "configuration.dataset.library.selection_mode",
+    "configuration.library_selection.requested",
+    "configuration.library_selection.resolved",
+    "configuration.assay.censoring",
+    "configuration.assay.label_policy",
+    "configuration.label_provenance.status",
+    "configuration.label_provenance.legacy_status",
+    "configuration.label_provenance.definition",
+    "configuration.label_provenance.detail",
+    "configuration.label_provenance.limitations",
+    "configuration.label_provenance.open_blockers",
+    "configuration.assay.fitness_direction",
+    "configuration.assay.transformation",
+    "configuration.assay.threshold_definition",
+    "configuration.measurement_budget.initial_size",
+    "configuration.measurement_budget.rounds",
+    "configuration.measurement_budget.batch_size",
+    "configuration.measurement_budget.total_unique_measurements",
+    "configuration.measurement_budget.batch_schedule",
+    "configuration.seeding.base_seed",
+    "configuration.seeding.n_seeds",
+    "configuration.seeding.seed_values",
+    "configuration.seeding.initial_sets_sha256",
+    "configuration.seeding.seed_block_sha256",
+    "configuration.methods",
+    "configuration.code.commit",
+    "configuration.code.dirty_tree",
+    "configuration.code.source_tree_sha256",
+    "configuration.environment.python",
+    "configuration.environment.platform",
+    "configuration.environment.packages",
+    "results.top1.threshold_value",
+    "limitations",
+)
+
+# Keys that may never appear anywhere inside `configuration`, because they are outcomes.
+_OUTCOME_KEY_DENYLIST = frozenset({
+    "best_fitness", "mean_best_fitness", "std_best_fitness", "threshold_value", "global_best",
+    "n_hits", "revealed_fitness", "found_top1", "top1_hits", "results", "summary_rows",
+})
+
+
+def _json_safe(value: Any) -> Any:
+    """
+    Converts a value into something `json.dumps` accepts without a `default=` fallback.
+
+    A manifest that only serialises via `default=str` is not machine-readable: tuples,
+    sets, Paths and enums all stringify into shapes no consumer can parse back.
+    """
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return value if np.isfinite(value) else None
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        items = sorted(value, key=repr) if isinstance(value, (set, frozenset)) else list(value)
+        return [_json_safe(v) for v in items]
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating,)):
+        return _json_safe(float(value))
+    if isinstance(value, np.ndarray):
+        return _json_safe(value.tolist())
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat()
+    return repr(value)
+
+
+def configuration_fingerprint(configuration: Dict[str, Any]) -> str:
+    """
+    A stable identity for a configuration, computable from the manifest alone.
+
+    Canonical JSON (sorted keys, no insignificant whitespace) over the whole
+    `configuration` subtree. Two arms that differ in anything that was configured get
+    different fingerprints; two runs of the same configuration that produced different
+    results get the same one, because no outcome enters this subtree.
+    """
+    canonical = json.dumps(_json_safe(configuration), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def seed_block_identity(
+    base_seed: int,
+    n_seeds: int,
+    seeds: Sequence[int],
+    initial_sets: Dict[int, Sequence[str]],
+    inline_limit: int = 5000,
+) -> Dict[str, Any]:
+    """
+    Records the starting conditions precisely enough to reproduce or recognise them.
+
+    The seed values alone are not the starting conditions: the shared initial sample is
+    drawn from the eligible universe, so the same seed over a different eligibility filter
+    is a different experiment. Each seed's initial set is hashed, and the whole block gets
+    one hash, so two runs can be compared without anyone reading an outcome.
+    """
+    per_seed: Dict[str, str] = {}
+    sizes: Dict[str, int] = {}
+    for seed in seeds:
+        ids = list(initial_sets.get(seed, ()))
+        digest = hashlib.sha256()
+        digest.update(f"seed={seed}\n".encode())
+        for variant_id in ids:  # selection order is part of the identity
+            digest.update(variant_id.encode())
+            digest.update(b"\n")
+        per_seed[str(seed)] = digest.hexdigest()
+        sizes[str(seed)] = len(ids)
+
+    block = hashlib.sha256()
+    for seed in seeds:
+        block.update(per_seed[str(seed)].encode())
+    total = sum(sizes.values())
+    identity: Dict[str, Any] = {
+        "base_seed": base_seed,
+        "n_seeds": n_seeds,
+        "seed_values": list(seeds),
+        "initial_set_sizes": sizes,
+        "initial_sets_sha256": per_seed,
+        "seed_block_sha256": block.hexdigest(),
+        "sampler": "random.Random(seed).sample(eligible_variant_ids, initial_size); the "
+                   "eligible list is sorted lexicographically, so the draw is reproducible",
+        "shared_across_methods": True,
+        "initial_sets_inlined": total <= inline_limit,
+    }
+    if identity["initial_sets_inlined"]:
+        identity["initial_sets"] = {str(s): list(initial_sets.get(s, ())) for s in seeds}
+    else:
+        identity["initial_sets"] = None
+        identity["initial_sets_omitted_reason"] = (
+            f"{total} starting variants exceeds the {inline_limit}-id inline limit; the "
+            "per-seed hashes above still identify the block"
+        )
+    return identity
+
+
+def _code_identity(repository_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Commit, dirty-tree status and a content hash of the tree the run executed against."""
+    git_available = bool(repository_state.get("git_available"))
+    status_lines = [str(line) for line in (repository_state.get("status_lines") or [])]
+    # An unknown tree state is recorded as None, never as False: 'we could not tell' must
+    # not be readable as 'clean'.
+    dirty: Optional[bool] = bool(status_lines) if git_available else None
+    return {
+        "commit": repository_state.get("head"),
+        "git_available": git_available,
+        "dirty_tree": dirty,
+        "dirty_file_count": len(status_lines) if git_available else None,
+        "dirty_files": status_lines[:250],
+        "dirty_files_truncated": len(status_lines) > 250,
+        "source_tree_sha256": repository_state.get("source_tree_sha256"),
+        "files_hashed": repository_state.get("files_hashed"),
+        "benchmark_version": BENCHMARK_VERSION,
+        "benchmark_file": str(Path(__file__).resolve()),
+        "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
+    }
+
+
+# The LibrarySpec attributes the manifest records. Named here so this module's whole
+# read surface onto the library description is one list.
+#
+# It used to be read from `ACTIVE_LIBRARY` and the eight other module globals that
+# `configure_library()` reassigned, and the manifest recorded those globals as evidence
+# that the library had really been configured. There is no active-library state any more:
+# the library is threaded explicitly and `Universe` carries the one it was built from,
+# which is strictly better evidence. The manifest now attests to the library the universe
+# was actually scored against, not to the last value a global happened to hold.
+_LIBRARY_MANIFEST_ATTRIBUTES: Tuple[str, ...] = (
+    "key", "label", "accession", "positions", "parent_residues", "dataset",
+    "structure_pdb", "published_optimum", "published_measured_count",
+    "published_imputed_count", "provenance_note", "labelled_stage", "pool_restricted",
+    # Added by the datasets refactor; each one silently changes what was run.
+    "unlabelled_placeholder", "allowed_aa_per_position", "fitness_direction",
+    "assay_units", "assay_transformation", "detection_floor", "detection_ceiling",
+    "replicate_count", "source_publication", "source_doi", "dataset_version",
+    "duplicate_policy", "conflict_tolerance",
+)
+
+
+def _library_identity(library: LibrarySpec) -> Dict[str, Any]:
+    """
+    The library definition: which positions, which parent, which eligibility switches.
+
+    A manifest that did not record this could not tell a TrpB arm from a GB1 arm, which
+    is the multi-landscape version of the 62-arm reconstruction problem. `labelled_stage`
+    and `pool_restricted` are load-bearing rather than descriptive: labelled_stage decides
+    which rows are eligible at all (69% of the HER2 file is an unlabelled split), and
+    pool_restricted changes where candidates come from, which makes the task strictly
+    easier. `source` records how this spec reached the manifest, so a reader can tell the
+    library the universe was built from apart from one that was merely requested.
+    """
+    identity: Dict[str, Any] = {
+        attribute: _json_safe(getattr(library, attribute, None))
+        for attribute in _LIBRARY_MANIFEST_ATTRIBUTES
+    }
+    identity["alphabet"] = AA_ALPHABET
+    identity["n_sites"] = library.n_sites
+    identity["one_hot_features"] = library.one_hot_width
+    identity["selection_mode"] = library.selection_mode.value
+    identity["metadata_json"] = str(library.metadata_json)
+    identity["per_position_alphabets"] = [
+        library.alphabet_for(slot) for slot in range(library.n_sites)
+    ]
+    identity["source"] = "Universe.library (the library this universe was built from)"
+    identity["available_libraries"] = sorted(LIBRARIES)
+    return identity
+
+
+def _dataset_identity(universe: "Universe", args: argparse.Namespace) -> Dict[str, Any]:
+    """
+    Dataset name, source, version, hash and the exact eligibility rules applied.
+
+    Name and source come from the library registry rather than a second table in this
+    file, so there is one declaration per landscape. When --dataset points somewhere the
+    active library does not own, that is recorded as an override instead of being
+    described with the library's citation - scoring one library's variants against
+    another's table must not be able to hide behind the right-looking name.
+    """
+    fingerprint = universe.fingerprint
+    # The library the universe was BUILT from, not one read from module state: that is
+    # what makes this record an attestation rather than a restatement of the request.
+    library = universe.library
+    owns_dataset = Path(fingerprint.path) == Path(library.dataset)
+
+    if universe.synthetic:
+        name = (
+            f"SYNTHETIC additive + pairwise landscape over the "
+            f"{library.n_sites}-site {library.key} geometry"
+        )
+        source = "generated in-process by build_synthetic_universe(); NOT biological"
+        version = f"generator parameters in dataset.synthetic_generator; {fingerprint.path}"
+    elif owns_dataset:
+        name = library.label
+        source = library.provenance_note or "UNDECLARED_BY_CALLER"
+        version = (
+            library.dataset_version
+            or "prepared CSV as committed; content_sha256 below is the authoritative version"
+        )
+    else:
+        name = Path(fingerprint.path).stem or "UNDECLARED"
+        source = (
+            f"UNDECLARED_BY_CALLER: --dataset points at a file library {library.key!r} "
+            "does not declare, so that library's citation does NOT describe these labels"
+        )
+        version = "UNDECLARED_BY_CALLER"
+
+    identity: Dict[str, Any] = {
+        "name": name,
+        "source": source,
+        "version": {
+            "declared": version,
+            "content_sha256": fingerprint.sha256,
+        },
+        "path": fingerprint.path,
+        "sha256": fingerprint.sha256,
+        "size_bytes": fingerprint.size_bytes,
+        "rows_parsed": fingerprint.rows_parsed,
+        "unique_variants": fingerprint.unique_variants,
+        "synthetic": bool(universe.synthetic),
+        "declared_by_its_library": bool(owns_dataset),
+        "library": _library_identity(library),
+        "eligibility_rules": _eligibility_rules(library, args),
+        "excluded_records": {
+            "duplicates_dropped": universe.duplicates_dropped,
+            "imputed_excluded": universe.excluded_imputed,
+            "unmapped_dropped": universe.unmapped_dropped,
+            "malformed_or_non_finite_dropped": universe.malformed_rows_dropped,
+            # HER2's held-out split: 25,114 rows, 69% of the file. A manifest that did
+            # not state this would describe the wrong universe.
+            "unlabelled_excluded": universe.unlabelled_excluded,
+            "subsampled_to": args.max_variants,
+            "subsample_seed": args.subsample_seed if args.max_variants else None,
+        },
+        "published_split": {
+            "measured": library.published_measured_count,
+            "imputed_knn": library.published_imputed_count,
+            "source": library.source_doi or library.provenance_note or "UNDECLARED",
+        },
+        "sequence_mapping": (
+            f"variant id == position-ordered notation against the {library.accession} "
+            f"parent; wild-type positions are OMITTED from the notation and refilled, so "
+            f"every genotype is {library.n_sites} residue(s) long before any comparison"
+        ),
+    }
+    if universe.synthetic:
+        # The synthetic fingerprint hashes only seed and size, so the planted interaction
+        # has to be stated separately or two arms on the same seed - one with a planted
+        # sign-epistatic pair, one without - would share a configuration fingerprint.
+        # This is the generator's ground truth, recorded AFTER the run; it is never in the
+        # Universe a selector sees.
+        identity["synthetic_generator"] = {
+            "generator": "build_synthetic_universe",
+            # Both recorded: `seed_requested` is what the CLI asked for and
+            # `fingerprint_path` is what the generator actually stamped into the
+            # universe. A caller that built the universe itself could desync them, and a
+            # manifest must not quietly report one as the other.
+            "seed_requested": getattr(args, "synthetic_seed", None),
+            "fingerprint_path": fingerprint.path,
+            "requested_size": getattr(args, "synthetic_size", None),
+            "plant_sign_epistasis": bool(getattr(args, "plant_sign_epistasis", False)),
+            "planted_interaction": _json_safe(universe.planted_interaction),
+            "visibility": "ground truth for the test harness; never passed to a selector",
+        }
+    return identity
+
+
+def _eligibility_rules(library: LibrarySpec, args: argparse.Namespace) -> List[str]:
+    """The filters `load_universe` applies, including this library's own."""
+    strict = not bool(getattr(args, "lenient_rows", False))
+    rules = [
+        (
+            "a record must map onto the library's declared positions and agree with the "
+            "parent residue at each of them; a record that does not is a REFUSAL naming "
+            "the row, because a dataset that disagrees with the declared design is a "
+            "configuration error, not noise"
+            if strict else
+            "--lenient-rows: a record that does not map onto the declared positions is "
+            "DROPPED and counted in excluded_records.unmapped_dropped instead of refused"
+        ),
+        "the parent (zero-mutation) record is not a library member and is dropped",
+        f"duplicate variant ids keep the first occurrence (policy "
+        f"{library.duplicate_policy!r}, conflict tolerance {library.conflict_tolerance})",
+        "blank, non-numeric and non-finite DMS_score values are dropped and counted",
+        "records identified as imputed are dropped when a provenance list is available",
+        "fewer than 1000 surviving variants aborts the run rather than benchmarking on "
+        "too few records",
+        "the surviving list is sorted lexicographically by variant id, which fixes the "
+        "row order of the one-hot matrix and every tie-break",
+    ]
+    if library.labelled_stage is not None:
+        rules.insert(0, (
+            f"ONLY rows whose 'stage' column equals {library.labelled_stage!r} are "
+            f"eligible: the others are an unlabelled split whose DMS_score is an absent "
+            f"label, not a measurement. Each one is checked against the declared "
+            f"placeholder {library.unlabelled_placeholder!r}, so a real measurement "
+            f"cannot be discarded as an absent label, and admitting them would put an "
+            f"invented value into every quantile"
+        ))
+    if library.pool_restricted:
+        rules.append(
+            "this library is POOL-RESTRICTED: it is a sparse sample of its combinatorial "
+            "product, so the selector is handed the enumerated untested measured variants "
+            "to rank rather than generating Hamming neighbours nobody assayed. Ranking an "
+            "enumerated pool is strictly easier than generating under constraints"
+        )
+    if library.detection_floor is not None or library.detection_ceiling is not None:
+        rules.append(
+            f"censoring is RECORDED, never applied: a value at the declared floor "
+            f"({library.detection_floor}) or ceiling ({library.detection_ceiling}) keeps "
+            f"its measured value and is counted, so a block of ties is legible as a "
+            f"detection limit rather than a real plateau"
+        )
+    return rules
+
+
+def _label_provenance_block(universe: "Universe") -> Dict[str, Any]:
+    """
+    The explicit provenance claim for this run's labels, plus the limitations it carries.
+
+    Three cases, kept apart because they are different claims. A positive published count
+    (TrpB: 871) names it. A count of None (GB1: the prepared CSV records no split) names
+    the library's own provenance note, because 'up to None imputed values' would read as
+    a measured count. A recorded 0 (HER2) is a fact rather than an unknown, so it does not
+    get 'up to 0 may be included' - but it is still UNVERIFIED, because the 0 is our
+    registry's declaration and not an upstream flag, and laundering our own assertion into
+    a provenance claim is exactly what this vocabulary exists to prevent.
+    """
+    library = universe.library
+    imputed = library.published_imputed_count
+    resolved = map_legacy_provenance_status(universe.provenance_status)
+    limitations: List[str] = []
+    if resolved is LabelProvenance.HISTORICAL_UNKNOWN_PROVENANCE:
+        if imputed:
+            limitations.append(
+                f"Up to {imputed} published KNN-imputed values are present in the eligible "
+                "universe and cannot be located, so no individual label in this run can be "
+                "claimed as measured."
+            )
+        elif imputed == 0:
+            limitations.append(
+                f"Library {library.key!r} declares 0 imputed records, but that is THIS "
+                "repository's declaration and not an upstream per-record flag, so the "
+                "labels remain HISTORICAL_UNKNOWN_PROVENANCE. Verify against the source "
+                "publication before describing them as measured. "
+                + (library.provenance_note or "")
+            )
+        else:
+            limitations.append(
+                f"The measured/imputed split of library {library.key!r} is unverified and no "
+                "published count is on record, so no individual label in this run can be "
+                "claimed as measured. " + (library.provenance_note or "")
+            )
+        limitations.append(DIFFERENTIAL_BIAS_WARNING)
+    if resolved is LabelProvenance.SIMULATED_NOISY_OUTCOME:
+        limitations.append(
+            "Labels are generated, not measured. Results validate mechanism only and say "
+            "nothing about biological performance."
+        )
+    if resolved is LabelProvenance.HISTORICAL_MEASURED:
+        limitations.append(
+            "Labels are retrospective measurements from a published landscape. They support "
+            "no prospective claim; only PROSPECTIVE_PHYSICAL_MEASUREMENT does."
+        )
+    return {
+        "status": resolved.value,
+        "legacy_status": universe.provenance_status,
+        "library": library.key,
+        "library_provenance_note": library.provenance_note or "",
+        "published_imputed_count": imputed,
+        "source_publication": library.source_publication,
+        "source_doi": library.source_doi,
+        "definition": LABEL_PROVENANCE_DEFINITIONS[resolved],
+        "detail": universe.provenance_detail,
+        "vocabulary": {m.value: LABEL_PROVENANCE_DEFINITIONS[m] for m in LabelProvenance},
+        "provenance_mode_requested": None,  # filled by build_manifest from the CLI
+        "limitations": limitations,
+        "differential_bias": DIFFERENTIAL_BIAS_WARNING,
+        "open_blockers": list(PROVENANCE_OPEN_BLOCKERS),
+        "prospective": False,
+    }
+
+
+def _production_selection_identity(
+    components_disabled: Sequence[str],
+    ablation_arm: str,
+    prior_spread: Optional[float],
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """
+    Reads the production selector's effective acquisition policy and hyperparameters.
+
+    Defaults are read from the live signature of `select_next_micro_batch` and the live
+    module globals rather than restated here, so the manifest records what the run actually
+    used instead of what this file once believed. The benchmark's own overrides are listed
+    separately, because 'the default, except for these three arguments' is the only honest
+    description of the call.
+    """
+    policy: Dict[str, Any] = {
+        "policy_id": "hybrid_thompson",
+        "formula": "acq(x) = EI(x; xi) + 0.3 * max(thompson_sample(x) - f_best, 0), where "
+                   "thompson_sample(x) ~ N(mu(x), sigma(x)^2) and mu(x) = m(x) + mu_res(x)",
+        "surrogate_mean": "m(x) = calibrated biophysical prior; the GP is fitted on residuals "
+                          "y - m(x)",
+        "batch_construction": "k-DPP diversity selection over the Pareto-filtered candidate "
+                              "pool; candidates are enumerated from the strategy's clusters "
+                              "and lead recombinants, capped at 3 mutations",
+        "ablation_arm": ablation_arm,
+        "components_disabled": list(components_disabled),
+        "parameters": {},
+        "engine": {},
+    }
+    model: Dict[str, Any] = {
+        "surrogate": "workers.math_worker deep-kernel/GP on epistatic one-hot features with a "
+                     "residual biophysical prior mean",
+        "hyperparameters": {},
+        "baselines": "per-method hyperparameters are recorded under configuration.methods",
+    }
+
+    try:
+        import workers.math_worker as _mw
+    except Exception as exc:  # pragma: no cover - only when the engine cannot be imported
+        policy["engine"] = {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+        model["hyperparameters"] = {"available": False}
+        return policy, model
+
+    signature = inspect.signature(_mw.select_next_micro_batch)
+    defaults: Dict[str, Any] = {}
+    for name in ("exploration_xi", "acquisition_mode", "fantasy_variance",
+                 "apply_auxiliary_objective_weights", "pareto_weights_config"):
+        parameter = signature.parameters.get(name)
+        if parameter is not None and parameter.default is not inspect.Parameter.empty:
+            defaults[name] = _json_safe(parameter.default)
+    prior_fn = signature.parameters.get("prior_mean_fn")
+    defaults["prior_mean_fn"] = (
+        getattr(prior_fn.default, "__qualname__", None) if prior_fn is not None else None
+    )
+
+    engine_file = Path(getattr(_mw, "__file__", "") or "")
+    engine_sha = None
+    if engine_file.is_file():
+        engine_sha = _sha256_file(engine_file)[0]
+
+    policy["policy_id"] = str(defaults.get("acquisition_mode") or "hybrid_thompson")
+    policy["parameters"] = {
+        "acquisition_mode": defaults.get("acquisition_mode"),
+        "exploration_xi": defaults.get("exploration_xi"),
+        "thompson_weight": 0.3,
+        "fantasy_variance": defaults.get("fantasy_variance"),
+        "pareto_weights_config": defaults.get("pareto_weights_config"),
+        "apply_auxiliary_objective_weights": ablation_arm in ("aux-weighted", "legacy"),
+        "prior_calibration_enabled": bool(_mw.PRIOR_CALIBRATION_ENABLED),
+        "prior_fitness_spread": float(_mw.PRIOR_FITNESS_SPREAD),
+        "prior_spread_cli_override": prior_spread,
+        "prior_mean_fn": None if "prior" in set(components_disabled) else defaults["prior_mean_fn"],
+    }
+    policy["engine"] = {
+        "available": True,
+        "module": "workers.math_worker.select_next_micro_batch",
+        "module_sha256": engine_sha,
+        "signature_defaults": defaults,
+        "overrides_passed_by_the_benchmark": {
+            "batch_size": "--batch-size",
+            "random_seed": "seed * 1000 + round_index",
+            "numpy_global_seed": "(seed * 7919 + round_index) % (2**31 - 1), seeded by the "
+                                 "caller because the Thompson draw uses numpy's global RNG",
+            "catalytic_invariants": "metadata.catalytic_positions",
+            "pdb_path": "workers/data/8EH0.pdb when present",
+            "apply_auxiliary_objective_weights": ablation_arm in ("aux-weighted", "legacy"),
+            "ablate": list(components_disabled),
+        },
+    }
+    model["hyperparameters"] = dict(policy["parameters"])
+    model["module_sha256"] = engine_sha
+    return policy, model
+
+
+def _assay_block(universe: "Universe") -> Dict[str, Any]:
+    """
+    How a raw assay number becomes the quantity being optimised, and how 'top' is defined.
+
+    Read from the library's declared `AssayMeta` rather than asserted here: units,
+    transformation, detection limits and replicate count are per-landscape facts, and the
+    old module-level FITNESS_DIRECTION made one landscape's claim look universal.
+
+    The threshold DEFINITION is configuration; the threshold VALUE is computed from the
+    outcomes and therefore lives under `results`. Censoring COUNTS are outcome-adjacent
+    but are properties of the eligible set, not of any method's behaviour, so they belong
+    with the dataset: they say what kind of labels the run was scored against.
+    """
+    library = universe.library
+    n = max(len(universe), 1)
+    return {
+        "fitness_direction": library.fitness_direction,
+        "units": library.assay_units,
+        "transformation": (
+            f"declared {library.assay_transformation!r}; this benchmark applies none of its "
+            "own - the prepared table's DMS_score column is the objective verbatim, never "
+            "re-scaled, log-transformed, standardised or clipped here"
+        ),
+        "replicates": (
+            f"{library.replicate_count} declared"
+            if library.replicate_count is not None else
+            "unknown: the prepared table carries one value per variant, so no replicate "
+            "aggregation or measurement-noise model is applied"
+        ),
+        "censoring": {
+            "detection_floor": library.detection_floor,
+            "detection_ceiling": library.detection_ceiling,
+            "at_floor": universe.censored_at_floor,
+            "at_ceiling": universe.censored_at_ceiling,
+            "fraction_at_floor": round(universe.censored_at_floor / n, 6),
+            "policy": (
+                "values at a declared limit keep their measured value and are COUNTED, not "
+                "adjusted or dropped. A mass of ties at the floor is a detection limit, not "
+                "a plateau, and a model treating them as exact continuous labels is "
+                "mis-specified"
+            ),
+        },
+        "label_policy": {
+            "labelled_stage": library.labelled_stage,
+            "unlabelled_placeholder": library.unlabelled_placeholder,
+            "unlabelled_excluded": universe.unlabelled_excluded,
+            "policy": (
+                "absent label, measured zero and detection floor are three distinct states; "
+                "only labelled rows enter the eligible universe, and each excluded row is "
+                "checked against the declared placeholder so a real measurement cannot be "
+                "discarded as an absent label"
+            ),
+        },
+        "source_publication": library.source_publication,
+        "source_doi": library.source_doi,
+        "threshold_definition": {
+            "statistic": "percentile of measured fitness over the eligible set of this run",
+            "percentile": 99.0,
+            "tie_handling": "fitness >= threshold counts as a hit; all ties count, so the hit "
+                            "set can exceed 1% of the pool",
+            "scope": "recomputed per run over the eligible set; a different eligibility "
+                     "filter changes the threshold",
+            "visibility": "evaluator-only; never passed to a selector or into candidate "
+                          "metadata",
+        },
+    }
+
+
+def _method_block(
+    methods: Sequence[str],
+    method_status: Dict[str, Dict[str, Any]],
+    method_configs: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    block: Dict[str, Any] = {}
+    for method in methods:
+        status = dict(method_status.get(method, {}))
+        probe = status.pop("probe", None)
+        entry: Dict[str, Any] = {
+            "status": status.get("status", "unknown"),
+            "status_detail": status.get("detail", ""),
+            "config": _json_safe(method_configs.get(method, {})),
+        }
+        if probe is not None:
+            try:
+                entry["availability_probe"] = json.loads(probe)
+            except (TypeError, ValueError):
+                entry["availability_probe"] = {"raw": str(probe)}
+        block[method] = entry
+    return block
+
+
+def _per_arm_results(
+    methods: Sequence[str],
+    outcomes: Sequence[RunOutcome],
+) -> Dict[str, Any]:
+    """
+    Outcome-derived aggregates, so a committed manifest carries the run's numbers too.
+
+    Strictly under `results`: nothing here may be read back as part of a configuration's
+    identity. summary.csv remains the full table.
+    """
+    per_arm: Dict[str, Any] = {}
+    for method in methods:
+        runs = [o for o in outcomes if o.method == method]
+        finals = [o.rounds[-1] for o in runs if o.status == "completed" and o.rounds]
+        per_arm[method] = {
+            "seeds_attempted": len(runs),
+            "seeds_completed": len(finals),
+            "mean_best_fitness": (
+                statistics.fmean(m.best_fitness for m in finals) if finals else None),
+            "mean_top1_hits_including_initial": (
+                statistics.fmean(m.cum_top1_including_initial for m in finals) if finals else None),
+            "mean_unique_measurements": (
+                statistics.fmean(m.n_measurements for m in finals) if finals else None),
+            "total_model_calls": sum(o.model_calls for o in runs),
+        }
+    return per_arm
+
+
+def build_manifest(
+    *,
+    run_id: str,
+    args: argparse.Namespace,
+    universe: "Universe",
+    evaluator: Optional["Evaluator"],
+    methods: Sequence[str],
+    method_status: Dict[str, Dict[str, Any]],
+    method_configs: Dict[str, Dict[str, Any]],
+    components_disabled: Sequence[str],
+    seeds: Sequence[int],
+    initial_sets: Dict[int, Sequence[str]],
+    outcomes: Sequence[RunOutcome],
+    started: datetime,
+    finished: datetime,
+    repository_state_before: Dict[str, Any],
+    repository_state_after: Optional[Dict[str, Any]] = None,
+    self_checks: Sequence[Tuple[str, bool, str]] = (),
+    extra_warnings: Sequence[str] = (),
+    run_state: Optional[str] = None,
+    abort_reason: str = "",
+    limitations: Optional[Sequence[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Builds the run manifest: the single authoritative, machine-readable record of a run.
+
+    Two rules hold this together:
+      1. `configuration` is complete enough to identify and re-run the arm on its own. The
+         console transcript, the CLI string and the report are convenience, not record.
+      2. `configuration` contains no outcome. Identifying an arm by what it produced is the
+         practice this replaces, so the fingerprint deliberately cannot see results.
+    """
+    disabled = tuple(components_disabled)
+    policy, model = _production_selection_identity(
+        components_disabled=disabled,
+        ablation_arm=str(getattr(args, "ablation", "none")),
+        prior_spread=getattr(args, "prior_spread", None),
+    )
+    states = component_states(disabled)
+    provenance = _label_provenance_block(universe)
+    provenance["provenance_mode_requested"] = getattr(args, "provenance_mode", None)
+
+    total_budget = args.initial_size + args.rounds * args.batch_size
+    schedule = [{
+        "round": 0,
+        "n_measurements": args.initial_size,
+        "kind": "shared_initial_sample",
+        "selected_by": "random.Random(seed).sample over the eligible set, identical for every "
+                       "method within a seed",
+    }]
+    for index in range(1, args.rounds + 1):
+        schedule.append({
+            "round": index,
+            "n_measurements": args.batch_size,
+            "kind": "selected",
+            "selected_by": "the method under test; committed before any outcome is revealed",
+        })
+
+    configuration: Dict[str, Any] = {
+        "benchmark_version": BENCHMARK_VERSION,
+        "smoke_test": bool(getattr(args, "smoke_test", False)),
+        "acquisition_policy": policy,
+        "components": {
+            "ablatable": list(ABLATABLE_COMPONENTS),
+            "enabled": [name for name in ABLATABLE_COMPONENTS if states[name]],
+            "disabled": list(disabled),
+            "states": states,
+            "requested_spec": getattr(args, "ablate_components", ""),
+            "prior_ablation_arm": str(getattr(args, "ablation", "none")),
+            "prior_spread_override": getattr(args, "prior_spread", None),
+            "qualify_threshold": getattr(args, "qualify_threshold", None),
+        },
+        "model": model,
+        "dataset": _dataset_identity(universe, args),
+        "label_provenance": provenance,
+        "assay": _assay_block(universe),
+        "library_selection": {
+            # Which library was asked for, which one the universe was built from, and
+            # whether --dataset overrode its declared file. All three, because a mismatch
+            # between them is the failure this records: one library's variants scored
+            # against another library's table.
+            "requested": getattr(args, "library", None),
+            "resolved": universe.library.key,
+            "dataset_override": (
+                None if Path(str(getattr(args, "dataset", "") or "")) == Path(universe.library.dataset)
+                else str(getattr(args, "dataset", "") or "")
+            ),
+            "lenient_rows": bool(getattr(args, "lenient_rows", False)),
+        },
+        "measurement_budget": {
+            "initial_size": args.initial_size,
+            "rounds": args.rounds,
+            "batch_size": args.batch_size,
+            "total_unique_measurements": total_budget,
+            "batch_schedule": schedule,
+            "accounting": "unique variants only; duplicate, already-observed, unknown and "
+                          "over-budget selections are rejected and a short batch is never "
+                          "backfilled",
+            "max_model_calls": getattr(args, "max_model_calls", None),
+            "live_calls_permitted": bool(getattr(args, "enable_live_muse", False)),
+        },
+        "seeding": seed_block_identity(
+            base_seed=args.base_seed,
+            n_seeds=args.seeds,
+            seeds=list(seeds),
+            initial_sets=initial_sets,
+        ),
+        "methods": _method_block(methods, method_status, method_configs),
+        "methods_requested": list(methods),
+        "code": _code_identity(repository_state_before),
+        "environment": {
+            "python": sys.version,
+            "python_executable": sys.executable,
+            "platform": platform.platform(),
+            "packages": {"numpy": np.__version__, **_package_versions()},
+        },
+    }
+
+    # ---- Outcome-derived material. Nothing below may be referenced by the fingerprint. ----
+    completed = [o for o in outcomes if o.status == "completed" and o.rounds]
+    failures = [
+        {"method": o.method, "seed": o.seed, "status": o.status, "reason": o.failure_reason}
+        for o in outcomes if o.status != "completed"
+    ]
+    short_batches = sum(
+        1 for o in outcomes for m in o.rounds if m.status == "short_batch"
+    )
+
+    warnings: List[str] = [str(w) for w in extra_warnings if str(w).strip()]
+    for failure in failures:
+        warnings.append(
+            f"{failure['method']} seed {failure['seed']}: {failure['status']} - "
+            f"{failure['reason']}"
+        )
+    if short_batches:
+        warnings.append(
+            f"{short_batches} round(s) committed a short batch: selections were rejected and "
+            "were NOT backfilled, so those arms spent less than the stated budget."
+        )
+    for method in methods:
+        attempted = [o for o in outcomes if o.method == method]
+        if attempted and not [o for o in attempted if o.status == "completed" and o.rounds]:
+            warnings.append(
+                f"{method}: 0 of {len(attempted)} seeds completed - the arm did not run, which "
+                "is not a null result."
+            )
+    excluded = configuration["dataset"]["excluded_records"]
+    dropped = {
+        key: excluded.get(key, 0) for key in
+        ("duplicates_dropped", "imputed_excluded", "unmapped_dropped",
+         "malformed_or_non_finite_dropped")
+        if excluded.get(key, 0)
+    }
+    if dropped:
+        warnings.append(
+            f"records excluded while building the eligible universe: {dropped}. The eligible "
+            "set defines the top-1% threshold, so an exclusion changes the scoring."
+        )
+    if excluded.get("subsampled_to"):
+        warnings.append(
+            f"the candidate universe was subsampled to {excluded['subsampled_to']} variants "
+            f"(seed {excluded.get('subsample_seed')}): this is not the full published landscape."
+        )
+    if provenance["status"] != LabelProvenance.HISTORICAL_MEASURED.value:
+        warnings.append(
+            f"label provenance is {provenance['status']}: see "
+            "configuration.label_provenance.limitations before quoting any number."
+        )
+    if evaluator is not None and evaluator.harness_exports:
+        warnings.append(
+            "the evaluator exported its complete fitness table to harness method(s) "
+            f"{sorted(set(evaluator.harness_exports))}; see Evaluator.export_truth_table."
+        )
+
+    if run_state is None:
+        if not outcomes:
+            run_state = "FAILED"
+        elif failures or short_batches:
+            run_state = "PARTIAL"
+        else:
+            run_state = "SUCCESS"
+    if run_state == "SUCCESS" and not completed:
+        run_state = "FAILED"
+
+    # PARTIAL must not be readable as 'crashed'. On an incompletely-saturated library a
+    # short batch is the protocol working as designed - proposals outside the eligible
+    # universe are rejected and never backfilled - but the arm did then spend less than
+    # the stated budget, which a reader has to know. State the reason rather than leaving
+    # one word to carry both meanings.
+    if run_state == "ABORTED":
+        state_reason = abort_reason or "aborted before any measurement"
+    elif run_state == "FAILED":
+        state_reason = (
+            f"no run completed: {len(outcomes)} (method, seed) attempt(s), "
+            f"{len(failures)} failed"
+        )
+    elif run_state == "PARTIAL":
+        parts = []
+        if failures:
+            parts.append(f"{len(failures)} (method, seed) run(s) failed")
+        if short_batches:
+            parts.append(
+                f"{short_batches} round(s) committed a short batch - rejected selections are "
+                "never backfilled, so those arms spent less than the stated budget. This is "
+                "expected on a library that does not saturate its combinatorial product"
+            )
+        state_reason = "; ".join(parts)
+    else:
+        state_reason = (
+            "every requested arm completed every seed, and every round committed a full batch"
+        )
+
+    manifest: Dict[str, Any] = {
+        "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
+        "run_id": run_id,
+        "run": {
+            "state": run_state,
+            "state_reason": state_reason,
+            "state_vocabulary": ["SUCCESS", "PARTIAL", "FAILED", "ABORTED"],
+            "abort_reason": abort_reason,
+            "started_utc": started.astimezone(timezone.utc).isoformat(),
+            "finished_utc": finished.astimezone(timezone.utc).isoformat(),
+            "timezone": "UTC",
+            "started_epoch_seconds": started.timestamp(),
+            "finished_epoch_seconds": finished.timestamp(),
+            "duration_seconds": round((finished - started).total_seconds(), 3),
+            "arms_requested": list(methods),
+            "arms_completed": sorted({o.method for o in completed}),
+            "seeds_attempted": len({(o.method, o.seed) for o in outcomes}),
+            "seeds_completed": len(completed),
+            "failures": failures,
+            "warnings": warnings,
+            "self_checks": [{"check": n, "passed": bool(p), "detail": d} for n, p, d in self_checks],
+            "repository_unchanged": (
+                None if repository_state_after is None else
+                (repository_state_before.get("source_tree_sha256")
+                 == repository_state_after.get("source_tree_sha256")
+                 and repository_state_before.get("status_lines")
+                 == repository_state_after.get("status_lines"))
+            ),
+            "repository_state_before": _json_safe(repository_state_before),
+            "repository_state_after": _json_safe(repository_state_after),
+        },
+        "invocation": {
+            "argv": list(sys.argv),
+            "cwd": str(Path.cwd()),
+            "resolved_args": {k: _json_safe(v) for k, v in sorted(vars(args).items())},
+        },
+        "configuration": _json_safe(configuration),
+        "results": {
+            "top1": {
+                "threshold_value": float(evaluator.top1_threshold) if evaluator else None,
+                "n_hits": int(evaluator.n_top1) if evaluator else None,
+                "global_best": float(evaluator.global_best) if evaluator else None,
+                "definition": "see configuration.assay.threshold_definition",
+            },
+            "per_arm": _per_arm_results(methods, outcomes),
+            "notes": [f"{o.method}: {note}" for o in outcomes for note in o.notes],
+        },
+        "limitations": list(limitations or []),
+    }
+    manifest["configuration_fingerprint"] = configuration_fingerprint(manifest["configuration"])
+    validate_manifest(manifest)
+    return manifest
+
+
+def validate_manifest(manifest: Dict[str, Any]) -> None:
+    """
+    Refuses a manifest that cannot identify its own run.
+
+    Called on every manifest before it is written, so an incomplete record fails the run
+    rather than being discovered months later by someone trying to reconstruct an arm.
+    """
+    missing: List[str] = []
+    for path in MANIFEST_REQUIRED_PATHS:
+        node: Any = manifest
+        for key in path.split("."):
+            if not isinstance(node, dict) or key not in node:
+                missing.append(path)
+                break
+            node = node[key]
+    if missing:
+        raise ManifestIncompleteError(
+            "the run manifest is missing required field(s): " + ", ".join(missing)
+        )
+
+    leaked: List[str] = []
+
+    def _walk(node: Any, trail: str) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in _OUTCOME_KEY_DENYLIST:
+                    leaked.append(f"{trail}.{key}")
+                _walk(value, f"{trail}.{key}")
+        elif isinstance(node, list):
+            for index, item in enumerate(node):
+                _walk(item, f"{trail}[{index}]")
+
+    _walk(manifest.get("configuration", {}), "configuration")
+    if leaked:
+        raise ManifestIncompleteError(
+            "outcome-derived field(s) leaked into the manifest's configuration subtree, which "
+            "would make a configuration's identity depend on its results: " + ", ".join(leaked)
+        )
 
 
 # ==============================================================================================
@@ -2620,6 +4137,23 @@ def write_summary_csv(path: Path, rows: Sequence[Dict[str, Any]], stamp: str) ->
     _write_csv(path, header, [[stamp] + [row[k] for k in rows[0]] for row in rows])
 
 
+def _plot_title(synthetic: bool, library_label: str) -> str:
+    """
+    Titles the figure from the library it was run on.
+
+    The label is an argument, never module state: a GB1 or HER2 figure titled 'TrpB
+    four-site landscape' is a mislabelled figure, and a figure outlives the run folder
+    that would have explained it. A synthetic figure names the geometry it was generated
+    over, because 'SYNTHETIC' alone does not say which library's sites were used.
+    """
+    if synthetic:
+        return (
+            f"SYNTHETIC landscape on the {library_label} geometry (NOT biological) - "
+            "best value vs budget"
+        )
+    return f"{library_label} - best measured fitness vs budget"
+
+
 def write_plot(
     path: Path,
     outcomes: Sequence[RunOutcome],
@@ -2662,10 +4196,7 @@ def write_plot(
 
     axes.set_xlabel("Unique experimental measurements used")
     axes.set_ylabel("Best measured fitness found")
-    title = f"{library_label} - best measured fitness vs budget"
-    if synthetic:
-        title = "SYNTHETIC landscape (NOT biological) - best value vs budget"
-    axes.set_title(title)
+    axes.set_title(_plot_title(synthetic, library_label))
     axes.legend()
     axes.grid(alpha=0.25)
     figure.text(0.01, 0.01, stamp, fontsize=7, color="#666666")
@@ -2683,28 +4214,64 @@ def write_report(
     stamp: str,
     plot_note: Optional[str],
 ) -> None:
+    configuration = manifest["configuration"]
+    dataset = configuration["dataset"]
+    budget = configuration["measurement_budget"]
+    components = configuration["components"]
+    top1 = manifest["results"]["top1"]
+    run = manifest["run"]
+
     lines: List[str] = []
     add = lines.append
     add("PanoptesBio isolated comparison benchmark")
     add("=" * 78)
     add(f"Run id:        {manifest['run_id']}")
-    add(f"Started (UTC): {manifest['started_utc']}")
+    add(f"Run state:     {run['state']} - {run['state_reason']}")
+    add(f"Started (UTC): {run['started_utc']}")
+    add(f"Ended (UTC):   {run['finished_utc']}")
     add(f"Provenance:    {stamp}")
-    add(f"Dataset:       {manifest['dataset']['path']}")
-    add(f"               sha256 {manifest['dataset']['sha256'][:16]}..., "
-        f"{manifest['dataset']['unique_variants']:,} eligible variants")
+    add(f"Library:       {dataset['library'].get('key')} - {dataset['library'].get('label')}")
+    add(f"               positions {dataset['library'].get('positions')}, parent "
+        f"{dataset['library'].get('parent_residues')}"
+        + (f", labelled stage {dataset['library'].get('labelled_stage')!r}"
+           if dataset['library'].get('labelled_stage') else "")
+        + (", POOL-RESTRICTED" if dataset['library'].get('pool_restricted') else ""))
+    add(f"Dataset:       {dataset['path']}")
+    add(f"               sha256 {dataset['sha256'][:16]}..., "
+        f"{dataset['unique_variants']:,} eligible variants")
+    add("")
+    add("Configuration identity (manifest.json is authoritative; this is a summary)")
+    add("-" * 78)
+    add(f"  configuration_fingerprint: {manifest['configuration_fingerprint']}")
+    add(f"  acquisition policy:        {configuration['acquisition_policy']['policy_id']}")
+    add(f"  prior ablation arm:        {components['prior_ablation_arm']}")
+    add(f"  components enabled:        {', '.join(components['enabled']) or '(none)'}")
+    add(f"  components DISABLED:       {', '.join(components['disabled']) or '(none)'}")
+    add(f"  code commit:               {configuration['code']['commit']} "
+        f"(dirty tree: {configuration['code']['dirty_tree']})")
+    add(f"  seed block:                {configuration['seeding']['seed_block_sha256'][:16]}... "
+        f"over seeds {configuration['seeding']['seed_values']}")
+    add(f"  label provenance:          {configuration['label_provenance']['status']} "
+        f"(legacy {configuration['label_provenance']['legacy_status']})")
+    add(f"  library:                   {configuration['library_selection']['resolved']} "
+        f"(requested {configuration['library_selection']['requested']}), selection mode "
+        f"{dataset['library']['selection_mode']}")
+    if configuration["library_selection"]["dataset_override"]:
+        add(f"  DATASET OVERRIDE:          {configuration['library_selection']['dataset_override']}")
     add("")
     add("Protocol")
     add("-" * 78)
-    config = manifest["config"]
-    add(f"  {config['seeds']} paired seeds; {config['initial_size']} shared starting variants, "
-        f"then {config['rounds']} rounds x {config['batch_size']}.")
-    add(f"  Total budget per method per seed: {config['total_budget']} unique measurements, including the start.")
-    add(f"  Fitness direction: {manifest['dataset']['fitness_direction']}.")
-    add(f"  Top-1% threshold: {manifest['top1']['threshold']:.6g} (99th percentile over the eligible set).")
+    add(f"  {configuration['seeding']['n_seeds']} paired seeds; {budget['initial_size']} shared "
+        f"starting variants, then {budget['rounds']} rounds x {budget['batch_size']}.")
+    add(f"  Total budget per method per seed: {budget['total_unique_measurements']} unique "
+        "measurements, including the start.")
+    # The direction is the library's declaration, not a module constant: FITNESS_DIRECTION
+    # no longer exists, and it was never the same claim for every landscape.
+    add(f"  Fitness direction: {configuration['assay']['fitness_direction']}.")
+    add(f"  Top-1% threshold: {top1['threshold_value']:.6g} (99th percentile over the eligible set).")
     add(f"  Ties: every variant at or above the threshold counts as a hit - "
-        f"{manifest['top1']['n_hits']:,} of {manifest['dataset']['unique_variants']:,} variants qualify.")
-    add(f"  Global optimum in the eligible set: {manifest['top1']['global_best']:.6g}.")
+        f"{top1['n_hits']:,} of {dataset['unique_variants']:,} variants qualify.")
+    add(f"  Global optimum in the eligible set: {top1['global_best']:.6g}.")
     add("")
     add("Results")
     add("-" * 78)
@@ -2749,6 +4316,12 @@ def write_report(
         add("-" * 78)
         for method, note in notes:
             add(f"  {method}: {note}")
+        add("")
+    if run["warnings"]:
+        add("Warnings recorded in the manifest")
+        add("-" * 78)
+        for warning in run["warnings"]:
+            add(f"  - {warning}")
         add("")
     add("Limitations")
     add("-" * 78)
@@ -2904,17 +4477,13 @@ def build_selector_factories(
             factories[method] = lambda seed: RandomForestSelector(seed)
             status[method] = {"status": "available", "detail": "sklearn RandomForestRegressor(n_estimators=300)"}
         elif method == "alde":
-            checkout = Path(args.alde_path).expanduser().resolve() if args.alde_path else None
-            if checkout is None and os.getenv("ALDE_PATH"):
-                checkout = Path(os.environ["ALDE_PATH"]).expanduser().resolve()
-            python_exe = Path(args.alde_python).expanduser().resolve() if args.alde_python else None
-            if python_exe is None and checkout is not None:
-                for candidate in (checkout.parent / ".venv-alde" / "Scripts" / "python.exe",
-                                  checkout.parent / ".venv-alde" / "bin" / "python"):
-                    if candidate.is_file():
-                        python_exe = candidate
-                        break
-            probe = probe_alde(checkout, python_exe)
+            # Resolution and probing are separate: the resolver records every path it
+            # looked at so an UNAVAILABLE reason can name them, which is what turns an
+            # environment problem into something the next person can act on.
+            resolution = resolve_alde_paths(args)
+            checkout = resolution["checkout"]
+            python_exe = resolution["python_exe"]
+            probe = probe_alde(checkout, python_exe, resolution)
             if probe["available"]:
                 workspace = (Path(args.alde_workspace).expanduser().resolve()
                              if args.alde_workspace else checkout.parent / "benchmark_runs")
@@ -2967,13 +4536,16 @@ def build_selector_factories(
             except Exception as exc:
                 status[method] = {"status": "UNSUPPORTED", "detail": f"{type(exc).__name__}: {exc}"}
                 continue
+            # Parsed once, up front: an invalid --ablate-components value must not be
+            # discovered inside the first round of the first seed.
+            components = resolve_ablate_components(args)
             factories[method] = (
                 lambda seed, m=metadata, s=sequence, p=pdb_path, l=live, q=qualify, pr=probe,
-                lib=library:
+                lib=library, c=components:
                 PanoptesSelector(seed, s, m, l, p, lib, call_budget=args.max_model_calls,
                                  ablation=args.ablation,
                                  prior_spread=args.prior_spread,
-                                 ablate_components=_parse_components(args.ablate_components),
+                                 ablate_components=set(c),
                                  qualify_threshold=q, probe_after_qualify=pr)
             )
             detail = (
@@ -2984,6 +4556,11 @@ def build_selector_factories(
                 + (" -> Orchestrator._generate_reflection" if live else "")
                 + "; steps 4 (gatekeeper) and 5 (ESM execution) are not exercised - "
                   "run_stream() offers no interface to substitute the experimental assay for ESM scoring"
+                # The arm's identity, so a report row cannot be confused with another arm's.
+                # manifest.json remains the authoritative, machine-readable version.
+                + f"; prior ablation arm '{args.ablation}'"
+                + (f"; components disabled: {', '.join(components)}" if components
+                   else "; all selector components enabled")
             )
             status[method] = {"status": "available", "detail": detail}
         else:
@@ -2992,7 +4569,13 @@ def build_selector_factories(
 
 
 def execute(args: argparse.Namespace, library: LibrarySpec) -> int:
-    """Runs one benchmark against one library. The library is an argument, not state."""
+    """
+    Runs one benchmark against one library. The library is an argument, not state.
+
+    This frame only creates the run folder and attaches the run log; `_execute_run` does
+    the work, so the log handler can be detached in a `finally` rather than leaking for
+    the life of the process.
+    """
     started = datetime.now(timezone.utc)
     run_id = f"run_{started.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
     output_root = Path(args.output_dir).expanduser().resolve()
@@ -3005,7 +4588,26 @@ def execute(args: argparse.Namespace, library: LibrarySpec) -> int:
     file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
     logging.getLogger().addHandler(file_handler)
     logger.info("Run %s -> %s", run_id, run_dir)
+    try:
+        return _execute_run(args, library, run_id=run_id, run_dir=run_dir,
+                            cache_dir=cache_dir, output_root=output_root, started=started)
+    finally:
+        # Detached and closed even when the run aborts: otherwise the log file stays open
+        # for the lifetime of the process and every later run in it logs to this folder too.
+        logging.getLogger().removeHandler(file_handler)
+        file_handler.close()
 
+
+def _execute_run(
+    args: argparse.Namespace,
+    library: LibrarySpec,
+    *,
+    run_id: str,
+    run_dir: Path,
+    cache_dir: Path,
+    output_root: Path,
+    started: datetime,
+) -> int:
     try:
         ignore_prefixes = (output_root.relative_to(REPO_ROOT).as_posix(),)
     except ValueError:
@@ -3047,10 +4649,12 @@ def execute(args: argparse.Namespace, library: LibrarySpec) -> int:
             strict_rows=not args.lenient_rows,
         )
 
-    stamp = f"provenance={universe.provenance_status}"
-    if universe.synthetic:
-        stamp = "SYNTHETIC_NOT_BIOLOGICAL - mechanism validation only"
-    logger.info("Eligible universe: %d variants (%s)", len(universe), universe.provenance_status)
+    # Carries the explicit vocabulary first and the legacy string after it, so old grep
+    # patterns over existing run folders keep working.
+    stamp = provenance_stamp(universe)
+    logger.info(
+        "Eligible universe: %d variants (%s)", len(universe), stamp,
+    )
 
     evaluator = Evaluator(universe)
     view = CandidateView(
@@ -3073,14 +4677,76 @@ def execute(args: argparse.Namespace, library: LibrarySpec) -> int:
     unknown = [m for m in methods if m not in ALL_METHODS]
     if unknown:
         raise BenchmarkError(f"Unknown method(s) {unknown}. Choose from: {', '.join(ALL_METHODS)}")
+    components_disabled = resolve_ablate_components(args)
     factories, method_status = build_selector_factories(args, methods, library)
+
+    # The starting samples are drawn before anything runs: they are part of the
+    # configuration, not a by-product of it, so the manifest can record the seed block
+    # even for a run that aborts before its first measurement.
+    seeds = list(range(args.base_seed, args.base_seed + args.seeds))
+    initial_sets: Dict[int, List[str]] = {
+        seed: random.Random(seed).sample(universe.variant_ids, args.initial_size)
+        for seed in seeds
+    }
+
+    def _manifest(
+        outcomes: Sequence[RunOutcome],
+        finished: datetime,
+        after_state: Optional[Dict[str, Any]] = None,
+        run_state: Optional[str] = None,
+        abort_reason: str = "",
+        extra_warnings: Sequence[str] = (),
+        limitations: Sequence[str] = (),
+    ) -> Dict[str, Any]:
+        return build_manifest(
+            run_id=run_id,
+            args=args,
+            universe=universe,
+            evaluator=evaluator,
+            methods=methods,
+            method_status=method_status,
+            method_configs=_method_configs(factories, methods),
+            components_disabled=components_disabled,
+            seeds=seeds,
+            initial_sets=initial_sets,
+            outcomes=outcomes,
+            started=started,
+            finished=finished,
+            repository_state_before=before_state,
+            repository_state_after=after_state,
+            self_checks=self_checks,
+            extra_warnings=extra_warnings,
+            run_state=run_state,
+            abort_reason=abort_reason,
+            limitations=limitations,
+        )
+
+    # A requested arm that cannot run aborts here - before a single measurement is spent -
+    # and the aborted run still leaves a manifest saying what was missing and why.
+    try:
+        enforce_requested_methods_available(
+            methods, method_status,
+            allow_unavailable=bool(getattr(args, "allow_unavailable_baselines", False)),
+        )
+    except BaselineUnavailableError as exc:
+        manifest = _manifest(
+            outcomes=[],
+            finished=datetime.now(timezone.utc),
+            run_state="ABORTED",
+            abort_reason=str(exc),
+            extra_warnings=[f"run ABORTED before any measurement: {exc}"],
+            limitations=["ABORTED RUN: no measurements were taken. See run.abort_reason."],
+        )
+        (run_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2), encoding="utf-8")
+        logger.error("Run %s ABORTED: %s", run_id, exc)
+        print(f"Aborted-run manifest: {run_dir / 'manifest.json'}", file=sys.stderr)
+        raise
 
     # ---- Run -------------------------------------------------------------------------------
     outcomes: List[RunOutcome] = []
-    seeds = list(range(args.base_seed, args.base_seed + args.seeds))
     for seed in seeds:
-        sampler = random.Random(seed)
-        initial_ids = sampler.sample(universe.variant_ids, args.initial_size)  # shared across methods
+        initial_ids = initial_sets[seed]  # shared across methods within a seed
         for method in methods:
             factory = factories.get(method)
             if factory is None:
@@ -3146,21 +4812,6 @@ def execute(args: argparse.Namespace, library: LibrarySpec) -> int:
     if universe.synthetic:
         limitations.insert(0, "SYNTHETIC RUN: values are generated, not measured. These results say "
                               "nothing about biological performance.")
-    if universe.provenance_status == "UNVERIFIED_INCLUDES_IMPUTED":
-        # 0 published imputed values is a recorded fact, not an unknown, so it does not
-        # get the "up to 0 may be included" phrasing an unknown count would deserve.
-        if library.published_imputed_count:
-            caveat = (
-                f"Measurement provenance is UNVERIFIED: up to "
-                f"{library.published_imputed_count} published KNN-imputed values may be "
-                f"included in the eligible set."
-            )
-        else:
-            caveat = (
-                f"Measurement provenance is UNVERIFIED for library {library.key!r}: "
-                f"{library.provenance_note}"
-            )
-        limitations.insert(0, caveat)
     if universe.unlabelled_excluded:
         limitations.insert(0, (
             f"{universe.unlabelled_excluded:,} row(s) of {universe.fingerprint.path} carry no "
@@ -3185,113 +4836,67 @@ def execute(args: argparse.Namespace, library: LibrarySpec) -> int:
             f"generating under mutation constraints, and success here does not validate "
             f"unconstrained generation."
         ))
+    # The provenance limitations are generated from the resolved vocabulary - including
+    # the library-specific imputed-count text, which is None for GB1 and a recorded 0 for
+    # HER2 - so the report and the manifest cannot disagree about what the labels are.
+    for limitation in reversed(_label_provenance_block(universe)["limitations"]):
+        limitations.insert(0, limitation)
     if not unchanged:
         limitations.insert(0, "WARNING: the repository source hash changed during this run - see manifest.")
 
-    manifest = {
-        "run_id": run_id,
-        "benchmark_version": BENCHMARK_VERSION,
-        "benchmark_file": str(Path(__file__).resolve()),
-        "started_utc": started.isoformat(),
-        "finished_utc": datetime.now(timezone.utc).isoformat(),
-        "config": {
-            "smoke_test": bool(args.smoke_test),
-            "seeds": args.seeds,
-            "base_seed": args.base_seed,
-            "seed_values": seeds,
-            "initial_size": args.initial_size,
-            "rounds": args.rounds,
-            "batch_size": args.batch_size,
-            "total_budget": total_budget,
-            "methods_requested": methods,
-            "provenance_mode": args.provenance_mode,
-            "enable_live_muse": bool(args.enable_live_muse),
-            "max_model_calls": args.max_model_calls,
-            "max_variants": args.max_variants,
-            "library": library.key,
-            "lenient_rows": bool(args.lenient_rows),
-        },
-        "dataset": {
-            **universe.fingerprint.to_dict(),
-            "library": library.key,
-            "library_label": library.label,
-            "provenance_status": universe.provenance_status,
-            "provenance_detail": universe.provenance_detail,
-            "provenance_note": library.provenance_note,
-            "excluded_imputed": universe.excluded_imputed,
-            "duplicates_dropped": universe.duplicates_dropped,
-            "unlabelled_excluded": universe.unlabelled_excluded,
-            "synthetic": universe.synthetic,
-            "fitness_direction": library.fitness_direction,
-            "active_site_positions": list(library.positions),
-            "parent_residues": library.parent_residues,
-            "selection_mode": library.selection_mode.value,
-            "assay": {
-                "units": library.assay_units,
-                "transformation": library.assay_transformation,
-                "detection_floor": library.detection_floor,
-                "detection_ceiling": library.detection_ceiling,
-                "censored_at_floor": universe.censored_at_floor,
-                "censored_at_ceiling": universe.censored_at_ceiling,
-                "censoring": (
-                    "values at a declared limit keep their measured value and are counted "
-                    "here; they are NOT exact continuous labels"
-                ),
-                "unlabelled_placeholder": library.unlabelled_placeholder,
-                "labelled_stage": library.labelled_stage,
-                "source_publication": library.source_publication,
-                "source_doi": library.source_doi,
-                "dataset_version": library.dataset_version,
-            },
-            "sequence_mapping": (
-                f"variant id == position-ordered notation vs the {library.accession} parent; "
-                f"wild-type positions are OMITTED from the notation and refilled, so every "
-                f"genotype is {library.n_sites} residue(s) long before any comparison"
-            ),
-            "published_split": {
-                "measured": library.published_measured_count,
-                "imputed_knn": library.published_imputed_count,
-                "source": library.source_doi or "see provenance_note",
-            },
-        },
-        "top1": {
-            "threshold": evaluator.top1_threshold,
-            "definition": "99th percentile of measured fitness over the eligible set",
-            "tie_handling": "fitness >= threshold counts as a hit; ties all count",
-            "n_hits": evaluator.n_top1,
-            "global_best": evaluator.global_best,
-            "visibility": "evaluator-only; never passed to a selector",
-        },
-        "methods": {
-            method: {
-                **method_status.get(method, {}),
-                "config": (factories[method](0).config if method in factories else {}),
-            }
-            for method in methods
-        },
-        "environment": {
-            "python": sys.version,
-            "platform": platform.platform(),
-            "numpy": np.__version__,
-            "packages": _package_versions(),
-        },
-        "repository_state_before": before_state,
-        "repository_state_after": after_state,
-        "repository_unchanged": unchanged,
-        "self_checks": [{"check": n, "passed": p, "detail": d} for n, p, d in self_checks],
-        "limitations": limitations,
-    }
-    (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, default=str), encoding="utf-8")
+    extra_warnings: List[str] = []
+    if plot_note:
+        extra_warnings.append(plot_note)
+    if not unchanged:
+        extra_warnings.append(
+            "the repository source hash or git status changed during this run; see "
+            "run.repository_state_before / run.repository_state_after"
+        )
+
+    manifest = _manifest(
+        outcomes=outcomes,
+        finished=datetime.now(timezone.utc),
+        after_state=after_state,
+        extra_warnings=extra_warnings,
+        limitations=limitations,
+    )
+    # No `default=str` fallback: a manifest that needs one is not machine-readable.
+    (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     write_report(run_dir / "report.txt", manifest, summary_rows, outcomes, stamp, plot_note)
 
     print()
     print((run_dir / "report.txt").read_text(encoding="utf-8"))
     print(f"Artifacts: {run_dir}")
+    print(f"Run state: {manifest['run']['state']} | "
+          f"configuration fingerprint: {manifest['configuration_fingerprint'][:16]}")
     if not unchanged:
         print("WARNING: repository files changed during this run. Inspect manifest.json "
-              "(repository_state_before / repository_state_after).", file=sys.stderr)
-        return 2
-    return 0
+              "(run.repository_state_before / run.repository_state_after).", file=sys.stderr)
+        return EXIT_REPOSITORY_CHANGED
+    return EXIT_OK
+
+
+def _method_configs(
+    factories: Dict[str, Callable[[int], Selector]],
+    methods: Sequence[str],
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Collects each available method's own hyperparameter block for the manifest.
+
+    A construction failure here must not cost the manifest: it is recorded as the config
+    for that method instead of propagating.
+    """
+    configs: Dict[str, Dict[str, Any]] = {}
+    for method in methods:
+        factory = factories.get(method)
+        if factory is None:
+            configs[method] = {}
+            continue
+        try:
+            configs[method] = dict(factory(0).config)
+        except Exception as exc:
+            configs[method] = {"config_unavailable": f"{type(exc).__name__}: {exc}"}
+    return configs
 
 
 def _package_versions() -> Dict[str, Optional[str]]:
@@ -3374,7 +4979,21 @@ examples:
         "--ablate-components", default="",
         help=(
             "Comma-separated selector components to disable, for attributing the "
-            "engine advantage: dpp, gflownet, pareto, dkl, prior. Empty disables none."
+            f"engine advantage: {', '.join(ABLATABLE_COMPONENTS)}. Omitting the flag "
+            "disables none. A value that names no component (',' or whitespace), an "
+            "empty entry ('dpp,,prior') or an unrecognised name is rejected before the "
+            "run starts, because each of those used to produce an unablated run in a "
+            "folder labelled as an ablation arm."
+        ),
+    )
+    parser.add_argument(
+        "--allow-unavailable-baselines", action="store_true",
+        help=(
+            "Continue when a method named in --methods cannot run, reporting it as a row "
+            "instead of failing. OFF by default: a requested ALDE baseline was once "
+            "silently marked UNAVAILABLE because ALDE_PATH was unset, and two complete "
+            "benchmark runs were quoted from that report. Use this only to probe what an "
+            "environment can run - a run made with it is not a complete comparison."
         ),
     )
     parser.add_argument("--provenance-mode", choices=("require", "acknowledge-unflagged"), default="require",
@@ -3510,13 +5129,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             parser.error(f"{name} must be >= 1")
 
     try:
+        # Validated here, before any run folder exists: a malformed ablation request must
+        # not get as far as creating an output folder, let alone a round.
+        resolve_ablate_components(args)
+    except ConfigurationError as exc:
+        print(f"\nCONFIGURATION ERROR\n{'=' * 78}\n{exc}\n", file=sys.stderr)
+        return EXIT_ERROR
+
+    try:
         return execute(args, spec)
+    except BaselineUnavailableError as exc:
+        print(f"\nREQUESTED BASELINE UNAVAILABLE\n{'=' * 78}\n{exc}\n", file=sys.stderr)
+        return EXIT_BASELINE_UNAVAILABLE
     except ProvenanceError as exc:
         print(f"\nPROVENANCE ERROR\n{'=' * 78}\n{exc}\n", file=sys.stderr)
-        return 3
+        return EXIT_PROVENANCE
+    except ConfigurationError as exc:
+        print(f"\nCONFIGURATION ERROR\n{'=' * 78}\n{exc}\n", file=sys.stderr)
+        return EXIT_ERROR
     except BenchmarkError as exc:
         print(f"\nERROR: {exc}\n", file=sys.stderr)
-        return 1
+        return EXIT_ERROR
 
 
 if __name__ == "__main__":
