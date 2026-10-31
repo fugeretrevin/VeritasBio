@@ -116,6 +116,114 @@ observation recorded now, not a hypothesis being tested.
 
 ---
 
+## 3A. AMENDMENT 2026-10-31 — the falsification test is not currently runnable
+
+Recorded the same day this document was registered, before any confirmatory arm was
+accepted, because the defect is in the registration rather than in a result.
+
+**Two constraints were missed at registration.**
+
+**1. HER2's primary endpoint is degenerate.** `veritas.preflight --library her2`
+reports:
+
+> the d≥2 ceiling is 113 against a raw count of 113 (0.00% removed, floor 5%):
+> DEGENERATE; a budget of 125 measurements is not smaller than the 113-variant hit
+> tier: an arm can reach the whole tier, so the endpoint cannot discriminate
+
+An arm can measure the entire hit tier, so top-1% yield cannot separate two methods
+on HER2 at this budget. HER2 is the **only** diffuse landscape of the nine — every
+other one scores z ≥ 2.09 — so §4's requirement that the sign **flip** on a
+multi-modal landscape has no available test. Per handoff rule 2.7 a failed gate means
+the run is not to be trusted, so no HER2 arm is run.
+
+**2. Only three of the nine landscapes are runnable at all.** The benchmark's
+`LIBRARIES` registry holds `trpb`, `gb1` and `her2`; the other six are registered in
+`veritas.calibration.landscapes.REGISTRY` for diagnostics but are not wired into the
+runner. The z values in §2 were measurable on all nine because the instrument reads
+only a prepared table; the *arms* are not.
+
+**What this leaves testable now:** `gb1` alone, which §2 assigns to the
+concentrated-no-motif band and which therefore carries **no prediction**. Running it
+tests the band assignment — a landscape carrying no prediction should show no strong
+effect — but it cannot confirm or falsify the mechanism.
+
+**The registration is therefore one-sided until one of three things happens**, and it
+must not be reported as confirmed before then:
+
+1. A non-degenerate endpoint is defined for HER2 and registered *before* its arm runs.
+   Best-fitness is the obvious candidate and is already a secondary endpoint, but
+   substituting it post hoc for the primary is exactly the move this document exists to
+   prevent, so it requires its own amendment.
+2. The six diagnostic-only landscapes are wired into the benchmark. Blockers: a
+   `LibrarySpec` per landscape, and four structure files that are identified in
+   `docs/structures.md` but not present locally (3M24, 8QI9, 5WL2, 5WKZ).
+3. A further diffuse landscape is found. None of the nine qualifies, so this means a
+   new dataset.
+
+**No confirmation count is claimed in this document until a sign-flip test exists.**
+The narrow-band evidence on its own is consistent with the diversity term simply being
+miscalibrated everywhere, which §4 already names as the alternative the flip is there
+to exclude.
+
+---
+
+## 3B. RESULT 2026-10-31 — GB1, and the band refinement it disconfirms
+
+First arm run after registration. GB1, 48 paired seeds, `panoptes_default` with and
+without `--ablate-components dpp`:
+
+| metric | baseline | dpp off | Δ | t | verdict |
+| --- | --- | --- | --- | --- | --- |
+| best fitness | 5.5104 | 5.5224 | +0.012 | 0.09 | not separable |
+| **top-1% hits** | 14.65 | **20.90** | **+6.25** | **3.92** | **significant** |
+
+Better on 36 of 48 seeds. For comparison, TrpB gives +2.54 (t = 2.37), so **the effect
+on GB1 is more than twice as large.**
+
+### This disconfirms the three-band refinement, not the core prediction
+
+§2 assigned GB1 to *concentrated, no motif* (z = 14.98, **zero** positions conserved at
+0.80) and therefore gave it **no prediction**. The stated reason was that the mechanism
+under test is about a *narrow motif* specifically. GB1 then behaved exactly like a
+narrow landscape, and more strongly than the landscape the mechanism was derived on.
+
+So the refinement is wrong as stated. The variable that tracks the effect is
+**concentration (z)**, not whether concentration happens to sit at conserved residues:
+
+| landscape | z | conserved positions | dpp off, Δ top-1% |
+| --- | --- | --- | --- |
+| trpb | 20.72 | 2 | +2.54 (t = 2.37) |
+| gb1 | 14.98 | **0** | **+6.25 (t = 3.92)** |
+
+The three-band scheme was introduced in this document *after* the quantile tail rule
+exposed GB1's zero conserved positions — a post-hoc refinement to a pre-registered
+prediction, and it is the part that failed. **The two-band version registered first
+(narrow vs diffuse, on z alone) survives.** Recorded here rather than silently
+reverted, because quietly dropping a band after seeing a result is the failure mode
+this document exists to prevent.
+
+Revised assignment, for the arms not yet run: **z ≥ 3.0 predicts that removing k-DPP
+increases top-1% yield**, with no sub-condition on conserved positions. The diffuse
+prediction (z ≤ 1.0) is unchanged and still has no available test (§3A).
+
+### Two things this does not establish
+
+- **It is not generalisation evidence.** GB1 is development data under handoff rule
+  2.4, as are TrpB and HER2. Two development landscapes agreeing is mechanism evidence.
+- **It does not distinguish the two explanations §4 cares about.** Both landscapes are
+  concentrated, so "diversity is mismatched to tail structure" and "diversity is simply
+  miscalibrated" both predict this result. Only a diffuse landscape separates them, and
+  §3A records that none is currently runnable.
+
+### One consequence worth flagging
+
+`docs/HANDOFF.md` §1 reports GB1 at **parity at every budget** — the engine's weakest
+headline result. Removing the diversity term there is worth +6.25 top-1% hits. That
+parity may therefore be partly an artifact of a mis-signed component rather than a
+property of the landscape.
+
+---
+
 ## 4. What falsifies this
 
 The prediction is wrong if **any** of the following holds:

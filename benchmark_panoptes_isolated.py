@@ -431,6 +431,156 @@ LIBRARIES: Dict[str, LibrarySpec] = {
             "mass of ties at the floor is expected and is not a defect."
         ),
     ),
+    "cr6261_h1": LibrarySpec(
+        key="cr6261_h1",
+        label="CR6261 VH 11-site, H1 antigen (Phillips et al. 2021)",
+        dataset=REPO_ROOT / "scripts" / "data" / "CR6261_H1_Phillips_2021.csv",
+        # No accession: positions come from this spec and the parent sequence from
+        # scripts/data/library_wt_sequences.json, so no per-target annotation table
+        # is consulted. See resolve_library_metadata.
+        accession=None,
+        positions=(28, 30, 58, 59, 62, 74, 75, 76, 77, 79, 104),
+        parent_residues="TSANQKSTSAL",
+        structure_pdb=REPO_ROOT / "workers" / "data" / "5WKZ.pdb",
+        # No literature optimum in hand; the best OBSERVED variant is recorded in
+        # the provenance note instead, because calling it published would be a
+        # claim about a paper this repository has not read.
+        published_optimum=None,
+        published_measured_count=1886,
+        published_imputed_count=0,
+        provenance_note=(
+            "CombinGym clean table. Carries replicate columns h1_repa/b/c and h1_sem, which this harness does not yet use as a noise model. "
+            "Best observed variant in the prepared table: T28P:S30R:S75F:L104V. "
+            "Imputation status for this table has not been established; the zero imputed count is an absence of evidence, not evidence of absence."
+        ),
+        assay_units="-log10(K_D) against influenza H1 haemagglutinin",
+        source_publication="Phillips et al. 2021" if "Phillips" in "CR6261 VH 11-site, H1 antigen (Phillips et al. 2021)" else None,
+    ),
+    "cr6261_h9": LibrarySpec(
+        key="cr6261_h9",
+        label="CR6261 VH 11-site, H9 antigen (Phillips et al. 2021)",
+        dataset=REPO_ROOT / "scripts" / "data" / "CR6261_H9_Phillips_2021.csv",
+        # No accession: positions come from this spec and the parent sequence from
+        # scripts/data/library_wt_sequences.json, so no per-target annotation table
+        # is consulted. See resolve_library_metadata.
+        accession=None,
+        positions=(28, 30, 58, 59, 62, 74, 75, 76, 77, 79, 104),
+        parent_residues="TSANQKSTSAL",
+        structure_pdb=REPO_ROOT / "workers" / "data" / "5WKZ.pdb",
+        # No literature optimum in hand; the best OBSERVED variant is recorded in
+        # the provenance note instead, because calling it published would be a
+        # claim about a paper this repository has not read.
+        published_optimum=None,
+        published_measured_count=1841,
+        published_imputed_count=0,
+        provenance_note=(
+            "Same library and same VH as cr6261_h1, different antigen endpoint. NOT an independent landscape from cr6261_h1. "
+            "Best observed variant in the prepared table: T28P:S30R:A58T:N59K:K74D:S75F:S77G:A79V. "
+            "Imputation status for this table has not been established; the zero imputed count is an absence of evidence, not evidence of absence."
+        ),
+        assay_units="-log10(K_D) against influenza H9 haemagglutinin",
+        source_publication="Phillips et al. 2021" if "Phillips" in "CR6261 VH 11-site, H9 antigen (Phillips et al. 2021)" else None,
+    ),
+    "cr9114_h1": LibrarySpec(
+        key="cr9114_h1",
+        label="CR9114 VH 16-site, H1 antigen (Phillips et al. 2021)",
+        dataset=REPO_ROOT / "scripts" / "data" / "CR9114_H1_Phillips_2021.csv",
+        # No accession: positions come from this spec and the parent sequence from
+        # scripts/data/library_wt_sequences.json, so no per-target annotation table
+        # is consulted. See resolve_library_metadata.
+        accession=None,
+        positions=(29, 30, 31, 52, 57, 58, 59, 71, 74, 75, 76, 77, 84, 87, 95, 106),
+        parent_residues="FSSITANTKSTSSRYY",
+        structure_pdb=REPO_ROOT / "workers" / "data" / "5WL2.pdb",
+        # No literature optimum in hand; the best OBSERVED variant is recorded in
+        # the provenance note instead, because calling it published would be a
+        # claim about a paper this repository has not read.
+        published_optimum=None,
+        published_measured_count=65093,
+        published_imputed_count=0,
+        provenance_note=(
+            "Re-prepared from the raw eLife table, NOT CombinGym's clean workbook, which drops 16,384 genotypes carrying both F29S and Y106S. See docs/cr9114-reprep.md. "
+            "Best observed variant in the prepared table: S31N:T57S:T71S:K74I:S75F:T76S:S77N. "
+            "Imputation status for this table has not been established; the zero imputed count is an absence of evidence, not evidence of absence."
+        ),
+        assay_units="-log10(K_D) against influenza H1 haemagglutinin",
+        source_publication="Phillips et al. 2021" if "Phillips" in "CR9114 VH 16-site, H1 antigen (Phillips et al. 2021)" else None,
+    ),
+    "creilov": LibrarySpec(
+        key="creilov",
+        label="CreiLOV 15-site (Chen et al. 2023)",
+        dataset=REPO_ROOT / "scripts" / "data" / "CREILOV_CHLRE_Chen_2023.csv",
+        # No accession: positions come from this spec and the parent sequence from
+        # scripts/data/library_wt_sequences.json, so no per-target annotation table
+        # is consulted. See resolve_library_metadata.
+        accession=None,
+        positions=(3, 4, 5, 7, 29, 34, 47, 60, 61, 92, 96, 98, 107, 109, 113),
+        parent_residues="GLRTAGQRDIDRVVT",
+        structure_pdb=REPO_ROOT / "workers" / "data" / "8QI9.pdb",
+        # No literature optimum in hand; the best OBSERVED variant is recorded in
+        # the provenance note instead, because calling it published would be a
+        # claim about a paper this repository has not read.
+        published_optimum=None,
+        published_measured_count=165427,
+        published_imputed_count=0,
+        provenance_note=(
+            "CombinGym clean table; carries Rep1/Rep2/Rep3 replicate columns. Structure 8QI9 is CrPhotLOV1 dark state; position 113 is unobserved. "
+            "Best observed variant in the prepared table: G3E:R5D:T7S:A29H:G34T:R60N. "
+            "Imputation status for this table has not been established; the zero imputed count is an absence of evidence, not evidence of absence."
+        ),
+        assay_units="fluorescence, log scale",
+        source_publication="Phillips et al. 2021" if "Phillips" in "CreiLOV 15-site (Chen et al. 2023)" else None,
+    ),
+    "eqfp611_blue": LibrarySpec(
+        key="eqfp611_blue",
+        label="eqFP611/mTagBFP2 13-site, blue endpoint (Poelwijk et al. 2019)",
+        dataset=REPO_ROOT / "scripts" / "data" / "EQFP611_BLUE_Poelwijk_2019.csv",
+        # No accession: positions come from this spec and the parent sequence from
+        # scripts/data/library_wt_sequences.json, so no per-target annotation table
+        # is consulted. See resolve_library_metadata.
+        accession=None,
+        positions=(20, 45, 63, 127, 143, 158, 168, 172, 174, 197, 206, 207, 231),
+        parent_residues="DVLTFNSAAYNNK",
+        structure_pdb=REPO_ROOT / "workers" / "data" / "3M24.pdb",
+        # No literature optimum in hand; the best OBSERVED variant is recorded in
+        # the provenance note instead, because calling it published would be a
+        # claim about a paper this repository has not read.
+        published_optimum=None,
+        published_measured_count=8191,
+        published_imputed_count=0,
+        provenance_note=(
+            "Structure 3M24 carries a DIFFERENT residue from this parent at positions 63 and 174 (mTagBFP2 engineering), and 231 is unobserved, so structure-derived terms at those three sites are not meaningful. See docs/structures.md. "
+            "Best observed variant in the prepared table: D20N:V45A:T127P:N158A:S168G:A172C:N206D. "
+            "Imputation status for this table has not been established; the zero imputed count is an absence of evidence, not evidence of absence."
+        ),
+        assay_units="blue fluorescence",
+        source_publication="Phillips et al. 2021" if "Phillips" in "eqFP611/mTagBFP2 13-site, blue endpoint (Poelwijk et al. 2019)" else None,
+    ),
+    "eqfp611_red": LibrarySpec(
+        key="eqfp611_red",
+        label="eqFP611/mTagBFP2 13-site, red endpoint (Poelwijk et al. 2019)",
+        dataset=REPO_ROOT / "scripts" / "data" / "EQFP611_RED_Poelwijk_2019.csv",
+        # No accession: positions come from this spec and the parent sequence from
+        # scripts/data/library_wt_sequences.json, so no per-target annotation table
+        # is consulted. See resolve_library_metadata.
+        accession=None,
+        positions=(20, 45, 63, 127, 143, 158, 168, 172, 174, 197, 206, 207, 231),
+        parent_residues="DVLTFNSAAYNNK",
+        structure_pdb=REPO_ROOT / "workers" / "data" / "3M24.pdb",
+        # No literature optimum in hand; the best OBSERVED variant is recorded in
+        # the provenance note instead, because calling it published would be a
+        # claim about a paper this repository has not read.
+        published_optimum=None,
+        published_measured_count=8191,
+        published_imputed_count=0,
+        provenance_note=(
+            "Same library and same source table as eqfp611_blue, different endpoint column. NOT an independent landscape from eqfp611_blue. Same 3M24 caveat at positions 63, 174 and 231. "
+            "Best observed variant in the prepared table: D20N:L63M:T127P:F143S:A172C:Y197R:N206D. "
+            "Imputation status for this table has not been established; the zero imputed count is an absence of evidence, not evidence of absence."
+        ),
+        assay_units="red fluorescence",
+        source_publication="Phillips et al. 2021" if "Phillips" in "eqFP611/mTagBFP2 13-site, red endpoint (Poelwijk et al. 2019)" else None,
+    ),
 }
 
 #: The default library for the CLI's --dataset default only. It is a default value, not
@@ -5087,6 +5237,100 @@ ALL_METHODS = ("random", "ridge", "random_forest", "alde", "panoptes_default", "
 DEFAULT_METHODS = ("random", "ridge", "random_forest", "panoptes_default")
 
 
+
+WT_SEQUENCE_REGISTRY = REPO_ROOT / "scripts" / "data" / "library_wt_sequences.json"
+
+
+class _DerivedMetadata:
+    """Parent metadata assembled from a LibrarySpec rather than a per-target table.
+
+    Carries only what the planning path reads: the sequence, the positions the planner
+    may target, the positions it must withhold, and identifiers for reporting.
+    """
+
+    def __init__(self, *, sequence: str, binding_positions: Sequence[int],
+                 catalytic_positions: Sequence[int], accession: str,
+                 protein_name: str, pdb_id: Optional[str] = None) -> None:
+        self.sequence = sequence
+        self.binding_positions = list(binding_positions)
+        self.catalytic_positions = list(catalytic_positions)
+        self.accession = accession
+        self.protein_name = protein_name
+        self.pdb_id = pdb_id
+        self.length = len(sequence)
+
+    def to_llm_summary(self) -> str:
+        return (f"{self.protein_name} ({self.accession}), {self.length} residues; targetable positions {self.binding_positions}")
+
+
+def _wt_sequence_from_registry(library: "LibrarySpec") -> Optional[str]:
+    """Wild-type sequence for a library, keyed by its prepared-CSV filename."""
+    if not WT_SEQUENCE_REGISTRY.is_file():
+        return None
+    entries = json.loads(WT_SEQUENCE_REGISTRY.read_text(encoding="utf-8"))
+    entry = entries.get(Path(library.dataset).name)
+    if not entry:
+        return None
+    seq = entry.get("wild_type_sequence") if isinstance(entry, dict) else entry
+    return str(seq) if seq else None
+
+
+def resolve_library_metadata(library: "LibrarySpec"):
+    """
+    Parent metadata for a library, with the planner's target positions DERIVED from
+    the library's own declaration.
+
+    Positions are never read from a per-target table. Where fetched metadata also
+    carries binding_positions they are compared, and a disagreement raises: the spec
+    and the annotation would be describing different libraries, which is the residue
+    numbering error the surrounding validation exists to catch.
+    """
+    fetched = None
+    if library.accession:
+        try:
+            from workers.rag_worker import fetch_protein_metadata
+            fetched = fetch_protein_metadata(library.accession, use_cache=True)
+        except Exception as exc:
+            logger.info(
+                "no parent metadata for %s (%s); deriving from the library spec",
+                library.accession, type(exc).__name__,
+            )
+
+    declared = list(library.positions)
+    if fetched is not None:
+        annotated = sorted({int(p) for p in (getattr(fetched, "binding_positions", None) or [])})
+        if annotated and annotated != sorted(declared):
+            raise BenchmarkError(
+                f"library {library.key!r} declares positions {sorted(declared)} but the "
+                f"metadata for {library.accession} annotates {annotated}. These describe "
+                f"different libraries; refusing to run rather than silently preferring one."
+            )
+        return _DerivedMetadata(
+            sequence=fetched.sequence,
+            binding_positions=declared,
+            catalytic_positions=list(getattr(fetched, "catalytic_positions", None) or ()),
+            accession=library.accession or library.key,
+            protein_name=getattr(fetched, "protein_name", library.label),
+            pdb_id=getattr(fetched, "pdb_id", None),
+        )
+
+    sequence = _wt_sequence_from_registry(library)
+    if not sequence:
+        raise BenchmarkError(
+            f"no parent sequence for library {library.key!r}: "
+            f"{library.accession or '<no accession>'} did not resolve and "
+            f"{WT_SEQUENCE_REGISTRY} has no entry for {Path(library.dataset).name!r}. "
+            f"Add the sequence there rather than hard-coding positions in rag_worker."
+        )
+    return _DerivedMetadata(
+        sequence=sequence,
+        binding_positions=declared,
+        catalytic_positions=(),
+        accession=library.accession or library.key,
+        protein_name=library.label,
+        pdb_id=Path(library.structure_pdb).stem if library.structure_pdb else None,
+    )
+
 def _load_panoptes_context(
     library: LibrarySpec,
     pdb: bool = True,
@@ -5099,16 +5343,7 @@ def _load_panoptes_context(
     position and parent residue against that sequence and refuses on a mismatch, which
     is the check that stops the dataset being aligned against the wrong reference.
     """
-    from workers.rag_worker import fetch_protein_metadata
-
-    metadata_json = library.metadata_json
-    if not metadata_json.is_file():
-        raise BenchmarkError(
-            f"Parent metadata cache {metadata_json} is missing for library "
-            f"{library.key!r}. Generate it with:\n"
-            f"  python scripts/download_trpb_benchmark.py"
-        )
-    metadata = fetch_protein_metadata(library.accession, use_cache=True)
+    metadata = resolve_library_metadata(library)
     sequence = metadata.sequence
     if max(library.positions) > len(sequence):
         raise BenchmarkError(
