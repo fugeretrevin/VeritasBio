@@ -3050,6 +3050,7 @@ MANIFEST_REQUIRED_PATHS: Tuple[str, ...] = (
     "run_id",
     "configuration_fingerprint",
     "run.state",
+    "run.state_reason",
     "run.abort_reason",
     "run.started_utc",
     "run.finished_utc",
@@ -3906,11 +3907,40 @@ def build_manifest(
     if run_state == "SUCCESS" and not completed:
         run_state = "FAILED"
 
+    # PARTIAL must not be readable as 'crashed'. On an incompletely-saturated library a
+    # short batch is the protocol working as designed - proposals outside the eligible
+    # universe are rejected and never backfilled - but the arm did then spend less than
+    # the stated budget, which a reader has to know. State the reason rather than leaving
+    # one word to carry both meanings.
+    if run_state == "ABORTED":
+        state_reason = abort_reason or "aborted before any measurement"
+    elif run_state == "FAILED":
+        state_reason = (
+            f"no run completed: {len(outcomes)} (method, seed) attempt(s), "
+            f"{len(failures)} failed"
+        )
+    elif run_state == "PARTIAL":
+        parts = []
+        if failures:
+            parts.append(f"{len(failures)} (method, seed) run(s) failed")
+        if short_batches:
+            parts.append(
+                f"{short_batches} round(s) committed a short batch - rejected selections are "
+                "never backfilled, so those arms spent less than the stated budget. This is "
+                "expected on a library that does not saturate its combinatorial product"
+            )
+        state_reason = "; ".join(parts)
+    else:
+        state_reason = (
+            "every requested arm completed every seed, and every round committed a full batch"
+        )
+
     manifest: Dict[str, Any] = {
         "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
         "run_id": run_id,
         "run": {
             "state": run_state,
+            "state_reason": state_reason,
             "state_vocabulary": ["SUCCESS", "PARTIAL", "FAILED", "ABORTED"],
             "abort_reason": abort_reason,
             "started_utc": started.astimezone(timezone.utc).isoformat(),
@@ -4196,7 +4226,7 @@ def write_report(
     add("PanoptesBio isolated comparison benchmark")
     add("=" * 78)
     add(f"Run id:        {manifest['run_id']}")
-    add(f"Run state:     {run['state']}" + (f" - {run['abort_reason']}" if run["abort_reason"] else ""))
+    add(f"Run state:     {run['state']} - {run['state_reason']}")
     add(f"Started (UTC): {run['started_utc']}")
     add(f"Ended (UTC):   {run['finished_utc']}")
     add(f"Provenance:    {stamp}")

@@ -444,6 +444,22 @@ class TestManifestIsAuthoritative(unittest.TestCase):
         ])
         self.assertEqual(partial["run"]["state"], "PARTIAL")
         self.assertTrue(any("boom" in w for w in partial["run"]["warnings"]))
+        # Every state says why, so PARTIAL cannot be read as 'crashed' when it means a
+        # short batch on a library that does not saturate its combinatorial product.
+        self.assertIn("failed", partial["run"]["state_reason"])
+        self.assertIn("full batch", succeeded["run"]["state_reason"])
+        self.assertIn("no run completed", failed["run"]["state_reason"])
+
+    def test_short_batch_alone_is_partial_and_says_so(self) -> None:
+        short = _completed_outcome()
+        short.rounds[-1].status = "short_batch"
+        short.rounds[-1].accepted = 3
+        manifest = _build_manifest(outcomes=[short])
+        self.assertEqual(manifest["run"]["state"], "PARTIAL")
+        reason = manifest["run"]["state_reason"]
+        self.assertIn("short batch", reason)
+        self.assertIn("never backfilled", reason)
+        self.assertNotIn("failed", reason)
 
     def test_components_enabled_and_disabled_are_both_listed(self) -> None:
         manifest = _build_manifest(components_disabled=("dpp", "prior"))
