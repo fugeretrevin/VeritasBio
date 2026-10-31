@@ -74,14 +74,46 @@ best-fitness gain is not significant and loses 25 of 38 decided seeds.
 
 ## 3. Open problems, hardest last
 
-### 3.1 Attributing the advantage — needs a joint design
-Single-component ablations cannot do it. The advantage over random is 44.5 hits; the
-five single removals cost **68.4 between them, ~154% of the total**, so the components
-are redundant rather than additive. All five removals are significant and worse, which
-establishes only the negative: the advantage is not concentrated in any one stage.
-A 2^5 joint design is the honest instrument. 32 arms × 48 seeds ≈ 1.5k campaigns, which
-is minutes at 2.3 s/seed for the non-LLM arms.
+### 3.1 Attributing the advantage — the ablation set is too narrow, not too small
 
+> **CORRECTED 2026-10-31.** This section inherited the confounded ablation table from
+> `docs/545.md` §4, where every `--ablate-components` arm ran with prior calibration
+> forced on against a baseline that had it off (fixed in `ddd9010`). Re-measured on
+> identical seeds, **two of the five removals are significant improvements**:
+
+| ablation | top-1% | Δ vs 45.60 | t | verdict |
+|---|---|---|---|---|
+| dpp off | 48.15 | **+2.54** | **+2.37** | significantly better |
+| dkl off | 48.04 | **+2.44** | **+2.56** | significantly better |
+| gflownet off | 44.85 | −0.75 | −0.86 | not separable |
+| pareto off | 40.56 | −5.04 | −6.98 | worse |
+| prior off | 32.81 | −12.79 | −8.49 | worse |
+
+**The redundancy argument is withdrawn.** It read: the five single removals cost 68.4
+between them against a 44.5-hit advantage over random, ~154% of the total, therefore
+the components are redundant rather than additive. That 68.4 was the confounded sum.
+The real total is ≈ **−13.7** and two terms are **positive**, so the components are
+*sub*-additive. The conclusion inverts: removing any single component costs little or
+helps, yet the system beats random by 44.5 hits.
+
+So the five ablated stages **do not account for the advantage**, and a 2^5 joint design
+over them would spend 32 arms partitioning a small fraction of the effect. The honest
+next instrument is a **wider** ablation set, not a deeper one over the same five:
+
+- the candidate generator (`generate_candidate_variants`)
+- the EI acquisition itself, against a greedy-mean or random-among-eligible control
+- the featurisation (`featurize_variant_on_positions`)
+- `_AnnotationDrivenPlanner`'s position restriction, which is plausibly the largest
+  single contributor: restricting search to annotated active-site positions is a strong
+  prior that `random` does not get, and it has never been ablated
+
+That last one is the first thing to measure. If the advantage is mostly "we search the
+right four positions", that is worth knowing before any further architecture work — it
+is a true and useful result, but it is a different claim from "our selection engine is
+better", and only one of the two is currently supported.
+
+Two deletions are also now shippable on their own merits: `dpp` and `dkl` both improve
+top-1% yield significantly and removing them simplifies the system.
 ### 3.2 Candidate generation — "enumerate, don't rank"
 The pool is singles and pairs; the ≥0.70 tier is 97% triples and quadruples. Verified
 by attrition trace:
