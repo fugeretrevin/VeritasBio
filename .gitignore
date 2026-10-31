@@ -249,3 +249,6 @@ benchmark_e2e_results/
 # Local tooling scratch directories.
 .impeccable/
 .taste-skill/
+
+# Claude Code agent worktrees - transient, one per background agent
+.claude/worktrees/
