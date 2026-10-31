@@ -2,6 +2,19 @@
 
 This repository uses automated AI agent engineering skills based on [Matt Pocock's Skills](https://github.com/mattpocock/skills) alongside domain-specific VeritasBio active learning and biophysics skills.
 
+## START HERE — READ BEFORE TOUCHING THE BENCHMARK OR ANY DATASET
+
+[`docs/HANDOFF.md`](docs/HANDOFF.md) carries the current state, the numbers that are
+still quotable, the numbers that are void, and ten rules that are load-bearing — each
+written down because breaking it already produced a wrong result here, in one case
+silently inverting a published conclusion. It also lists the open problems that are
+blocked on an external answer, so you do not start work on them.
+
+The two that bite fastest: mutation strings **omit wild-type positions**, so a
+genotype comparison must fill WT and assert equal length rather than `zip()`; and a
+git worktree **cannot see** gitignored paths or anything outside the repo, which has
+cost three full agent runs.
+
 ## Agent Skills Configuration
 
 ### Issue Tracker
