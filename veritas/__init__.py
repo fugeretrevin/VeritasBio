@@ -14,6 +14,12 @@ described, validated and ingested without touching optimisation code.
 bounded candidate trace and the per-depth return ledger. Anything in there that reads
 true fitness is retrospective only and is gated behind an explicit access token, so a
 number from the landscape cannot flow back into a round that has yet to happen.
+
+`veritas.paths` holds the environment concern: the real repository root (which is not the
+worktree you may be standing in), the gitignored results roots, the dataset directory,
+and the rule that a failure to resolve must name every path it checked. Three agent runs
+were lost in one night to "it is not on disk" conclusions drawn from inside a worktree;
+see `docs/agents/paths.md`.
 """
 
-__all__ = ["datasets", "diagnostics"]
+__all__ = ["datasets", "diagnostics", "paths"]

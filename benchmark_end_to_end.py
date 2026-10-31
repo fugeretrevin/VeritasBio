@@ -36,7 +36,25 @@ No hardcoded library:
     The saturated positions and the parent residues are derived from the dataset's own
     variant notations (`derive_library_scope`). Nothing in this file names a position
     or a residue of any particular landscape, so pointing it at another combinatorial
-    dataset requires no code change.
+    dataset requires no code change. The library itself is resolved once from
+    `--library` and threaded explicitly through every call path; the `ACTIVE_LIBRARY`,
+    `ACTIVE_SITE_POSITIONS` and `PARENT_RESIDUES` globals this file used to read are
+    gone, and the derived scope is cross-checked against the library's DECLARED
+    positions so a dataset and a library specification cannot silently disagree.
+
+Manifest and provenance (migrated to match benchmark_panoptes_isolated):
+    The manifest is serialised through that harness's `_json_safe`, NOT through
+    `json.dumps(default=str)`. A manifest that needs `default=str` is not
+    machine-readable: tuples, sets, Paths and enums all stringify into shapes no
+    consumer can parse back, and a value that cannot be serialised becomes an opaque
+    string instead of a loud failure. It is then validated against
+    `MANIFEST_REQUIRED_PATHS` before it is written.
+
+    Label provenance uses the harness's `LabelProvenance` enum, which is deliberately
+    not a `str` subclass, so the old `provenance_status == "UNVERIFIED_INCLUDES_IMPUTED"`
+    comparison cannot be written by accident. The legacy string is KEPT beside the new
+    stamp - in the CSV stamp, the report and the manifest - so existing run folders and
+    the documented greps keep matching.
 
 Comparison:
     The baselines (random, ridge, random_forest, alde) and the scoring harness are
@@ -77,16 +95,65 @@ import numpy as np
 # protocol harness and competitor selectors. Importing it does not run it: its CLI is
 # guarded under __main__.
 import benchmark_panoptes_isolated as iso
+from veritas import paths
 
-REPO_ROOT = Path(__file__).resolve().parent
-DEFAULT_OUTPUT_ROOT = REPO_ROOT / "benchmark_e2e_results"
-BENCHMARK_VERSION = "1.0.0"
+# Resolved rather than assumed: `paths` answers with the REAL repository root even when
+# this file is executed from a git worktree, where the gitignored output roots do not
+# exist. `Path(__file__).parent` would silently point a run's artifacts into a worktree
+# that nobody then looks in.
+REPO_ROOT = paths.repository_root()
+DEFAULT_OUTPUT_ROOT = paths.results_dir("benchmark_e2e_results", must_exist=False)
+BENCHMARK_VERSION = "1.1.0"
 
 logger = logging.getLogger("panoptes_e2e_benchmark")
 
 
 class E2EError(RuntimeError):
     """Actionable configuration or execution failure in the end-to-end benchmark."""
+
+
+# ==============================================================================================
+# Label provenance: one vocabulary, taken from the harness rather than restated
+# ==============================================================================================
+# `LabelProvenance` is read from benchmark_panoptes_isolated, which this file already
+# imports for its dataset loading, evaluator and protocol. One definition, one mapping,
+# one stamp format. It is deliberately NOT a `str` subclass, so the comparison this file
+# used to make - `provenance_status == "UNVERIFIED_INCLUDES_IMPUTED"` - is now a type
+# error waiting to happen rather than a quietly false branch.
+LabelProvenance = iso.LabelProvenance
+
+
+def resolved_provenance(universe: "iso.Universe") -> "iso.LabelProvenance":
+    """The run's label provenance as an enum member, never as a bare string."""
+    return iso.map_legacy_provenance_status(universe.provenance_status)
+
+
+def provenance_stamp(universe: "iso.Universe") -> str:
+    """
+    The one-line stamp written into every CSV and the report.
+
+    Identical in format to the isolated harness's: the explicit vocabulary leads and the
+    legacy string follows, so documented greps for `UNVERIFIED_INCLUDES_IMPUTED` keep
+    matching run folders produced by either file.
+    """
+    return iso.provenance_stamp(universe)
+
+
+def label_provenance_block(
+    universe: "iso.Universe",
+    args: argparse.Namespace,
+) -> Dict[str, Any]:
+    """
+    The manifest's provenance claim, built by the harness so both files emit one shape.
+
+    The only thing added here is what the CLI asked for, which the harness leaves for
+    its caller to fill, and the arm's own name - so a reader of this manifest can see
+    that an end-to-end run and an isolated run made the same claim about the same data.
+    """
+    block = dict(iso._label_provenance_block(universe))
+    block["provenance_mode_requested"] = args.provenance_mode
+    block["benchmark"] = "end_to_end"
+    return block
 
 
 # ==============================================================================================
@@ -167,6 +234,45 @@ def derive_library_scope(variant_ids: Sequence[str], wt_sequence: str) -> Librar
         parent_residues=dict(sorted(parents.items())),
         source=f"derived from {inspected:,} dataset variant notations, cross-checked against WT",
     )
+
+
+def check_scope_against_library(scope: LibraryScope, library: Any) -> Dict[str, Any]:
+    """
+    Cross-checks the DERIVED scope against the library's DECLARED design.
+
+    Deriving the scope from the data is what keeps this file free of landscape literals,
+    but a derived scope that mutates a position the library does not declare means the
+    dataset and the library specification are not describing the same experiment, and
+    every downstream filter would then be computed over the wrong sites. That is an
+    error, not a note.
+
+    A derived scope that is a strict SUBSET is reported rather than refused: a sparse
+    pool-restricted library can legitimately leave a declared position wild type in
+    every record it happens to contain.
+    """
+    declared = tuple(int(p) for p in library.positions)
+    derived = tuple(scope.positions)
+    unexpected = sorted(set(derived) - set(declared))
+    if unexpected:
+        raise E2EError(
+            f"the dataset mutates position(s) {unexpected} that library "
+            f"{library.key!r} does not declare (declared: {list(declared)}). The dataset "
+            "and the library specification are not describing the same design; nothing "
+            "downstream can be trusted to filter on the right sites."
+        )
+    absent = sorted(set(declared) - set(derived))
+    if absent:
+        logger.warning(
+            "library %s declares position(s) %s that never vary in the eligible universe",
+            library.key, absent,
+        )
+    return {
+        "library": library.key,
+        "declared_positions": list(declared),
+        "derived_positions": list(derived),
+        "declared_but_never_varying": absent,
+        "derived_source": scope.source,
+    }
 
 
 def notation_from_sequence(wt_sequence: str, sequence: str) -> str:
@@ -663,13 +769,18 @@ def build_seed_context(args: argparse.Namespace) -> SeedContext:
     library = iso.resolve_library(args.library)
     universe = iso.load_universe(
         library=library,
-        dataset_path=Path(args.dataset),
+        dataset_path=paths.explicit_path(args.dataset, what="--dataset", must_be_dir=False),
         provenance_mode=args.provenance_mode,
-        imputed_ids_path=Path(args.imputed_ids) if args.imputed_ids else None,
+        imputed_ids_path=(
+            paths.explicit_path(args.imputed_ids, what="--imputed-ids", must_be_dir=False)
+            if args.imputed_ids else None
+        ),
         max_variants=args.max_variants,
         subsample_seed=args.subsample_seed,
     )
     metadata, wt_sequence, pdb_path, _design = iso._load_panoptes_context(library, pdb=True)
+    scope = derive_library_scope(universe.variant_ids, wt_sequence)
+    check_scope_against_library(scope, library)
     return SeedContext(
         universe=universe,
         evaluator=iso.Evaluator(universe),
@@ -682,7 +793,7 @@ def build_seed_context(args: argparse.Namespace) -> SeedContext:
             batch_size=args.batch_size,
             n_rounds=args.rounds,
         ),
-        scope=derive_library_scope(universe.variant_ids, wt_sequence),
+        scope=scope,
         metadata=metadata,
         wt_sequence=wt_sequence,
         pdb_path=pdb_path,
@@ -853,10 +964,13 @@ def write_report(
     add = lines.append
     rule = "-" * 78
 
+    resolved = resolved_provenance(universe)
     add("PanoptesBio END-TO-END benchmark")
     add("=" * 78)
     add(f"Started (UTC): {started.isoformat()}")
-    add(f"Provenance:    {universe.provenance_status}")
+    # Both vocabularies on the line: the explicit claim, then the legacy stamp that
+    # existing greps and older run folders carry.
+    add(f"Provenance:    {resolved.value} (legacy {universe.provenance_status})")
     add(f"Dataset:       {universe.fingerprint.path}")
     add(f"               sha256 {universe.fingerprint.sha256[:16]}..., "
         f"{len(universe):,} eligible variants")
@@ -919,16 +1033,43 @@ def _limitations(
     production: Dict[str, Any],
 ) -> List[str]:
     items: List[str] = []
-    if universe.provenance_status == "UNVERIFIED_INCLUDES_IMPUTED":
+    # Compared against the enum, never against a bare string. `LabelProvenance` is not a
+    # `str` subclass, so `universe.provenance_status == "UNVERIFIED_INCLUDES_IMPUTED"`
+    # tested one spelling of one of six distinct claims and silently said nothing for
+    # the other five. The legacy string is still quoted inside the message so a reader
+    # of an old report and a reader of this one are looking at the same stamp.
+    resolved = resolved_provenance(universe)
+    legacy = universe.provenance_status
+    if resolved is LabelProvenance.HISTORICAL_UNKNOWN_PROVENANCE:
         # The imputed count belongs to the library that was loaded, which the universe
         # carries. It used to come from a module global that only ever held TrpB's.
         imputed = universe.library.published_imputed_count
         items.append(
-            f"Measurement provenance is UNVERIFIED: up to {imputed} published "
-            "KNN-imputed values may be included in the eligible set."
+            f"Label provenance is {resolved.value} (legacy stamp {legacy}): up to "
+            f"{imputed} published KNN-imputed values may be included in the eligible "
+            "set, and they cannot be located, so no individual label in this run can be "
+            "claimed as measured."
             if imputed else
-            f"Measurement provenance is UNVERIFIED for library "
+            f"Label provenance is {resolved.value} (legacy stamp {legacy}) for library "
             f"{universe.library.key!r}: {universe.library.provenance_note}"
+        )
+    elif resolved is LabelProvenance.SIMULATED_NOISY_OUTCOME:
+        items.append(
+            f"Label provenance is {resolved.value} (legacy stamp {legacy}): the labels "
+            "are generated, not measured. This run validates mechanism only and says "
+            "nothing about biological performance."
+        )
+    elif resolved is LabelProvenance.HISTORICAL_MEASURED:
+        items.append(
+            f"Label provenance is {resolved.value} (legacy stamp {legacy}): the labels "
+            "are retrospective measurements from a published landscape. They support no "
+            "prospective claim; only PROSPECTIVE_PHYSICAL_MEASUREMENT does, and no run "
+            "in this benchmark produces one."
+        )
+    else:
+        items.append(
+            f"Label provenance is {resolved.value} (legacy stamp {legacy}). See "
+            "manifest.label_provenance for what that claim does and does not support."
         )
     if args.dry_run:
         items.append(
@@ -978,6 +1119,129 @@ def _limitations(
             "are unavailable for this run."
         )
     return items
+
+
+# ==============================================================================================
+# Manifest
+# ==============================================================================================
+# Every field a reader needs to identify this run and know what its numbers may be used
+# for. Checked before the manifest is written, so an incomplete record fails the run
+# instead of being discovered by whoever tries to reconstruct the arm months later.
+MANIFEST_REQUIRED_PATHS: Tuple[str, ...] = (
+    "run_id",
+    "benchmark",
+    "benchmark_version",
+    "started_utc",
+    "finished_utc",
+    "library.key",
+    "library.declared_positions",
+    "library_scope.positions",
+    "library_scope.parent_residues",
+    "library_scope.source",
+    "library_scope.declared_vs_derived",
+    "config",
+    "dataset",
+    "label_provenance.status",
+    "label_provenance.legacy_status",
+    "label_provenance.definition",
+    "label_provenance.limitations",
+    "provenance_status",
+    "methods",
+    "summary",
+    "production",
+    "harness_exports",
+    "packages",
+    "repository_state",
+    "environment.repository_root",
+    "environment.in_worktree",
+    "limitations",
+)
+
+
+def build_manifest(
+    *,
+    run_id: str,
+    args: argparse.Namespace,
+    library: Any,
+    universe: "iso.Universe",
+    scope: LibraryScope,
+    scope_check: Dict[str, Any],
+    evaluator: "iso.Evaluator",
+    status: Dict[str, Dict[str, str]],
+    rows: Sequence[Dict[str, Any]],
+    production: Dict[str, Any],
+    production_facts: Sequence[Dict[str, Any]],
+    started: datetime,
+) -> Dict[str, Any]:
+    """
+    The run's machine-readable record, built in one place.
+
+    `provenance_status` is retained at the top level as the LEGACY key, unchanged, so
+    the documented greps and any existing reader keep working; `label_provenance` is the
+    explicit claim beside it. Keeping both is deliberate - the point of the enum is that
+    one opaque stamp stopped standing in for six different claims, not that the old
+    stamp disappears from the record.
+    """
+    return {
+        "run_id": run_id,
+        "benchmark": "end_to_end",
+        "benchmark_version": BENCHMARK_VERSION,
+        "started_utc": started.isoformat(),
+        "finished_utc": datetime.now(timezone.utc).isoformat(),
+        # The library that was resolved from --library and threaded through the run,
+        # recorded so the manifest names its own landscape rather than implying one.
+        "library": {
+            "key": library.key,
+            "label": library.label,
+            "accession": library.accession,
+            "declared_positions": list(library.positions),
+            "parent_residues": library.parent_residues,
+            "selection_mode": library.selection_mode,
+            "source_publication": library.source_publication,
+            "source_doi": library.source_doi,
+        },
+        "library_scope": {
+            "positions": scope.as_sorted(),
+            "parent_residues": {str(k): v for k, v in scope.parent_residues.items()},
+            "source": scope.source,
+            "declared_vs_derived": scope_check,
+        },
+        "config": vars(args),
+        "dataset": universe.fingerprint.to_dict(),
+        # LEGACY key, retained verbatim beside the explicit vocabulary below.
+        "provenance_status": universe.provenance_status,
+        "label_provenance": label_provenance_block(universe, args),
+        "methods": status,
+        "summary": list(rows),
+        "production": production,
+        "harness_exports": evaluator.harness_exports,
+        "packages": iso._package_versions(),
+        "repository_state": iso.repository_state(),
+        # Which roots this process actually resolved, so a later reader can tell whether
+        # the run was executed from a worktree instead of inferring it.
+        "environment": paths.describe_environment(),
+        "per_campaign_ledger": [
+            {"seed": e.get("seed"), **(e.get("ledger") or {})} for e in production_facts
+        ],
+        "limitations": _limitations(args, universe, production),
+    }
+
+
+def validate_manifest(manifest: Dict[str, Any]) -> None:
+    """Refuses a manifest that cannot identify its own run or state its provenance."""
+    missing: List[str] = []
+    for path in MANIFEST_REQUIRED_PATHS:
+        node: Any = manifest
+        for key in path.split("."):
+            if not isinstance(node, dict) or key not in node:
+                missing.append(path)
+                break
+            node = node[key]
+    if missing:
+        raise iso.ManifestIncompleteError(
+            "the end-to-end run manifest is missing required field(s): "
+            + ", ".join(missing)
+        )
 
 
 # ==============================================================================================
@@ -1063,11 +1327,20 @@ def execute(args: argparse.Namespace) -> int:
     logger.info("Run %s -> %s", run_id, out_dir)
 
     library = iso.resolve_library(args.library)
+    # An operator-supplied path is a constraint, not a hint: it resolves or the run
+    # stops here, naming the flag and the value. Nothing is substituted, because a run
+    # that quietly scored a different file than the one named would still report the
+    # named one.
+    dataset_path = paths.explicit_path(args.dataset, what="--dataset", must_be_dir=False)
+    imputed_ids_path = (
+        paths.explicit_path(args.imputed_ids, what="--imputed-ids", must_be_dir=False)
+        if args.imputed_ids else None
+    )
     universe = iso.load_universe(
         library=library,
-        dataset_path=Path(args.dataset),
+        dataset_path=dataset_path,
         provenance_mode=args.provenance_mode,
-        imputed_ids_path=Path(args.imputed_ids) if args.imputed_ids else None,
+        imputed_ids_path=imputed_ids_path,
         max_variants=args.max_variants,
         subsample_seed=args.subsample_seed,
     )
@@ -1075,7 +1348,12 @@ def execute(args: argparse.Namespace) -> int:
 
     metadata, wt_sequence, pdb_path, _design = iso._load_panoptes_context(library, pdb=True)
     scope = derive_library_scope(universe.variant_ids, wt_sequence)
-    logger.info("Derived library scope: %s", scope.as_sorted())
+    # Derived from the data, then checked against what the library declares. A silent
+    # disagreement here would mean every downstream site filter was computed over the
+    # wrong positions.
+    scope_check = check_scope_against_library(scope, library)
+    logger.info("Derived library scope: %s (library %s declares %s)",
+                scope.as_sorted(), library.key, list(library.positions))
 
     view = iso.CandidateView(
         variant_ids=list(universe.variant_ids),
@@ -1173,7 +1451,9 @@ def execute(args: argparse.Namespace) -> int:
     rows = iso.summarise(outcomes, status)
     production = summarise_production(production_facts)
 
-    stamp = f"provenance={universe.provenance_status}"
+    # Explicit vocabulary first, legacy string after it, exactly as the isolated harness
+    # writes it, so a grep that finds one file's run folders finds the other's too.
+    stamp = provenance_stamp(universe)
     iso.write_trace_csv(out_dir / "selection_trace.csv", outcomes, stamp)
     iso.write_round_metrics_csv(out_dir / "round_metrics.csv", outcomes, stamp)
     iso.write_summary_csv(out_dir / "summary.csv", rows, stamp)
@@ -1183,31 +1463,27 @@ def execute(args: argparse.Namespace) -> int:
     )
     print("\n" + report)
 
-    manifest = {
-        "run_id": run_id,
-        "benchmark": "end_to_end",
-        "benchmark_version": BENCHMARK_VERSION,
-        "started_utc": started.isoformat(),
-        "finished_utc": datetime.now(timezone.utc).isoformat(),
-        "library_scope": {
-            "positions": scope.as_sorted(),
-            "parent_residues": {str(k): v for k, v in scope.parent_residues.items()},
-            "source": scope.source,
-        },
-        "config": vars(args),
-        "dataset": universe.fingerprint.to_dict(),
-        "provenance_status": universe.provenance_status,
-        "methods": status,
-        "summary": rows,
-        "production": production,
-        "harness_exports": evaluator.harness_exports,
-        "packages": iso._package_versions(),
-        "repository_state": iso.repository_state(),
-        "per_campaign_ledger": [
-            {"seed": e.get("seed"), **(e.get("ledger") or {})} for e in production_facts
-        ],
-    }
-    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, default=str), encoding="utf-8")
+    manifest = build_manifest(
+        run_id=run_id,
+        args=args,
+        library=library,
+        universe=universe,
+        scope=scope,
+        scope_check=scope_check,
+        evaluator=evaluator,
+        status=status,
+        rows=rows,
+        production=production,
+        production_facts=production_facts,
+        started=started,
+    )
+    validate_manifest(manifest)
+    # No `default=str` fallback: a manifest that needs one is not machine-readable, and a
+    # value that silently stringifies is a value no consumer can parse back. `_json_safe`
+    # is the harness's own converter, so both benchmarks write the same shapes.
+    (out_dir / "manifest.json").write_text(
+        json.dumps(iso._json_safe(manifest), indent=2), encoding="utf-8",
+    )
 
     print(f"Artifacts: {out_dir}")
     failed = [o for o in outcomes if o.status == "failed"]
@@ -1251,6 +1527,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except iso.ProvenanceError as exc:
         print(f"\nPROVENANCE ERROR\n{'=' * 78}\n{exc}\n", file=sys.stderr)
         return 3
+    except paths.PathResolutionError as exc:
+        # Printed rather than raised: the message already names every path that was
+        # checked, and a traceback over the top of it only buries the useful part.
+        print(f"\nPATH ERROR\n{'=' * 78}\n{exc}\n", file=sys.stderr)
+        return 2
     except (E2EError, iso.BenchmarkError) as exc:
         print(f"\nERROR: {exc}\n", file=sys.stderr)
         return 1
