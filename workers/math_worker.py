@@ -1625,6 +1625,7 @@ def select_next_micro_batch(
     aromatic_tolerant_positions: Optional[Set[int]] = None,
     apply_auxiliary_objective_weights: bool = False,
     ablate: Optional[Set[str]] = None,
+    candidate_pool: Optional[Sequence[Variant]] = None,
 ) -> SelectedBatch:
     """
     Executes the Gaussian Process active learning selection (Phases 1-4):
@@ -1794,16 +1795,35 @@ def select_next_micro_batch(
             surrogate.fit(X_train, y_train)
 
     # Step 3: Generate candidate variants (combinatorial exploration + lead recombination)
-    candidates = generate_candidate_variants(
-        strategy,
-        wt_sequence,
-        lead_variants=lead_variants,
-        catalytic_invariants=invariants_set,
-    )
+    #
+    # A caller may instead supply the candidate set directly. That is the pool-restricted
+    # regime: libraries where the measured variants are a sparse sample of the
+    # combinatorial product rather than a saturation of it, so proposing an arbitrary
+    # Hamming neighbour yields a variant nobody has measured and the batch comes up
+    # empty. A supplied pool makes the engine's task ranking a fixed, enumerated design
+    # space - which is also what a real campaign faces once synthesis constraints fix
+    # the orderable library.
+    pool_restricted = candidate_pool is not None
+    if pool_restricted:
+        candidates = list(candidate_pool or ())
+        if not candidates:
+            raise ValueError("candidate_pool was supplied but is empty")
+    else:
+        candidates = generate_candidate_variants(
+            strategy,
+            wt_sequence,
+            lead_variants=lead_variants,
+            catalytic_invariants=invariants_set,
+        )
 
     # Phase 3 / Pillar 3: policy-gradient multi-mutant candidate sampler
     # Enriches candidate pool by sampling discrete trajectories proportional to DKL posterior reward R(x)
     try:
+        if pool_restricted:
+            # Sampling fresh trajectories would propose variants outside the pool, which
+            # are rejected downstream. The pool is the design space; enriching it is not
+            # meaningful here. Ranking, scoring, Pareto and DPP all still run.
+            raise _AblationSkip("pool-restricted: generation replaced by the supplied pool")
         if "gflownet" in ablated:
             raise _AblationSkip("gflownet ablated")
 

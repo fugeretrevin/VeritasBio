@@ -127,6 +127,18 @@ class LibrarySpec:
     published_measured_count: Optional[int]
     published_imputed_count: Optional[int]
     provenance_note: str
+    # When set, only CSV rows whose 'stage' column holds this value enter the universe.
+    # HER2 ships 36,391 rows of which 25,114 are an unlabelled held-out split carrying
+    # DMS_score exactly 0.0 - not a measurement of zero binding but an absent label.
+    # Admitting them would put 69% of the universe at an invented value and make every
+    # quantile meaningless.
+    labelled_stage: Optional[str] = None
+    # Saturated libraries (TrpB, GB1) cover ~93-100% of the combinatorial product, so a
+    # proposed Hamming neighbour is almost always a variant somebody measured. A
+    # pool-restricted library is a sparse sample of its product, so free generation
+    # proposes variants that do not exist and the batch comes up short. The selector is
+    # handed the untested measured variants instead and ranks them.
+    pool_restricted: bool = False
 
 
 LIBRARIES: Dict[str, LibrarySpec] = {
@@ -167,6 +179,30 @@ LIBRARIES: Dict[str, LibrarySpec] = {
             "provenance column. Missing combinations are absent from the eligible "
             "universe rather than imputed into it, but the measured/imputed split of "
             "what IS present is unverified."
+        ),
+    ),
+    "her2": LibrarySpec(
+        key="her2",
+        label="Trastuzumab CDR-H3 ten-site library, HER2 binding (Mason et al. 2021)",
+        dataset=REPO_ROOT / "scripts" / "data" / "HER2_TRASTUZUMAB_Mason_2021.csv",
+        accession="HER2_TRASTUZUMAB",
+        positions=(99, 100, 101, 102, 103, 104, 105, 106, 107, 108),
+        parent_residues="WGGDGFYAMD",
+        structure_pdb=REPO_ROOT / "workers" / "data" / "1N8Z.pdb",
+        published_optimum=None,
+        published_measured_count=11_277,
+        published_imputed_count=0,
+        labelled_stage="train",
+        # 11,277 labelled variants against a 20^10 product: 0.00000001% saturation.
+        # Free generation would propose unmeasured variants essentially every time.
+        pool_restricted=True,
+        provenance_note=(
+            "The prepared CSV carries 36,391 rows across a 'train'/'test' split; the "
+            "25,114 'test' rows all carry DMS_score exactly 0.0, which is an absent "
+            "label rather than a measurement of no binding, so only the 11,277 "
+            "labelled rows enter the eligible universe. Of those, 5,833 (51.7%) sit at "
+            "the assay floor of 0.1 - this library is censored from below, so a large "
+            "mass of ties at the floor is expected and is not a defect."
         ),
     ),
 }
@@ -280,7 +316,9 @@ def _sha256_file(path: Path) -> Tuple[str, int]:
 
 
 def _canonical_variant_id(combo: str) -> str:
-    """Builds position-ordered ProteinGym notation for a 4-residue combo (parent residues dropped)."""
+    """Builds position-ordered ProteinGym notation for a combo over ACTIVE_SITE_POSITIONS
+    (parent residues dropped). The combo has one residue per saturated position, so it is
+    4 characters for TrpB and GB1 and 10 for the HER2 CDR-H3 library."""
     parts = [
         f"{PARENT_RESIDUES[i]}{pos}{combo[i]}"
         for i, pos in enumerate(ACTIVE_SITE_POSITIONS)
@@ -291,8 +329,9 @@ def _canonical_variant_id(combo: str) -> str:
 
 def _combo_from_notation(notation: str) -> Optional[str]:
     """
-    Maps 'V183A:F184I' to the 4-residue combo 'AIVS'. Returns None when the notation touches a
-    position outside the saturated library or disagrees with the parent residue.
+    Maps 'V183A:F184I' to the combo 'AIVS', one residue per position in
+    ACTIVE_SITE_POSITIONS. Returns None when the notation touches a position outside the
+    library or disagrees with the parent residue.
     """
     residues = list(PARENT_RESIDUES)
     if notation in ("", "WT"):
@@ -315,7 +354,8 @@ def _combo_from_notation(notation: str) -> Optional[str]:
 
 
 def _one_hot_matrix(combos: Sequence[str]) -> np.ndarray:
-    """One-hot encodes combos as 4 positions x 20 amino acids = 80 binary features."""
+    """One-hot encodes combos as len(ACTIVE_SITE_POSITIONS) x 20 binary features
+    (80 for the four-site libraries, 200 for the ten-site HER2 library)."""
     matrix = np.zeros((len(combos), len(ACTIVE_SITE_POSITIONS) * len(AA_ALPHABET)), dtype=np.float32)
     for row, combo in enumerate(combos):
         for slot, residue in enumerate(combo):
@@ -418,9 +458,18 @@ def load_universe(
 
     rows: List[Tuple[str, float, Optional[str]]] = []
     provenance_column: Optional[str] = None
+    unlabelled_skipped = 0
+    required_stage = ACTIVE_LIBRARY.labelled_stage
     with open(dataset_path, "r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         fieldnames = [f.strip() for f in (reader.fieldnames or [])]
+        if required_stage is not None and "stage" not in fieldnames:
+            raise BenchmarkError(
+                f"library {ACTIVE_LIBRARY.key!r} requires rows with stage "
+                f"{required_stage!r}, but {dataset_path} has no 'stage' column "
+                f"(found {fieldnames}). Refusing to admit unlabelled rows as "
+                f"measurements."
+            )
         if "mutant" not in fieldnames or "DMS_score" not in fieldnames:
             raise BenchmarkError(
                 f"{dataset_path} does not look like the prepared TrpB benchmark CSV "
@@ -431,6 +480,9 @@ def load_universe(
                 provenance_column = candidate
                 break
         for row in reader:
+            if required_stage is not None and (row.get("stage") or "").strip() != required_stage:
+                unlabelled_skipped += 1
+                continue
             notation = (row.get("mutant") or "").strip()
             raw_score = (row.get("DMS_score") or "").strip()
             if not notation or not raw_score:
@@ -509,6 +561,11 @@ def load_universe(
         combos.append(combo)
         scores.append(score)
 
+    if unlabelled_skipped:
+        logger.warning(
+            "%d record(s) outside stage %r were dropped as unlabelled; the eligible "
+            "universe is the labelled split only.", unlabelled_skipped, required_stage
+        )
     if unmapped:
         logger.warning("%d record(s) did not map onto positions %s and were dropped.", unmapped, list(ACTIVE_SITE_POSITIONS))
     if len(ids) < 1000:
@@ -1187,7 +1244,9 @@ class AldeSelector(Selector):
             "work_dir": str(work_dir),
             "savedir_subdir": str(run_root),
             "data_npz": str(data_npz),
-            "protein": "TrpB_panoptes",
+            # ALDE uses this only to name its own cache and output folders; it must track
+            # the active library or two libraries share one encoded design space on disk.
+            "protein": f"{ACTIVE_LIBRARY.key}_panoptes",
             "seed": self.seed,
             "budget": n_rounds * batch_size,   # excludes the initial sample, per ALDE's convention
             "batch_size": batch_size,
@@ -1780,6 +1839,21 @@ class PanoptesSelector(Selector):
             {"variant_sequence": self._sequence_for(v), "computed_score": float(score)}
             for v, score in revealed.measured.items()
         ]
+        # On a pool-restricted library the design space is the measured variants, so hand
+        # the engine the untested ones instead of letting it generate Hamming neighbours
+        # that nobody assayed. Everything after generation - prior, DKL, Pareto, DPP -
+        # runs unchanged; only the source of candidates differs.
+        candidate_pool = None
+        if ACTIVE_LIBRARY.pool_restricted:
+            from controller.gatekeeper import Variant
+
+            candidate_pool = [Variant(notation=vid) for vid in view.untested(revealed)]
+            if not candidate_pool:
+                raise BenchmarkError(
+                    "pool-restricted library exhausted: every eligible variant is "
+                    "already measured"
+                )
+
         # select_next_micro_batch draws its Thompson sample from numpy's global RNG; seeding it
         # here is a caller-side action that makes the production path reproducible.
         np.random.seed((self.seed * 7919 + round_index) % (2**31 - 1))
@@ -1793,6 +1867,7 @@ class PanoptesSelector(Selector):
             random_seed=(self.seed or 0) * 1000 + round_index,
             apply_auxiliary_objective_weights=self.ablation in ("aux-weighted", "legacy"),
             ablate=self.ablate_components or None,
+            candidate_pool=candidate_pool,
         )
         self.last_batch_predictions = {}
         proposals: List[str] = []
@@ -2434,7 +2509,13 @@ def build_selector_factories(
             status[method] = {"status": "available", "detail": "uniform random, no model"}
         elif method == "ridge":
             factories[method] = lambda seed: RidgeSelector(seed)
-            status[method] = {"status": "available", "detail": "sklearn Ridge(alpha=1.0) on 80 one-hot features"}
+            status[method] = {
+                "status": "available",
+                "detail": (
+                    f"sklearn Ridge(alpha=1.0) on "
+                    f"{len(ACTIVE_SITE_POSITIONS) * len(AA_ALPHABET)} one-hot features"
+                ),
+            }
         elif method == "random_forest":
             factories[method] = lambda seed: RandomForestSelector(seed)
             status[method] = {"status": "available", "detail": "sklearn RandomForestRegressor(n_estimators=300)"}
