@@ -50,7 +50,7 @@ are anchored, not so they are repeated as findings about anything else.
 |---|---|
 | TrpB eligible universe | 159,999 variants; sites 183/184/227/228; parent `VFVS` |
 | GB1 eligible universe | 149,360 variants (prepared CSV); sites 39/40/41/54; parent `VDGV` |
-| HER2 trastuzumab CDR-H3 | 11,277 labelled variants, 10 sites (99–108), against a 20^10 product |
+| HER2 trastuzumab CDR-H3 | 11,277 labelled rows, of which one is a literal `WT`, so the eligible universe of mutants is **11,276** and the assay-floor count **5,832** (not 11,277 and 5,833); 10 sites (99–108), against a 20^10 product — see §6.3 |
 | headline, TrpB held-out seeds | best arm 50.44 top-1% hits against ALDE's 30.42 |
 | GB1 | ridge, random forest, ALDE and frontier statistically indistinguishable |
 | front-loading, 50-measurement budget | 6.3x the best baseline's top-1% hits, t = +25.9 |
@@ -244,8 +244,9 @@ computing them is not a hidden look.
 
 HER2 appeared on the candidate list for the independent set. It cannot be used that way.
 Commit `38e98be` added the pool-restricted selection path to `select_next_micro_batch`
-**because HER2 needed it**: a 10-site library with 11,277 labelled variants against a 20^10
-product makes free generation propose variants nobody measured, so the batch came up short.
+**because HER2 needed it**: a 10-site library with 11,277 labelled rows — 11,276 mutants plus
+a literal `WT`, §1.2 — against a 20^10 product makes free generation propose variants nobody
+measured, so the batch came up short.
 That same commit also decided, by looking at the HER2 file, that the 25,114 `test` rows
 carrying `DMS_score` exactly 0.0 are absent labels and must be excluded.
 
@@ -347,8 +348,15 @@ changes either; what changes is the richness of the shallow shell.
 |---|---|---|
 | top-tier hits at depth 3–4 | ~90–95% | ~90–95% |
 | mean depth of a hit | 3.38 | 3.59 |
-| deep-shell (depth ≥ 3) hit rate | 0.91% | 0.97% |
-| **shallow-shell (depth ≤ 2) hit rate** | **168/2,242 = 7.49%** (7.5x base rate) | **72/2,167 = 3.32%** (3.3x) |
+| deep-shell (depth ≥ 3) hit rate | 1,432/157,757 = **0.9077%** | 1,422/147,193 = **0.9661%** |
+| **shallow-shell (1 ≤ depth ≤ 2) hit rate** | **168/2,242 = 7.4933%** (7.5x base rate) | **72/2,167 = 3.3226%** (3.3x) |
+| hit rate by depth, TrpB | d1 15.79%, d2 7.20%, d3 2.33%, d4 0.608% | — |
+| best variant at depth 4 | 1.0000 | 8.7620 |
+
+Both rows of shell figures have now been computed by **three independent implementations** —
+the original mechanism analysis, a parallel agent's own genotype canonicalisation and shell
+profiler, and `freeze_cross_protein_corpus.py stats` against the frozen corpus — and they
+agree to the digit (§16 O-4).
 | reliability's mean selection depth | 2.63 | 2.56 |
 | baselines' mean selection depth | 3.48–3.60 | 3.48–3.60 |
 | round-1 hits, reliability vs ridge | 10.44 vs 2.69 | 0.94 vs 3.35 |
@@ -376,28 +384,52 @@ reference. Not the number of mutations in the whole protein, and not a sequence 
 only library positions count. This definition is width-independent and applies unchanged to
 a 4-site 20-way library, a 13-site binary library and HER2's 10-site CDR-H3 library.
 
+**Depth 0 — the wild type — is excluded from both shells and retained in the eligible
+universe.** The shells partition the *mutants*: shallow is `1 ≤ depth ≤ cut`, deep is
+`depth > cut`, and the wild-type row belongs to neither while still counting toward the tier
+and the base rate. A wild type is not a search target.
+
+This is stated because it had already produced a one-row divergence between implementations.
+Several datasets carry a literal `WT` row and several do not, so the same definition gives
+different denominators depending on whether depth 0 is swept in:
+
+| | with depth 0 | excluding depth 0 (**adopted**) |
+|---|---|---|
+| GB1 shallow | 72/2,168 = 3.3210% | **72/2,167 = 3.3226%** |
+| GB1 deep | — | **1,422/147,193 = 0.9661%** |
+| TrpB shallow | 168/2,242 (no depth-0 row exists) | **168/2,242 = 7.4933%** — convention is a no-op |
+
+GB1's universe of 149,361 rows splits as 1 + 2,167 + 147,193; its CSV carries a literal `WT`
+row and TrpB's 159,999 does not. The same cause was confirmed independently on HER2, whose
+`train` split carries an explicit `WT` row: its eligible universe is **11,276**, not 11,277,
+and its assay-floor count is **5,832**, not 5,833. The adopted convention reproduces the
+development anchors exactly and is what `freeze_cross_protein_corpus.py` implements. The
+difference is immaterial in size — and two anchors computed under different conventions is
+precisely the drift a freeze exists to prevent, which is why it is written down rather than
+left to whichever implementation runs last.
+
 **The shell cut cannot be a fixed absolute depth, and the reason is resolution, not taste.**
 The candidate libraries are mostly *binary* — one alternative residue per site, not 19 — so
-the depth ≤ 2 shell holds between 59 and 197 variants on them, against 2,242 on TrpB. At a
+the depth ≤ 2 shell holds between 58 and 196 variants on them, against 2,242 on TrpB. At a
 base rate near 1% such a shell yields an expected hit count of one or two, and the enrichment
 estimate is unusable. Measured on the frozen corpus:
 
 | landscape | sites | depth ≤ 2 shell size | hits in it | depth ≤ 2 enrichment (95% CI) | resolvable? |
 |---|---|---|---|---|---|
 | TrpB (dev) | 4 (20-way) | 2,242 | 168 | 7.49x | yes |
-| GB1 (dev) | 4 (20-way) | 2,168 | 72 | 3.32x (2.64–4.16) | yes |
-| eqFP611 blue | 13 (binary) | 92 | 14 | 15.20x (9.28–23.91) | no |
-| eqFP611 combined | 13 (binary) | 92 | 14 | 15.20x (9.28–23.91) | no |
-| eqFP611 red | 13 (binary) | 92 | 0 | 0.00x (0.00–4.00) | no |
-| CreiLOV | 15 (restricted) | 197 | 18 | 9.13x (5.86–13.97) | no |
-| CR9114 H1 | 16 (binary) | 134 | 0 | 0.00x (0.00–2.78) | no |
-| CR6261 H1 | 11 (binary) | 59 | 0 | 0.00x (0.00–3.04) | no |
-| CR6261 H9 | 11 (binary) | 66 | 0 | 0.00x (0.00–2.74) | no |
+| GB1 (dev) | 4 (20-way) | 2,167 | 72 | 3.32x (2.64–4.16) | yes |
+| eqFP611 blue | 13 (binary) | 91 | 13 | 14.27x (8.53–22.90) | no |
+| eqFP611 combined | 13 (binary) | 91 | 13 | 14.27x (8.53–22.90) | no |
+| eqFP611 red | 13 (binary) | 91 | 0 | 0.00x (0.00–4.05) | no |
+| CreiLOV | 15 (restricted) | 196 | 18 | 9.18x (5.89–14.04) | no |
+| CR9114 H1 | 16 (binary) | 133 | 0 | 0.00x (0.00–2.80) | no |
+| CR6261 H1 | 11 (binary) | 58 | 0 | 0.00x (0.00–3.08) | no |
+| CR6261 H9 | 11 (binary) | 65 | 0 | 0.00x (0.00–2.78) | no |
 
 Four of the seven independent landscapes tie at exactly zero with intervals spanning the
 whole plausible range. A rank test on that column is a test on ties.
 
-**Pre-specified primary shell definition: depth ≤ floor(S/2), where S is the number of
+**Pre-specified primary shell definition: 1 ≤ depth ≤ floor(S/2), where S is the number of
 library sites.** On a four-site library floor(4/2) = 2, so it **reproduces the development
 definition exactly** on TrpB and GB1 without redefinition, and it is resolvable on every
 independent target. This is the covariate the primary test of §6.4 uses.
@@ -411,12 +443,13 @@ unresolvable where the shell holds fewer than 500 variants), and depth ≤ round
 the shell cut does not discriminate: specifically when the cut is at or above the maximum
 observed depth, or the shell contains more than 80% of the eligible universe. RhlA fails
 this — its measured variants reach depth 3 only, so a floor(11/2) = 5 cut admits 100% of the
-universe and returns an enrichment of exactly 1.00 by construction. **All three RhlA
-landscapes are therefore excluded from the H1 test**, though they remain usable for every
-other endpoint. HIV-1 protease is a borderline case — its floor(11/2) = 5 shell holds 72.5%
-of the universe and all 59 of its hits — and is flagged rather than excluded; its enrichment
-of 1.38x at the primary cut against 8.85x at depth ≤ 2 is the most severe cut-sensitivity in
-the corpus and must be reported with both values.
+universe and returns an enrichment of 0.98–1.00 — it leaves the deep shell empty, which is
+the degeneracy the guard is for. **All three RhlA landscapes are therefore excluded from the
+H1 test**, though they remain usable for every other endpoint. HIV-1 protease is a borderline
+case — its floor(11/2) = 5 shell holds 72.4% of the universe and 58 of its 59 hits, leaving a
+deep shell with zero — and is flagged rather than excluded; its enrichment of 1.357x at the
+primary cut against 8.71x at depth ≤ 2 is the most severe cut-sensitivity in the corpus and
+must be reported with both values.
 
 **For HER2's 10-site library** the primary cut is floor(10/2) = 5. HER2 is development data
 (§4.2) so this does not enter the test, but the number is fixed here so that it cannot be
@@ -465,39 +498,42 @@ shallow-shell enrichment, with the development anchors shown for scale:
 
 | rank | landscape | level | shell cut | shell size | hits | shell hit rate | enrichment (95% CI) |
 |---|---|---|---|---|---|---|---|
-| — | TrpB | development | ≤2 | 2,242 | 168 | 7.49% | 7.49x |
-| — | GB1 | development | ≤2 | 2,168 | 72 | 3.32% | 3.32x (2.64–4.16) |
-| 1 | `eqfp611_blue` | final test | ≤6 | 4,096 | 77 | 1.880% | **1.880x** (1.51–2.34) |
-| 2 | `creilov` | final test | ≤7 | 62,791 | 1,178 | 1.876% | **1.876x** (1.77–1.98) |
-| 3 | `eqfp611_combined` | final test | ≤6 | 4,096 | 76 | 1.856% | **1.856x** (1.48–2.31) |
-| 4 | `eqfp611_red` | final test | ≤6 | 4,096 | 26 | 0.635% | **0.635x** (0.43–0.93) |
-| 5 | `cr9114_h1` | final test | ≤8 | 32,445 | 202 | 0.623% | **0.623x** (0.54–0.71) |
-| 6 | `cr6261_h1` | final test | ≤5 | 946 | 4 | 0.423% | **0.210x** (0.08–0.54) |
-| 7 | `cr6261_h9` | final test | ≤5 | 918 | 0 | 0.000% | **0.000x** (0.00–0.21) |
+| — | TrpB | development | 1–2 | 2,242 | 168 | 7.4933% | 7.49x |
+| — | GB1 | development | 1–2 | 2,167 | 72 | 3.3226% | 3.32x (2.64–4.16) |
+| 1 | `creilov` | final test | 1–7 | 62,790 | 1,178 | 1.8761% | **1.875x** (1.77–1.98) |
+| 2 | `eqfp611_blue` | final test | 1–6 | 4,095 | 76 | 1.8559% | **1.854x** (1.48–2.31) |
+| 3 | `eqfp611_combined` | final test | 1–6 | 4,095 | 75 | 1.8315% | **1.830x** (1.46–2.29) |
+| 4 | `eqfp611_red` | final test | 1–6 | 4,095 | 26 | 0.6349% | **0.634x** (0.43–0.93) |
+| 5 | `cr9114_h1` | final test | 1–8 | 32,444 | 202 | 0.6226% | **0.622x** (0.54–0.71) |
+| 6 | `cr6261_h1` | final test | 1–5 | 945 | 4 | 0.4233% | **0.210x** (0.08–0.54) |
+| 7 | `cr6261_h9` | final test | 1–5 | 917 | 0 | 0.0000% | **0.000x** (0.00–0.21) |
 
-**Ranks 1–3 are a near-tie and ranks 4–5 are a near-tie,** at 1.880/1.876/1.856 and
-0.635/0.623, with overlapping intervals. The ordering within each cluster is not meaningfully
-resolved and the rank test should be read as separating three groups — {blue, CreiLOV,
-combined} > {red, CR9114} > {CR6261 H1} > {CR6261 H9} — rather than seven distinct levels.
-This is stated now so that a `rho_s` driven by an unresolved within-cluster ordering is not
-reported as a clean monotone result.
+**Ranks 1–3 are a near-tie and ranks 4–5 are a near-tie,** at 1.875/1.854/1.830 and
+0.634/0.622, with heavily overlapping intervals. The ordering within each cluster is not
+meaningfully resolved and the rank test should be read as separating four groups — {CreiLOV,
+blue, combined} > {red, CR9114} > {CR6261 H1} > {CR6261 H9} — rather than seven distinct
+levels. Concretely: adopting the depth-0 convention of §6.3 swapped ranks 1 and 2 (CreiLOV
+1.8753 against blue 1.8541, previously 1.8761 against 1.8799), which is how little separates
+them. This is stated now so that a `rho_s` driven by an unresolved within-cluster ordering is
+not reported as a clean monotone result.
 
 The per-protein rows the primary test uses, from the means of the above:
 
 | protein | landscapes | mean primary enrichment |
 |---|---|---|
-| CreiLOV | 1 | 1.876x |
-| eqFP611 / mTagBFP2 | 3 | 1.457x (spread 0.635–1.880) |
-| CR9114 | 1 | 0.623x |
+| CreiLOV | 1 | 1.875x |
+| eqFP611 / mTagBFP2 | 3 | 1.439x (spread 0.634–1.854) |
+| CR9114 | 1 | 0.622x |
 | CR6261 | 2 | 0.105x (spread 0.000–0.210) |
 
-Four proteins, a strict ordering, no ties.
+Four proteins, a strict ordering, no ties — and, unlike the landscape-level ordering, one
+that is **unchanged** by the depth-0 convention.
 
 **The prediction this forces, stated plainly.** Every independent enrichment measured
 (≤ 1.88x) sits **below GB1's 3.32x**, where reliability already lost to ridge by 22.49 raw
 top-1% hits. H1 therefore predicts that **the current reliability configuration will lose to
 ridge on every independent landscape in this corpus**, most severely on `cr6261_h9` and
-`cr6261_h1`, and least severely on `eqfp611_blue`, `creilov` and `eqfp611_combined`. If
+`cr6261_h1`, and least severely on `creilov`, `eqfp611_blue` and `eqfp611_combined`. If
 reliability instead wins broadly, H1 is wrong and so is the mechanism story behind it — and
 that is a more interesting result than the one predicted.
 
@@ -520,9 +556,9 @@ the test sharper than n = 3 families usually allows:
 
 One caveat on the covariate itself, recorded because it cuts against the clean reading above:
 **CreiLOV's depth profile is shallow-favouring but its primary shell cut hides that.** Its
-hit rate falls from 9.66% at depth 2 to 0.12% at depth 12, yet floor(15/2) = 7 admits 62,791
+hit rate falls from 9.66% at depth 2 to 0.12% at depth 12, yet floor(15/2) = 7 admits 62,790
 variants — 38% of the universe, spanning the whole productive range — so the enrichment comes
-out at 1.88x while the depth ≤ 2 cut gives 9.13x and the depth ≤ 4 cut 4.64x. The primary cut
+out at 1.875x while the depth ≤ 2 cut gives 9.18x and the depth ≤ 4 cut 4.6x. The primary cut
 is the resolvable one, not the most discriminating one, and on wide libraries it compresses
 real structure. This is why the full depth profile is a required published object (§10) and
 why §6.4 falsification condition 4 exists.
@@ -544,9 +580,9 @@ So the H1 test would go from n = 4 to **n = 7 proteins**, where a perfect orderi
 exact one-sided p of 1/5,040 instead of 1/24. That is the real gain, and it is large.
 
 Their covariates are already computed and frozen alongside the others, so promoting them
-later is not a fresh look: HIV-1 protease 1.38x, SaCas9 1.59x, SpCas9 2.59x, RhlA undefined.
-Note that SpCas9's 2.59x is the highest independent value in the whole corpus and sits
-between GB1's 3.32x and the rest — which is precisely why its 20.9% universe consumption
+later is not a fresh look: HIV-1 protease 1.357x, SaCas9 1.560x, SpCas9 2.500x, RhlA
+undefined. Note that SpCas9's 2.50x is the highest independent value in the whole corpus and
+sits between GB1's 3.32x and the rest — which is precisely why its 20.9% universe consumption
 must not be allowed to carry an H1 result.
 
 ### 6.6 H1's training data
@@ -624,6 +660,44 @@ Consequences, registered in advance:
    TrpB and GB1, so that a development-to-independent comparison differs in the target and
    not in the code path. Those runs are development results.
 3. The pool-restricted path was built in response to HER2, a development target (§4.2).
+
+### 7.4 The cross-protein aggregate is invalid until the anchor runs exist
+
+The mitigation in §7.3 item 2 is a **precondition, not a nice-to-have**. Until the
+pool-restricted development anchors have been measured on TrpB and GB1, any cross-protein
+number confounds two things that moved at once:
+
+- the **target effect** — a different protein, library geometry and shell structure;
+- the **mode effect** — pool-restricted selection with GFlowNet enrichment skipped.
+
+A single difference cannot be attributed to the first while the second is unmeasured. So:
+
+> **No equal-protein-weighted aggregate (§12.2 item 5), no H1 test (§6.4) and no gate decision
+> (§12.4) may be computed or reported before the pool-restricted TrpB and GB1 anchor runs
+> exist.** Per-target, per-arm tables may be produced and circulated in the interim, each
+> carrying the words "pool-restricted; mode effect not yet separated from target effect".
+
+**Anchors.** Those runs are in progress on held-out seeds 48–95, same 25 + 4×25 protocol. The
+GFlowNet-enabled held-out figures they will be differenced against, raw top-1% hits, are
+fixed here so the comparison cannot be re-baselined afterwards:
+
+| landscape | reliability | frontier |
+|---|---|---|
+| TrpB | 45.21 | 40.50 |
+| GB1 | 15.02 | 37.21 |
+
+The mode effect is `pool-restricted − GFlowNet-enabled` on each of those four cells, estimated
+with the seed-clustered contrasts of §11. It is reported **separately and before** any target
+effect, and every cross-protein table states its magnitude in the caption. If the mode effect
+on either development landscape is itself larger than the material-regression threshold of
+§12.3, then the pool-restricted configuration is a different method from the one the
+development results describe, and the write-up must say so rather than treating the two as
+one engine.
+
+Note what the GB1 column already shows: reliability 15.02 against frontier 37.21. The two
+VeritasBio modes are not close to each other on GB1 even before the mode effect is measured,
+which is a further reason the two arms are reported separately throughout and never merged
+into "the engine".
 
 ---
 
@@ -1163,8 +1237,12 @@ of order.
 4. Run the budget-25 identity check (§8.1) on every target. A failure voids the run.
 5. Run the development-level plumbing cross-check on GB1 (§4.3).
 6. Run all arms on all targets, both budget schedules, 48 seeds. Capture §10 rows.
-7. Analyse per §11, report per §12, with no changes to §§2, 6, 8, 9, 11 or 12.
-8. Only then consider §13.
+7. **Measure the pool-restricted TrpB and GB1 anchors** (§7.4) and report the mode effect. In
+   progress on seeds 48–95. Steps 8 and 9 are blocked until this exists.
+8. Analyse per §11, report per §12, with no changes to §§2, 6, 8, 9, 11 or 12.
+9. Only then consider §13.
+
+Steps 6 and 7 are independent of each other and may run concurrently.
 
 ---
 
@@ -1175,10 +1253,10 @@ of order.
 | O-1 | ~~`CreiLOV_clean.xlsx` not fully retrieved.~~ **Resolved on 2026-10-31** before the freeze: all 20 pinned files fetched, verified against the commit tree and characterised. Nothing in §§3.4, 5.1, 6.5, 9.1, 9.3 or 9.4 is outstanding. | none |
 | O-2 | **RhlA's library is measured only to depth 3** of its 11 sites (2,346 of 663,552 variants, 0.35% saturation), so the shallow-shell covariate is undefined there under the §6.3 degeneracy guard and no cut can be made to discriminate. An earlier draft of this document recorded RhlA as blocked for the primary endpoint; that was wrong — its `genotype` column is fixed-width (D-6) and the endpoint computes. | RhlA is excluded from the H1 test only. Its other endpoints are reported. |
 | O-3 | **ALDE compatibility on this corpus is unprobed.** The binary per-site alphabets and the 121-/1,053-residue genotype representations are not the saturated-site encoding its published code assumes. | Likely absent cells, to be documented per §7.2 rather than substituted. |
-| O-4 | **TrpB's shallow-shell figures (168/2,242 = 7.49%) were not recomputed here.** They are carried from the mechanism analysis. GB1's were independently reproduced by `freeze_cross_protein_corpus.py stats` against the frozen corpus — 72/2,168 = 3.3210% and a mean hit depth of 3.59, against the reported 72/2,167 = 3.32% and 3.59 — which validates the method but not TrpB's number. | Recompute TrpB's with the same code path before the H1 test is run, so both anchors come from one implementation. |
+| O-4 | ~~TrpB's shallow-shell figures were not recomputed here.~~ **Resolved on 2026-10-31.** TrpB has now been reproduced by a **second, independent implementation** — a parallel agent's own genotype canonicalisation and shell profiler, run against the real landscape files — giving shallow 168/2,242 = **7.4933%**, deep 1,432/157,757 = **0.9077%**, per-depth 15.79% / 7.20% / 2.33% / 0.608% at depths 1–4 and a depth-4 maximum of 1.0000. The same implementation gives GB1 shallow 72/2,167 = **3.3226%**, deep 1,422/147,193 = **0.9661%**, depth-4 maximum 8.7620. `freeze_cross_protein_corpus.py stats` reproduces GB1's figures **exactly** under the §6.3 depth-0 convention. Both anchors now come from agreeing implementations; the earlier 2,168 / 3.3210% was the depth-0 convention difference and nothing else. | none |
 | O-5 | **The upstream corpus has seven recorded discrepancies or inconsistencies** (§3.6, D-1 to D-7), two of them unexplained one-row differences and one — SpCas9, 948 claimed against 597 usable — a factor of 1.6. | The clean file wins where they disagree; D-5 means RhlA's provenance is unestablished. |
 | O-6 | **The H1 test is underpowered at the present corpus size** (§6.4): with n = 4 proteins the smallest attainable exact one-sided p is 0.042, so only a perfect ordering can reach alpha. Three of the seven landscape-level enrichments are also a near-tie (§6.5). | A non-significant result is uninformative. Expanding to the reserve proteins (§6.5) is the only fix, and it has its own caveats. |
-| O-7 | **Whether the pool-restricted path changes the engine's behaviour enough to invalidate comparison with the development results is unknown** (§7.3). The mitigation — running TrpB and GB1 pool-restricted too — has not been run. | Until it is, development-to-independent comparisons confound the target with the code path. |
+| O-7 | **The size of the mode effect is still unknown** (§7.3). The mitigation — running reliability and frontier pool-restricted on TrpB and GB1 — is **now in progress on held-out seeds 48–95**, against the fixed GFlowNet-enabled anchors of §7.4 (TrpB 45.21 / 40.50, GB1 15.02 / 37.21). | Until those runs land, the aggregate, the H1 test and the gate decision are all blocked by §7.4. |
 | O-8 | **No wet-lab validation of anything here.** Every figure is a retrospective simulation over a fully-measured library. | Nothing in this study is evidence about a real campaign. |
 
 ---
@@ -1191,6 +1269,9 @@ written after cross-protein results have been examined must say so in its first 
 | date | section | change | reason |
 |---|---|---|---|
 | 2026-10-31 | — | initial freeze: corpus pinned and verified (20/20 files), covariates and ceilings computed for all 7 final-test and 6 reserve landscapes, H1 and the §13 intervention registered | — |
+| 2026-10-31 | §6.3 | fixed the depth-0 convention: the wild type is retained in the eligible universe and the tier, excluded from both shells. All shell figures recomputed under it; landscape-level ranks 1 and 2 swapped (CreiLOV now above eqFP611 blue), the per-protein ordering unchanged | two implementations had disagreed by one row on GB1 (2,167 vs 2,168), the cause being a literal `WT` row; convention drift between implementations is what the freeze exists to prevent |
+| 2026-10-31 | §16 O-4 | closed: TrpB's shell figures reproduced by a second independent implementation; both development anchors now agree | the gap flagged at the initial freeze was closed by parallel work, not by this document |
+| 2026-10-31 | §7.4 | added: the cross-protein aggregate, the H1 test and the gate decision are blocked until the pool-restricted TrpB/GB1 anchor runs exist, and the mode effect must be attributed separately from the target effect | the §7.3 confound needed an enforceable precondition, not just a note; the anchor runs are now in progress on seeds 48–95 |
 
 No cross-protein arm had been run and no cross-protein performance figure had been examined
 when this table was written.

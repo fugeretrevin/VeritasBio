@@ -27,8 +27,9 @@
       2,
       3
     ],
-    "shallow_shell_primary": "depth <= floor(sites/2)",
-    "min_shell_for_absolute_cut": 500
+    "shallow_shell_primary": "1 <= depth <= floor(sites/2)",
+    "min_shell_for_absolute_cut": 500,
+    "depth0": "wild type retained in the eligible universe and the tier; excluded from both the shallow and the deep shell"
   },
   "landscapes": {
     "eqfp611_blue": {
@@ -225,56 +226,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 6,
-        "shell_variants": 4096,
-        "shell_hits": 77,
-        "shell_hit_rate": 0.018798828125,
-        "enrichment_vs_base_rate": 1.8780487804878048,
+        "shell_variants": 4095,
+        "shell_hits": 76,
+        "shell_hit_rate": 0.01855921855921856,
+        "enrichment_vs_base_rate": 1.8541112004526639,
         "wilson95_hit_rate": [
-          0.015068047412271846,
-          0.023431358104829648
+          0.014854157131156603,
+          0.023166698382447493
         ],
         "enrichment_wilson95": [
-          1.5053346878211094,
-          2.340849824326396
+          1.483966527054084,
+          2.314409672548901
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 4096,
+        "deep_hits": 5,
+        "deep_hit_rate": 0.001220703125,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 92,
-        "shell_hits": 14,
-        "shell_hit_rate": 0.15217391304347827,
-        "enrichment_vs_base_rate": 15.20254506892895,
+        "shell_variants": 91,
+        "shell_hits": 13,
+        "shell_hit_rate": 0.14285714285714285,
+        "enrichment_vs_base_rate": 14.27177700348432,
         "wilson95_hit_rate": [
-          0.09286540233783813,
-          0.23936512976135593
+          0.08542758101829259,
+          0.22921813651169295
         ],
         "enrichment_wilson95": [
-          9.277480194531341,
-          23.91316028054912
+          8.534423703681133,
+          22.899450906143766
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 8100,
+        "deep_hits": 68,
+        "deep_hit_rate": 0.008395061728395062,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 3,
-        "shell_variants": 378,
-        "shell_hits": 34,
-        "shell_hit_rate": 0.08994708994708994,
-        "enrichment_vs_base_rate": 8.985933668860497,
+        "shell_variants": 377,
+        "shell_hits": 33,
+        "shell_hit_rate": 0.08753315649867374,
+        "enrichment_vs_base_rate": 8.744775829721162,
         "wilson95_hit_rate": [
-          0.06508057238052181,
-          0.12306415944554616
+          0.06300649821500968,
+          0.12038072828719946
         ],
         "enrichment_wilson95": [
-          6.501707913917496,
-          12.294409685096515
+          6.294502846065358,
+          12.026328367423634
         ],
         "resolvable": false,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 7814,
+        "deep_hits": 48,
+        "deep_hit_rate": 0.006142820578448937,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.010009765625,
       "status": "ok"
@@ -473,56 +485,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 6,
-        "shell_variants": 4096,
+        "shell_variants": 4095,
         "shell_hits": 26,
-        "shell_hit_rate": 0.00634765625,
-        "enrichment_vs_base_rate": 0.6341463414634146,
+        "shell_hit_rate": 0.006349206349206349,
+        "enrichment_vs_base_rate": 0.6343012001548587,
         "wilson95_hit_rate": [
-          0.004335565767430794,
-          0.009284828933522641
+          0.0043366253828755735,
+          0.009287092304545523
         ],
         "enrichment_wilson95": [
-          0.4331335947169886,
-          0.9275770563831399
+          0.43323945288434995,
+          0.9278031726687429
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 4096,
+        "deep_hits": 56,
+        "deep_hit_rate": 0.013671875,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 92,
+        "shell_variants": 91,
         "shell_hits": 0,
         "shell_hit_rate": 0.0,
         "enrichment_vs_base_rate": 0.0,
         "wilson95_hit_rate": [
           0.0,
-          0.04008138989259148
+          0.04050400454197976
         ],
         "enrichment_wilson95": [
           0.0,
-          4.004228609757432
+          4.046448843998759
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 8100,
+        "deep_hits": 82,
+        "deep_hit_rate": 0.010123456790123457,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 3,
-        "shell_variants": 378,
+        "shell_variants": 377,
         "shell_hits": 0,
         "shell_hit_rate": 0.0,
         "enrichment_vs_base_rate": 0.0,
         "wilson95_hit_rate": [
           0.0,
-          0.010060350420173217
+          0.010086766531616873
         ],
         "enrichment_wilson95": [
           0.0,
-          1.0050535444153534
+          1.0076925783781148
         ],
         "resolvable": false,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 7814,
+        "deep_hits": 82,
+        "deep_hit_rate": 0.010493985154850269,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.010009765625,
       "status": "ok"
@@ -721,56 +744,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 6,
-        "shell_variants": 4096,
-        "shell_hits": 76,
-        "shell_hit_rate": 0.0185546875,
-        "enrichment_vs_base_rate": 1.853658536585366,
+        "shell_variants": 4095,
+        "shell_hits": 75,
+        "shell_hit_rate": 0.018315018315018316,
+        "enrichment_vs_base_rate": 1.8297150004467078,
         "wilson95_hit_rate": [
-          0.014850524555966738,
-          0.02316105721964166
+          0.014636763240154872,
+          0.02289614951692557
         ],
         "enrichment_wilson95": [
-          1.483603623932677,
-          2.3138461066256646
+          1.4622483471140086,
+          2.2873811810079787
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 4096,
+        "deep_hits": 6,
+        "deep_hit_rate": 0.00146484375,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 92,
-        "shell_hits": 14,
-        "shell_hit_rate": 0.15217391304347827,
-        "enrichment_vs_base_rate": 15.20254506892895,
+        "shell_variants": 91,
+        "shell_hits": 13,
+        "shell_hit_rate": 0.14285714285714285,
+        "enrichment_vs_base_rate": 14.27177700348432,
         "wilson95_hit_rate": [
-          0.09286540233783813,
-          0.23936512976135593
+          0.08542758101829259,
+          0.22921813651169295
         ],
         "enrichment_wilson95": [
-          9.277480194531341,
-          23.91316028054912
+          8.534423703681133,
+          22.899450906143766
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 8100,
+        "deep_hits": 68,
+        "deep_hit_rate": 0.008395061728395062,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 3,
-        "shell_variants": 378,
-        "shell_hits": 34,
-        "shell_hit_rate": 0.08994708994708994,
-        "enrichment_vs_base_rate": 8.985933668860497,
+        "shell_variants": 377,
+        "shell_hits": 33,
+        "shell_hit_rate": 0.08753315649867374,
+        "enrichment_vs_base_rate": 8.744775829721162,
         "wilson95_hit_rate": [
-          0.06508057238052181,
-          0.12306415944554616
+          0.06300649821500968,
+          0.12038072828719946
         ],
         "enrichment_wilson95": [
-          6.501707913917496,
-          12.294409685096515
+          6.294502846065358,
+          12.026328367423634
         ],
         "resolvable": false,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 7814,
+        "deep_hits": 48,
+        "deep_hit_rate": 0.006142820578448937,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.010009765625,
       "status": "ok"
@@ -987,56 +1021,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 7,
-        "shell_variants": 62791,
+        "shell_variants": 62790,
         "shell_hits": 1178,
-        "shell_hit_rate": 0.0187606504116832,
-        "enrichment_vs_base_rate": 1.875248867857359,
+        "shell_hit_rate": 0.018760949195731805,
+        "enrichment_vs_base_rate": 1.875278733263759,
         "wilson95_hit_rate": [
-          0.01772848111767842,
-          0.019851699101847163
+          0.01772876360751653,
+          0.019852015081211552
         ],
         "enrichment_wilson95": [
-          1.7720768424986741,
-          1.9843062713114035
+          1.7721050791928972,
+          1.984337855501308
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 102637,
+        "deep_hits": 477,
+        "deep_hit_rate": 0.004647446827167591,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 197,
+        "shell_variants": 196,
         "shell_hits": 18,
-        "shell_hit_rate": 0.09137055837563451,
-        "enrichment_vs_base_rate": 9.133080804208138,
+        "shell_hit_rate": 0.09183673469387756,
+        "enrichment_vs_base_rate": 9.179678155250016,
         "wilson95_hit_rate": [
-          0.058578052486517686,
-          0.139794629644036
+          0.058881064917446664,
+          0.14048426750319715
         ],
         "enrichment_wilson95": [
-          5.8552568379091525,
-          13.973381264503677
+          5.885544898588138,
+          14.042315048047673
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 165231,
+        "deep_hits": 1637,
+        "deep_hit_rate": 0.009907341842632436,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 4,
-        "shell_variants": 4740,
+        "shell_variants": 4739,
         "shell_hits": 220,
-        "shell_hit_rate": 0.046413502109704644,
-        "enrichment_vs_base_rate": 4.639331013295601,
+        "shell_hit_rate": 0.04642329605401983,
+        "enrichment_vs_base_rate": 4.640309981646159,
         "wilson95_hit_rate": [
-          0.040782880623697504,
-          0.05277873241257876
+          0.040791510119719744,
+          0.0527898298279128
         ],
         "enrichment_wilson95": [
-          4.07651382224594,
-          5.275577127219383
+          4.077376396425981,
+          5.27668638596493
         ],
         "resolvable": true,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 160688,
+        "deep_hits": 1435,
+        "deep_hit_rate": 0.008930349497162203,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.01000435234664023,
       "status": "ok"
@@ -1253,56 +1298,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 8,
-        "shell_variants": 32445,
+        "shell_variants": 32444,
         "shell_hits": 202,
-        "shell_hit_rate": 0.006225920789027585,
-        "enrichment_vs_base_rate": 0.621840894185882,
+        "shell_hit_rate": 0.006226112686475157,
+        "enrichment_vs_base_rate": 0.6218600607773684,
         "wilson95_hit_rate": [
-          0.005426539253017148,
-          0.007142213298537174
+          0.0054267065742858835,
+          0.007142433329769761
         ],
         "enrichment_wilson95": [
-          0.5419991894818211,
-          0.7133595904168796
+          0.5420159014206479,
+          0.7133815669924026
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 16396,
+        "deep_hits": 287,
+        "deep_hit_rate": 0.0175042693339839,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 134,
+        "shell_variants": 133,
         "shell_hits": 0,
         "shell_hit_rate": 0.0,
         "enrichment_vs_base_rate": 0.0,
         "wilson95_hit_rate": [
           0.0,
-          0.027868675451295993
+          0.028072332118501443
         ],
         "enrichment_wilson95": [
           0.0,
-          2.7835050669054144
+          2.803846161553638
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 48707,
+        "deep_hits": 489,
+        "deep_hit_rate": 0.010039624694602418,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 4,
-        "shell_variants": 2378,
+        "shell_variants": 2377,
         "shell_hits": 4,
-        "shell_hit_rate": 0.001682085786375105,
-        "enrichment_vs_base_rate": 0.16800562759171064,
+        "shell_hit_rate": 0.0016827934371055953,
+        "enrichment_vs_base_rate": 0.1680763072835877,
         "wilson95_hit_rate": [
-          0.0006543187001163333,
-          0.004317237587621516
+          0.0006545940502592051,
+          0.004319050388400745
         ],
         "enrichment_wilson95": [
-          0.06535292358360294,
-          0.43120286506548566
+          0.06538042537568474,
+          0.43138392642102413
         ],
         "resolvable": true,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 46463,
+        "deep_hits": 485,
+        "deep_hit_rate": 0.010438413361169102,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.010012080014741713,
       "status": "ok"
@@ -1483,56 +1539,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 5,
-        "shell_variants": 946,
+        "shell_variants": 945,
         "shell_hits": 4,
-        "shell_hit_rate": 0.004228329809725159,
-        "enrichment_vs_base_rate": 0.20996995660398354,
+        "shell_hit_rate": 0.004232804232804233,
+        "enrichment_vs_base_rate": 0.2101921470342523,
         "wilson95_hit_rate": [
-          0.001645506437955328,
-          0.010821267643734716
+          0.001647248978851737,
+          0.01083266404608852
         ],
         "enrichment_wilson95": [
-          0.08171238548478167,
-          0.5373613695717738
+          0.08179891639719021,
+          0.5379272909202378
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 941,
+        "deep_hits": 34,
+        "deep_hit_rate": 0.036131774707757705,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 59,
+        "shell_variants": 58,
         "shell_hits": 0,
         "shell_hit_rate": 0.0,
         "enrichment_vs_base_rate": 0.0,
         "wilson95_hit_rate": [
           0.0,
-          0.06112937143219893
+          0.06211785670628563
         ],
         "enrichment_wilson95": [
           0.0,
-          3.0355558919094574
+          3.0846419895989734
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 1828,
+        "deep_hits": 38,
+        "deep_hit_rate": 0.020787746170678335,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 3,
-        "shell_variants": 208,
+        "shell_variants": 207,
         "shell_hits": 0,
         "shell_hit_rate": 0.0,
         "enrichment_vs_base_rate": 0.0,
         "wilson95_hit_rate": [
           0.0,
-          0.01813365004934439
+          0.018219656142005478
         ],
         "enrichment_wilson95": [
           0.0,
-          0.9004788853450754
+          0.9047497668411667
         ],
         "resolvable": false,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 1679,
+        "deep_hits": 38,
+        "deep_hit_rate": 0.022632519356759976,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.020137784843667197,
       "status": "ok"
@@ -1713,56 +1780,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 5,
-        "shell_variants": 918,
+        "shell_variants": 917,
         "shell_hits": 0,
         "shell_hit_rate": 0.0,
         "enrichment_vs_base_rate": 0.0,
         "wilson95_hit_rate": [
           0.0,
-          0.004167157860265708
+          0.004171683240633929
         ],
         "enrichment_wilson95": [
           0.0,
-          0.2074568859083631
+          0.207682176466154
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 924,
+        "deep_hits": 37,
+        "deep_hit_rate": 0.04004329004329004,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 66,
+        "shell_variants": 65,
         "shell_hits": 0,
         "shell_hit_rate": 0.0,
         "enrichment_vs_base_rate": 0.0,
         "wilson95_hit_rate": [
           0.0,
-          0.05500255783352154
+          0.05580153215404492
         ],
         "enrichment_wilson95": [
           0.0,
-          2.7382354467390995
+          2.778011411560831
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 1776,
+        "deep_hits": 37,
+        "deep_hit_rate": 0.020833333333333332,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 3,
-        "shell_variants": 217,
+        "shell_variants": 216,
         "shell_hits": 0,
         "shell_hit_rate": 0.0,
         "enrichment_vs_base_rate": 0.0,
         "wilson95_hit_rate": [
           0.0,
-          0.017394645465373483
+          0.017473769055409184
         ],
         "enrichment_wilson95": [
           0.0,
-          0.8659712688437285
+          0.8699103405422627
         ],
         "resolvable": false,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 1625,
+        "deep_hits": 37,
+        "deep_hit_rate": 0.02276923076923077,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.02008686210640608,
       "status": "ok"
@@ -1925,56 +2003,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 5,
-        "shell_variants": 852,
-        "shell_hits": 59,
-        "shell_hit_rate": 0.06924882629107981,
-        "enrichment_vs_base_rate": 1.3791079812206573,
+        "shell_variants": 851,
+        "shell_hits": 58,
+        "shell_hit_rate": 0.0681551116333725,
+        "enrichment_vs_base_rate": 1.3573263757493674,
         "wilson95_hit_rate": [
-          0.05406389399736404,
-          0.08830062646015123
+          0.05309086650478789,
+          0.08710057792764375
         ],
         "enrichment_wilson95": [
-          1.0766961940153008,
-          1.7585294252657235
+          1.0573181041207758,
+          1.7346301536437527
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 323,
+        "deep_hits": 0,
+        "deep_hit_rate": 0.0,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 81,
-        "shell_hits": 36,
-        "shell_hit_rate": 0.4444444444444444,
-        "enrichment_vs_base_rate": 8.851224105461393,
+        "shell_variants": 80,
+        "shell_hits": 35,
+        "shell_hit_rate": 0.4375,
+        "enrichment_vs_base_rate": 8.712923728813559,
         "wilson95_hit_rate": [
-          0.3411955242755319,
-          0.5527242630705089
+          0.33413860840446424,
+          0.5465886578736887
         ],
         "enrichment_wilson95": [
-          6.794995610572034,
-          11.007644222166915
+          6.654455336868567,
+          10.885452084772615
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 1094,
+        "deep_hits": 23,
+        "deep_hit_rate": 0.02102376599634369,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 3,
-        "shell_variants": 257,
-        "shell_hits": 57,
-        "shell_hit_rate": 0.22178988326848248,
-        "enrichment_vs_base_rate": 4.417001912550287,
+        "shell_variants": 256,
+        "shell_hits": 56,
+        "shell_hit_rate": 0.21875,
+        "enrichment_vs_base_rate": 4.356461864406779,
         "wilson95_hit_rate": [
-          0.17530367993431067,
-          0.27647058703497285
+          0.1724715974899328,
+          0.27334432187887026
         ],
         "enrichment_wilson95": [
-          3.4912173546239837,
-          5.505982029933781
+          3.4348157127232377,
+          5.443721664536823
         ],
         "resolvable": false,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 918,
+        "deep_hits": 2,
+        "deep_hit_rate": 0.002178649237472767,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.05021276595744681,
       "status": "ok"
@@ -2083,56 +2172,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 5,
-        "shell_variants": 2346,
-        "shell_hits": 47,
-        "shell_hit_rate": 0.020034100596760442,
-        "enrichment_vs_base_rate": 1.0,
+        "shell_variants": 2345,
+        "shell_hits": 46,
+        "shell_hit_rate": 0.019616204690831557,
+        "enrichment_vs_base_rate": 0.979140770312571,
         "wilson95_hit_rate": [
-          0.015099406569195135,
-          0.02653806582771968
+          0.014738851833645983,
+          0.02606486376789286
         ],
         "enrichment_wilson95": [
-          0.7536852725815274,
-          1.3246447325921356
+          0.7356882213134782,
+          1.3010249021165246
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 0,
+        "deep_hits": 0,
+        "deep_hit_rate": null,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 387,
-        "shell_hits": 34,
-        "shell_hit_rate": 0.08785529715762273,
-        "enrichment_vs_base_rate": 4.385287811314531,
+        "shell_variants": 386,
+        "shell_hits": 33,
+        "shell_hit_rate": 0.08549222797927461,
+        "enrichment_vs_base_rate": 4.267335464667622,
         "wilson95_hit_rate": [
-          0.0635503918003543,
-          0.12026188616761646
+          0.06152155415273537,
+          0.11763193835089862
         ],
         "enrichment_wilson95": [
-          3.172111046034706,
-          6.002859254238898
+          3.0708418306875997,
+          5.87158568874911
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 1959,
+        "deep_hits": 13,
+        "deep_hit_rate": 0.006636038795303726,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 3,
-        "shell_variants": 2346,
-        "shell_hits": 47,
-        "shell_hit_rate": 0.020034100596760442,
-        "enrichment_vs_base_rate": 1.0,
+        "shell_variants": 2345,
+        "shell_hits": 46,
+        "shell_hit_rate": 0.019616204690831557,
+        "enrichment_vs_base_rate": 0.979140770312571,
         "wilson95_hit_rate": [
-          0.015099406569195135,
-          0.02653806582771968
+          0.014738851833645983,
+          0.02606486376789286
         ],
         "enrichment_wilson95": [
-          0.7536852725815274,
-          1.3246447325921356
+          0.7356882213134782,
+          1.3010249021165246
         ],
         "resolvable": true,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 0,
+        "deep_hits": 0,
+        "deep_hit_rate": null,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.020034100596760442,
       "status": "ok"
@@ -2241,56 +2341,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 5,
-        "shell_variants": 2346,
+        "shell_variants": 2345,
         "shell_hits": 47,
-        "shell_hit_rate": 0.020034100596760442,
-        "enrichment_vs_base_rate": 1.0,
+        "shell_hit_rate": 0.020042643923240937,
+        "enrichment_vs_base_rate": 1.0004264392324094,
         "wilson95_hit_rate": [
-          0.015099406569195135,
-          0.02653806582771968
+          0.015105859449537835,
+          0.026549339759988987
         ],
         "enrichment_wilson95": [
-          0.7536852725815274,
-          1.3246447325921356
+          0.7540073674173566,
+          1.3252074697220035
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 0,
+        "deep_hits": 0,
+        "deep_hit_rate": null,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 387,
+        "shell_variants": 386,
         "shell_hits": 5,
-        "shell_hit_rate": 0.012919896640826873,
-        "enrichment_vs_base_rate": 0.6448952663697839,
+        "shell_hit_rate": 0.012953367875647668,
+        "enrichment_vs_base_rate": 0.6465659794950942,
         "wilson95_hit_rate": [
-          0.005530892918712548,
-          0.0298836174070711
+          0.00554525372547768,
+          0.02996009996629226
         ],
         "enrichment_wilson95": [
-          0.27607393164467314,
-          1.4916375837657192
+          0.2767907497866093,
+          1.495455202572801
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 1959,
+        "deep_hits": 42,
+        "deep_hit_rate": 0.021439509954058193,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 3,
-        "shell_variants": 2346,
+        "shell_variants": 2345,
         "shell_hits": 47,
-        "shell_hit_rate": 0.020034100596760442,
-        "enrichment_vs_base_rate": 1.0,
+        "shell_hit_rate": 0.020042643923240937,
+        "enrichment_vs_base_rate": 1.0004264392324094,
         "wilson95_hit_rate": [
-          0.015099406569195135,
-          0.02653806582771968
+          0.015105859449537835,
+          0.026549339759988987
         ],
         "enrichment_wilson95": [
-          0.7536852725815274,
-          1.3246447325921356
+          0.7540073674173566,
+          1.3252074697220035
         ],
         "resolvable": true,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 0,
+        "deep_hits": 0,
+        "deep_hit_rate": null,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.020034100596760442,
       "status": "ok"
@@ -2399,56 +2510,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 5,
-        "shell_variants": 2346,
+        "shell_variants": 2345,
         "shell_hits": 47,
-        "shell_hit_rate": 0.020034100596760442,
-        "enrichment_vs_base_rate": 1.0,
+        "shell_hit_rate": 0.020042643923240937,
+        "enrichment_vs_base_rate": 1.0004264392324094,
         "wilson95_hit_rate": [
-          0.015099406569195135,
-          0.02653806582771968
+          0.015105859449537835,
+          0.026549339759988987
         ],
         "enrichment_wilson95": [
-          0.7536852725815274,
-          1.3246447325921356
+          0.7540073674173566,
+          1.3252074697220035
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 0,
+        "deep_hits": 0,
+        "deep_hit_rate": null,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 387,
+        "shell_variants": 386,
         "shell_hits": 9,
-        "shell_hit_rate": 0.023255813953488372,
-        "enrichment_vs_base_rate": 1.160811479465611,
+        "shell_hit_rate": 0.023316062176165803,
+        "enrichment_vs_base_rate": 1.1638187630911696,
         "wilson95_hit_rate": [
-          0.012282244589105935,
-          0.04360092334249662
+          0.012314186844239065,
+          0.04371232953494002
         ],
         "enrichment_wilson95": [
-          0.613066932043458,
-          2.176335450244619
+          0.6146613263103159,
+          2.181896278488708
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 1959,
+        "deep_hits": 38,
+        "deep_hit_rate": 0.019397651863195507,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 3,
-        "shell_variants": 2346,
+        "shell_variants": 2345,
         "shell_hits": 47,
-        "shell_hit_rate": 0.020034100596760442,
-        "enrichment_vs_base_rate": 1.0,
+        "shell_hit_rate": 0.020042643923240937,
+        "enrichment_vs_base_rate": 1.0004264392324094,
         "wilson95_hit_rate": [
-          0.015099406569195135,
-          0.02653806582771968
+          0.015105859449537835,
+          0.026549339759988987
         ],
         "enrichment_wilson95": [
-          0.7536852725815274,
-          1.3246447325921356
+          0.7540073674173566,
+          1.3252074697220035
         ],
         "resolvable": true,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 0,
+        "deep_hits": 0,
+        "deep_hit_rate": null,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.020034100596760442,
       "status": "ok"
@@ -2602,56 +2724,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 4,
-        "shell_variants": 576,
-        "shell_hits": 46,
-        "shell_hit_rate": 0.0798611111111111,
-        "enrichment_vs_base_rate": 1.5923076923076922,
+        "shell_variants": 575,
+        "shell_hits": 45,
+        "shell_hit_rate": 0.0782608695652174,
+        "enrichment_vs_base_rate": 1.5604013377926422,
         "wilson95_hit_rate": [
-          0.0604054824544054,
-          0.10488359340126995
+          0.059001573184054634,
+          0.10311787669546796
         ],
         "enrichment_wilson95": [
-          1.2043923886293753,
-          2.091217493046859
+          1.176400597638997,
+          2.0560118184204073
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 720,
+        "deep_hits": 19,
+        "deep_hit_rate": 0.02638888888888889,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 75,
-        "shell_hits": 20,
-        "shell_hit_rate": 0.26666666666666666,
-        "enrichment_vs_base_rate": 5.316923076923077,
+        "shell_variants": 74,
+        "shell_hits": 19,
+        "shell_hit_rate": 0.25675675675675674,
+        "enrichment_vs_base_rate": 5.119334719334719,
         "wilson95_hit_rate": [
-          0.179763135738092,
-          0.37630799109511226
+          0.17097707243139387,
+          0.36654444222960386
         ],
         "enrichment_wilson95": [
-          3.584200367947188,
-          7.5030024070656225
+          3.4090197826320994,
+          7.308332263531794
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 1221,
+        "deep_hits": 45,
+        "deep_hit_rate": 0.036855036855036855,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 2,
-        "shell_variants": 75,
-        "shell_hits": 20,
-        "shell_hit_rate": 0.26666666666666666,
-        "enrichment_vs_base_rate": 5.316923076923077,
+        "shell_variants": 74,
+        "shell_hits": 19,
+        "shell_hit_rate": 0.25675675675675674,
+        "enrichment_vs_base_rate": 5.119334719334719,
         "wilson95_hit_rate": [
-          0.179763135738092,
-          0.37630799109511226
+          0.17097707243139387,
+          0.36654444222960386
         ],
         "enrichment_wilson95": [
-          3.584200367947188,
-          7.5030024070656225
+          3.4090197826320994,
+          7.308332263531794
         ],
         "resolvable": false,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 1221,
+        "deep_hits": 45,
+        "deep_hit_rate": 0.036855036855036855,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.05015432098765432,
       "status": "ok"
@@ -2805,56 +2938,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 4,
-        "shell_variants": 200,
-        "shell_hits": 26,
-        "shell_hit_rate": 0.13,
-        "enrichment_vs_base_rate": 2.5869999999999997,
+        "shell_variants": 199,
+        "shell_hits": 25,
+        "shell_hit_rate": 0.12562814070351758,
+        "enrichment_vs_base_rate": 2.4999999999999996,
         "wilson95_hit_rate": [
-          0.09028202253521181,
-          0.18366351919982074
+          0.08656019049470849,
+          0.17887597417419349
         ],
         "enrichment_wilson95": [
-          1.796612248450715,
-          3.6549040320764328
+          1.722547790844699,
+          3.55963188606645
         ],
         "resolvable": false,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 397,
+        "deep_hits": 4,
+        "deep_hit_rate": 0.010075566750629723,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 31,
-        "shell_hits": 10,
-        "shell_hit_rate": 0.3225806451612903,
-        "enrichment_vs_base_rate": 6.419354838709677,
+        "shell_variants": 30,
+        "shell_hits": 9,
+        "shell_hit_rate": 0.3,
+        "enrichment_vs_base_rate": 5.97,
         "wilson95_hit_rate": [
-          0.18569426482301724,
-          0.49858990830886185
+          0.16664748188562525,
+          0.4787578760189556
         ],
         "enrichment_wilson95": [
-          3.695315869978043,
-          9.92193917534635
+          3.3162848895239425,
+          9.527281732777215
         ],
         "resolvable": false,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 566,
+        "deep_hits": 20,
+        "deep_hit_rate": 0.0353356890459364,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 2,
-        "shell_variants": 31,
-        "shell_hits": 10,
-        "shell_hit_rate": 0.3225806451612903,
-        "enrichment_vs_base_rate": 6.419354838709677,
+        "shell_variants": 30,
+        "shell_hits": 9,
+        "shell_hit_rate": 0.3,
+        "enrichment_vs_base_rate": 5.97,
         "wilson95_hit_rate": [
-          0.18569426482301724,
-          0.49858990830886185
+          0.16664748188562525,
+          0.4787578760189556
         ],
         "enrichment_wilson95": [
-          3.695315869978043,
-          9.92193917534635
+          3.3162848895239425,
+          9.527281732777215
         ],
         "resolvable": false,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 566,
+        "deep_hits": 20,
+        "deep_hit_rate": 0.0353356890459364,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.05025125628140704,
       "status": "ok"
@@ -2972,56 +3116,67 @@
           ]
         }
       },
+      "depth0_rows": 1,
+      "depth0_convention": "wild type retained in the eligible universe and the tier; excluded from both shells",
       "shallow_shell_primary": {
         "depth_cut": 2,
-        "shell_variants": 2168,
+        "shell_variants": 2167,
         "shell_hits": 72,
-        "shell_hit_rate": 0.033210332103321034,
-        "enrichment_vs_base_rate": 3.3201662739518962,
+        "shell_hit_rate": 0.03322565759113982,
+        "enrichment_vs_base_rate": 3.32169842267084,
         "wilson95_hit_rate": [
-          0.026454949508196532,
-          0.04161698929595925
+          0.026467195300364017,
+          0.04163610090141546
         ],
         "enrichment_wilson95": [
-          2.6448043597682345,
-          4.160612542325147
+          2.6460286193157097,
+          4.162523203973437
         ],
         "resolvable": true,
-        "definition": "depth <= floor(sites/2)"
+        "deep_variants": 147193,
+        "deep_hits": 1422,
+        "deep_hit_rate": 0.00966078549931043,
+        "definition": "1 <= depth <= floor(sites/2)"
       },
       "shallow_shell_absolute_d2": {
         "depth_cut": 2,
-        "shell_variants": 2168,
+        "shell_variants": 2167,
         "shell_hits": 72,
-        "shell_hit_rate": 0.033210332103321034,
-        "enrichment_vs_base_rate": 3.3201662739518962,
+        "shell_hit_rate": 0.03322565759113982,
+        "enrichment_vs_base_rate": 3.32169842267084,
         "wilson95_hit_rate": [
-          0.026454949508196532,
-          0.04161698929595925
+          0.026467195300364017,
+          0.04163610090141546
         ],
         "enrichment_wilson95": [
-          2.6448043597682345,
-          4.160612542325147
+          2.6460286193157097,
+          4.162523203973437
         ],
         "resolvable": true,
-        "definition": "depth <= 2 (absolute)"
+        "deep_variants": 147193,
+        "deep_hits": 1422,
+        "deep_hit_rate": 0.00966078549931043,
+        "definition": "1 <= depth <= 2 (absolute)"
       },
       "shallow_shell_quarter": {
         "depth_cut": 1,
-        "shell_variants": 77,
+        "shell_variants": 76,
         "shell_hits": 6,
-        "shell_hit_rate": 0.07792207792207792,
-        "enrichment_vs_base_rate": 7.7901736817399465,
+        "shell_hit_rate": 0.07894736842105263,
+        "enrichment_vs_base_rate": 7.8926759670259985,
         "wilson95_hit_rate": [
-          0.03620095484247757,
-          0.15975615801166937
+          0.03668400501896438,
+          0.16172743564431596
         ],
         "enrichment_wilson95": [
-          3.6191504794024714,
-          15.971445459692736
+          3.6674428873075895,
+          16.168521763902728
         ],
         "resolvable": false,
-        "definition": "depth <= round(sites/4)"
+        "deep_variants": 149284,
+        "deep_hits": 1488,
+        "deep_hit_rate": 0.009967578575064976,
+        "definition": "1 <= depth <= round(sites/4)"
       },
       "base_rate": 0.010002611123385623,
       "status": "ok"

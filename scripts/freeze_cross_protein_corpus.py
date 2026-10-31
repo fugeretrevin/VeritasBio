@@ -517,9 +517,26 @@ def landscape_stats(key: str, spec: Dict[str, Any], corpus_dir: Path) -> Dict[st
 
     base_rate = out["hit_count_ceiling"] / n
 
+    # DEPTH-0 CONVENTION, fixed by the protocol: the wild type is retained in the eligible
+    # universe (it is a measurable variant and it counts toward the tier and the base rate)
+    # but is excluded from BOTH the shallow and the deep shell. The shells partition the
+    # mutants only. A wild type is not a search target, and the development anchors were
+    # computed this way: GB1 shallow n=2,167 and deep n=147,193 sum to 149,360, one short of
+    # its 149,361-row universe, the missing row being its literal `WT`. TrpB's universe of
+    # 159,999 carries no depth-0 row at all, so the convention is a no-op there and its
+    # shallow n=2,242 is unaffected. Including depth 0 instead gave GB1 2,168 and 3.3210%
+    # against the anchors' 2,167 and 3.3226% -- immaterial in size, and exactly the kind of
+    # convention drift between implementations that this freeze exists to prevent.
+    out["depth0_rows"] = sum(1 for d in depths if d == 0)
+    out["depth0_convention"] = (
+        "wild type retained in the eligible universe and the tier; excluded from both shells"
+    )
+
     def shell(cut: int) -> Dict[str, Any]:
-        members = [i for i, d in enumerate(depths) if d <= cut]
+        members = [i for i, d in enumerate(depths) if 1 <= d <= cut]
+        deep = [i for i, d in enumerate(depths) if d > cut]
         hits_here = sum(1 for i in members if i in hit_set)
+        deep_hits = sum(1 for i in deep if i in hit_set)
         low, high = wilson_interval(hits_here, len(members)) if members else (float("nan"), float("nan"))
         return {
             "depth_cut": cut,
@@ -531,15 +548,18 @@ def landscape_stats(key: str, spec: Dict[str, Any], corpus_dir: Path) -> Dict[st
             "wilson95_hit_rate": [low, high],
             "enrichment_wilson95": [low / base_rate, high / base_rate] if base_rate > 0 else None,
             "resolvable": len(members) >= MIN_SHELL_FOR_ABSOLUTE_CUT,
+            "deep_variants": len(deep),
+            "deep_hits": deep_hits,
+            "deep_hit_rate": (deep_hits / len(deep)) if deep else None,
         }
 
     primary_cut = spec["sites"] // 2
     out["shallow_shell_primary"] = shell(primary_cut)
-    out["shallow_shell_primary"]["definition"] = "depth <= floor(sites/2)"
+    out["shallow_shell_primary"]["definition"] = "1 <= depth <= floor(sites/2)"
     out["shallow_shell_absolute_d2"] = shell(2)
-    out["shallow_shell_absolute_d2"]["definition"] = "depth <= 2 (absolute)"
+    out["shallow_shell_absolute_d2"]["definition"] = "1 <= depth <= 2 (absolute)"
     out["shallow_shell_quarter"] = shell(max(1, round(spec["sites"] / 4)))
-    out["shallow_shell_quarter"]["definition"] = "depth <= round(sites/4)"
+    out["shallow_shell_quarter"]["definition"] = "1 <= depth <= round(sites/4)"
     out["base_rate"] = base_rate
     out["status"] = "ok"
     return out
@@ -702,8 +722,10 @@ def cmd_stats(args: argparse.Namespace) -> int:
             "min_tier_members": MIN_TIER_MEMBERS,
             "budgets": list(BUDGETS),
             "diversity_distances": list(DIVERSITY_DISTANCES),
-            "shallow_shell_primary": "depth <= floor(sites/2)",
+            "shallow_shell_primary": "1 <= depth <= floor(sites/2)",
             "min_shell_for_absolute_cut": MIN_SHELL_FOR_ABSOLUTE_CUT,
+            "depth0": "wild type retained in the eligible universe and the tier; "
+                      "excluded from both the shallow and the deep shell",
         },
         "landscapes": results,
     }
