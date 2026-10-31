@@ -1,0 +1,43 @@
+================================================================================================================
+DATA-RESPONSIVENESS TEST - TrpB
+================================================================================================================
+  Every seed starts from a different random 25-variant sample. A policy that
+  conditions on its measurements must therefore pick different candidates.
+  TrpB global_best = 1.0, so terminating at 0.7036 is NOT convergence to the optimum.
+
+  arm                                   camps    bestF      sd   sel   union  jaccard  universal   r1_jac
+  frontier - dkl,gflownet  [SUSPECT]       96   0.7036  0.0000    93     294    0.801      27.0%    0.354
+  frontier - dkl,dpp,gflownet              96   0.7050  0.0148    92     334    0.817       3.3%    0.488
+  frontier  (shipped)                      96   0.7650  0.0978    95    1028    0.374       0.0%    0.242
+  reliability - dkl,gflownet               96   0.7333  0.0230   100     976    0.277       6.0%    0.354
+  reliability  (shipped)                   48   0.7515  0.0331   100    1052    0.199       4.0%    0.287
+  ridge      [control]                     48   0.6993  0.2280   100    4028    0.005       0.0%    0.000
+  random     [floor]                       48   0.4118  0.1798   100    4728    0.000       0.0%    0.000
+
+  sel       = variants selected per campaign (excludes the 25 initial)
+  union     = distinct variants any campaign ever selected, across all seeds
+  jaccard   = mean pairwise overlap of selected sets (1.000 = all identical)
+  universal = share of a campaign's picks that EVERY campaign also made
+  r1_jac    = overlap of the round-1 batch, the first decision after seeing data
+
+----------------------------------------------------------------------------------------------------------------
+CONTROL: do the initial samples actually differ?
+----------------------------------------------------------------------------------------------------------------
+  frontier - dkl,gflownet  [SUSPECT]   initial-sample jaccard = 0.0001   (near 0 means each seed starts from genuinely different data)
+  reliability - dkl,gflownet           initial-sample jaccard = 0.0001   (near 0 means each seed starts from genuinely different data)
+
+----------------------------------------------------------------------------------------------------------------
+WHAT IS 0.7036?
+----------------------------------------------------------------------------------------------------------------
+  1 variant(s) in the landscape with fitness in [0.7035, 0.7037]:
+    V183S:F184L   0.703612
+
+  'V183S:F184L' selected in 96 of 96 suspect campaigns
+
+----------------------------------------------------------------------------------------------------------------
+VERDICT INPUTS
+----------------------------------------------------------------------------------------------------------------
+  suspect : 96 campaigns, 93 picks each, union 294 distinct  -> 3.17x one campaign
+  healthy : 96 campaigns, 100 picks each, union 976 distinct  -> 9.76x one campaign
+  A policy whose union barely exceeds a single campaign is re-deriving the same
+  batch regardless of what it measured.

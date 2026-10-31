@@ -1,0 +1,38 @@
+
+========================================================================================================
+HELD-OUT CONFIRMATION — 'remove dkl,gflownet', seeds 48-95 (never seen during the scan)
+========================================================================================================
+  landscape     shipped    minus   delta      t      95% bootstrap CI  median d  won/lost
+  GB1             15.02    26.85  +11.83   5.75       [+7.79, +15.73]     +12.0      38/8
+  TRPB            45.21    50.44   +5.23   5.57        [+3.38, +7.04]      +6.0     37/10
+
+  Dev seeds 0-47 gave GB1 +10.08 (t=5.93) and TrpB +5.35 (t=5.69). If the held-out
+  deltas are close to those, the choice was not an artefact of scanning 32 subsets.
+
+========================================================================================================
+EXTREME TAIL, WITH INTERVALS — P(reach top 0.01% of the eligible universe)
+========================================================================================================
+  Clopper-Pearson exact 95% intervals on 48 campaigns. k is the raw number of
+  campaigns that got there; the point estimates alone are misleadingly precise.
+
+  GB1  threshold 6.4459  (15 of 149,360 variants are at or above it)
+    arm                                    k/n    rate        exact 95% CI
+    random                                0/48      0%            [0%, 7%]
+    ridge                                24/48     50%          [35%, 65%]
+    random_forest                        16/48     33%          [20%, 48%]
+    alde                                 26/48     54%          [39%, 69%]
+    panoptes_default                      0/48      0%            [0%, 7%]
+    panoptes_qualify_then_optimize       22/48     46%          [31%, 61%]
+    panoptes minus dkl,gflownet (held-out)    2/48      4%           [1%, 14%]
+    reliability 0/48 vs ALDE 26/48 — paired McNemar on 26 discordant seeds, p=0.0000
+
+  TRPB  threshold 0.8019  (16 of 159,999 variants are at or above it)
+    arm                                    k/n    rate        exact 95% CI
+    random                                1/48      2%           [0%, 11%]
+    ridge                                11/48     23%          [12%, 37%]
+    random_forest                        14/48     29%          [17%, 44%]
+    alde                                 12/48     25%          [14%, 40%]
+    panoptes_default                      2/48      4%           [1%, 14%]
+    panoptes_qualify_then_optimize       11/48     23%          [12%, 37%]
+    panoptes minus dkl,gflownet (held-out)    0/48      0%            [0%, 7%]
+    reliability 2/48 vs ALDE 12/48 — paired McNemar on 14 discordant seeds, p=0.0129

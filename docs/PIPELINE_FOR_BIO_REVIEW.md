@@ -1,4 +1,4 @@
-﻿# VeritasBio / PanoptesBio â€” Pipeline, Data Flow, and Open Biological Questions
+# VeritasBio / PanoptesBio â€” Pipeline, Data Flow, and Open Biological Questions
 
 **Purpose of this document.** It is written for an expert reviewer with strong
 molecular-biology and protein-engineering knowledge who has no prior context on this

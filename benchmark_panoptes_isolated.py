@@ -1,4 +1,4 @@
-﻿"""
+"""
 benchmark_panoptes_isolated.py - Standalone comparison benchmark on the TrpB landscape.
 
 Purpose:
@@ -97,6 +97,151 @@ logger = logging.getLogger("panoptes_isolated_benchmark")
 
 
 # ==============================================================================================
+# Library registry — the protocol is not TrpB-specific
+# ==============================================================================================
+@dataclass(frozen=True)
+class LibrarySpec:
+    """
+    A combinatorially-saturated library this protocol can run on.
+
+    Everything above was TrpB constants at module scope, read directly by the encoders
+    (`_canonical_variant_id`, `_combo_from_notation`, `_one_hot_matrix`). That made
+    every result single-target, which is the binding limitation on every claim in
+    docs/NEXT_STEPS.md: a method tuned and measured on one landscape demonstrates
+    nothing about generalisation.
+
+    `configure_library()` reassigns those globals rather than threading a spec through
+    ten functions. A module-level active library is a compromise, but the encoders read
+    the globals at call time so reassignment is sufficient, and it keeps this change
+    small enough to be reviewable.
+    """
+
+    key: str
+    label: str
+    dataset: Path
+    accession: str
+    positions: Tuple[int, ...]
+    parent_residues: str
+    structure_pdb: Optional[Path]
+    published_optimum: Optional[str]
+    published_measured_count: Optional[int]
+    published_imputed_count: Optional[int]
+    provenance_note: str
+    # When set, only CSV rows whose 'stage' column holds this value enter the universe.
+    # HER2 ships 36,391 rows of which 25,114 are an unlabelled held-out split carrying
+    # DMS_score exactly 0.0 - not a measurement of zero binding but an absent label.
+    # Admitting them would put 69% of the universe at an invented value and make every
+    # quantile meaningless.
+    labelled_stage: Optional[str] = None
+    # Saturated libraries (TrpB, GB1) cover ~93-100% of the combinatorial product, so a
+    # proposed Hamming neighbour is almost always a variant somebody measured. A
+    # pool-restricted library is a sparse sample of its product, so free generation
+    # proposes variants that do not exist and the batch comes up short. The selector is
+    # handed the untested measured variants instead and ranks them.
+    pool_restricted: bool = False
+
+
+LIBRARIES: Dict[str, LibrarySpec] = {
+    "trpb": LibrarySpec(
+        key="trpb",
+        label="TrpB Tm9D8* four-site active site (Johnston et al. 2024)",
+        dataset=REPO_ROOT / "scripts" / "data" / "TRPB_THEMA_Johnston_2024.csv",
+        accession="TRPB_TM9D8",
+        positions=(183, 184, 227, 228),
+        parent_residues="VFVS",
+        structure_pdb=REPO_ROOT / "workers" / "data" / "8EH0.pdb",
+        published_optimum="V183A:F184I:V227K:S228G",
+        published_measured_count=159_129,
+        published_imputed_count=871,
+        provenance_note=(
+            "Johnston et al. report 159,129 of 160,000 variants quantified and 871 "
+            "fitness values imputed with the scikit-learn KNN imputer; the prepared CSV "
+            "carries no flag separating them."
+        ),
+    ),
+    "gb1": LibrarySpec(
+        key="gb1",
+        label="GB1 domain four-site library (Wu et al. 2016)",
+        dataset=REPO_ROOT / "scripts" / "data" / "GB1_STRSG_Wu_2016.csv",
+        accession="SPG1_STRSG",
+        positions=(39, 40, 41, 54),
+        parent_residues="VDGV",
+        structure_pdb=REPO_ROOT / "workers" / "data" / "2QMT.pdb",
+        # Not stated in our prepared CSV. Left None rather than guessed: the dataset
+        # holds 149,360 of the 160,000 possible combinations, so roughly 6.6% of the
+        # library is simply absent rather than imputed, and absent is not the same
+        # problem as silently model-filled.
+        published_optimum=None,
+        published_measured_count=None,
+        published_imputed_count=None,
+        provenance_note=(
+            "This prepared CSV carries 149,360 of 160,000 combinations and no "
+            "provenance column. Missing combinations are absent from the eligible "
+            "universe rather than imputed into it, but the measured/imputed split of "
+            "what IS present is unverified."
+        ),
+    ),
+    "her2": LibrarySpec(
+        key="her2",
+        label="Trastuzumab CDR-H3 ten-site library, HER2 binding (Mason et al. 2021)",
+        dataset=REPO_ROOT / "scripts" / "data" / "HER2_TRASTUZUMAB_Mason_2021.csv",
+        accession="HER2_TRASTUZUMAB",
+        positions=(99, 100, 101, 102, 103, 104, 105, 106, 107, 108),
+        parent_residues="WGGDGFYAMD",
+        structure_pdb=REPO_ROOT / "workers" / "data" / "1N8Z.pdb",
+        published_optimum=None,
+        published_measured_count=11_277,
+        published_imputed_count=0,
+        labelled_stage="train",
+        # 11,277 labelled variants against a 20^10 product: 0.00000001% saturation.
+        # Free generation would propose unmeasured variants essentially every time.
+        pool_restricted=True,
+        provenance_note=(
+            "The prepared CSV carries 36,391 rows across a 'train'/'test' split; the "
+            "25,114 'test' rows all carry DMS_score exactly 0.0, which is an absent "
+            "label rather than a measurement of no binding, so only the 11,277 "
+            "labelled rows enter the eligible universe. Of those, 5,833 (51.7%) sit at "
+            "the assay floor of 0.1 - this library is censored from below, so a large "
+            "mass of ties at the floor is expected and is not a defect."
+        ),
+    ),
+}
+
+ACTIVE_LIBRARY: LibrarySpec = LIBRARIES["trpb"]
+
+
+def configure_library(key: str) -> LibrarySpec:
+    """
+    Points the module's encoders and defaults at one library. Call before load_universe.
+
+    Reassigns the module globals the encoders read, so a single process runs one library
+    at a time. Returns the spec so callers can report which one is active.
+    """
+    global ACTIVE_LIBRARY, DEFAULT_DATASET, PARENT_ACCESSION, PARENT_METADATA_JSON
+    global STRUCTURE_PDB, ACTIVE_SITE_POSITIONS, PARENT_RESIDUES
+    global PUBLISHED_MEASURED_COUNT, PUBLISHED_IMPUTED_COUNT, PUBLISHED_GLOBAL_OPTIMUM
+
+    if key not in LIBRARIES:
+        raise BenchmarkError(
+            f"unknown library {key!r}; choose from {', '.join(sorted(LIBRARIES))}"
+        )
+    spec = LIBRARIES[key]
+    ACTIVE_LIBRARY = spec
+    DEFAULT_DATASET = spec.dataset
+    PARENT_ACCESSION = spec.accession
+    PARENT_METADATA_JSON = REPO_ROOT / "workers" / "data" / f"{spec.accession}.json"
+    STRUCTURE_PDB = spec.structure_pdb
+    ACTIVE_SITE_POSITIONS = spec.positions
+    PARENT_RESIDUES = spec.parent_residues
+    PUBLISHED_MEASURED_COUNT = spec.published_measured_count
+    PUBLISHED_IMPUTED_COUNT = spec.published_imputed_count
+    PUBLISHED_GLOBAL_OPTIMUM = spec.published_optimum
+    logger.info("Library: %s (%s), positions %s, parent %s",
+                spec.key, spec.label, list(spec.positions), spec.parent_residues)
+    return spec
+
+
+# ==============================================================================================
 # Errors
 # ==============================================================================================
 class BenchmarkError(RuntimeError):
@@ -150,6 +295,11 @@ class Universe:
     excluded_imputed: int
     duplicates_dropped: int
     synthetic: bool = False
+    # Ground truth for a planted synthetic interaction, for the TEST HARNESS only.
+    # Never read by a selector: a policy that could see this would be scored on a
+    # landscape whose answer it had been handed, which is the failure mode the
+    # synthetic landscapes exist to avoid.
+    planted_interaction: Optional[Dict[str, Any]] = None
 
     def __len__(self) -> int:
         return len(self.variant_ids)
@@ -166,7 +316,9 @@ def _sha256_file(path: Path) -> Tuple[str, int]:
 
 
 def _canonical_variant_id(combo: str) -> str:
-    """Builds position-ordered ProteinGym notation for a 4-residue combo (parent residues dropped)."""
+    """Builds position-ordered ProteinGym notation for a combo over ACTIVE_SITE_POSITIONS
+    (parent residues dropped). The combo has one residue per saturated position, so it is
+    4 characters for TrpB and GB1 and 10 for the HER2 CDR-H3 library."""
     parts = [
         f"{PARENT_RESIDUES[i]}{pos}{combo[i]}"
         for i, pos in enumerate(ACTIVE_SITE_POSITIONS)
@@ -177,8 +329,9 @@ def _canonical_variant_id(combo: str) -> str:
 
 def _combo_from_notation(notation: str) -> Optional[str]:
     """
-    Maps 'V183A:F184I' to the 4-residue combo 'AIVS'. Returns None when the notation touches a
-    position outside the saturated library or disagrees with the parent residue.
+    Maps 'V183A:F184I' to the combo 'AIVS', one residue per position in
+    ACTIVE_SITE_POSITIONS. Returns None when the notation touches a position outside the
+    library or disagrees with the parent residue.
     """
     residues = list(PARENT_RESIDUES)
     if notation in ("", "WT"):
@@ -201,7 +354,8 @@ def _combo_from_notation(notation: str) -> Optional[str]:
 
 
 def _one_hot_matrix(combos: Sequence[str]) -> np.ndarray:
-    """One-hot encodes combos as 4 positions x 20 amino acids = 80 binary features."""
+    """One-hot encodes combos as len(ACTIVE_SITE_POSITIONS) x 20 binary features
+    (80 for the four-site libraries, 200 for the ten-site HER2 library)."""
     matrix = np.zeros((len(combos), len(ACTIVE_SITE_POSITIONS) * len(AA_ALPHABET)), dtype=np.float32)
     for row, combo in enumerate(combos):
         for slot, residue in enumerate(combo):
@@ -304,9 +458,18 @@ def load_universe(
 
     rows: List[Tuple[str, float, Optional[str]]] = []
     provenance_column: Optional[str] = None
+    unlabelled_skipped = 0
+    required_stage = ACTIVE_LIBRARY.labelled_stage
     with open(dataset_path, "r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         fieldnames = [f.strip() for f in (reader.fieldnames or [])]
+        if required_stage is not None and "stage" not in fieldnames:
+            raise BenchmarkError(
+                f"library {ACTIVE_LIBRARY.key!r} requires rows with stage "
+                f"{required_stage!r}, but {dataset_path} has no 'stage' column "
+                f"(found {fieldnames}). Refusing to admit unlabelled rows as "
+                f"measurements."
+            )
         if "mutant" not in fieldnames or "DMS_score" not in fieldnames:
             raise BenchmarkError(
                 f"{dataset_path} does not look like the prepared TrpB benchmark CSV "
@@ -317,6 +480,9 @@ def load_universe(
                 provenance_column = candidate
                 break
         for row in reader:
+            if required_stage is not None and (row.get("stage") or "").strip() != required_stage:
+                unlabelled_skipped += 1
+                continue
             notation = (row.get("mutant") or "").strip()
             raw_score = (row.get("DMS_score") or "").strip()
             if not notation or not raw_score:
@@ -346,9 +512,14 @@ def load_universe(
             provenance_detail = f"{len(imputed_lookup)} imputed ids from {source}"
         elif provenance_mode == "acknowledge-unflagged":
             provenance_status = "UNVERIFIED_INCLUDES_IMPUTED"
+            # The imputed count is library-specific and may be unknown, so fall back to
+            # the library's own provenance note rather than printing "None".
+            if PUBLISHED_IMPUTED_COUNT is not None:
+                caveat = f"up to {PUBLISHED_IMPUTED_COUNT} published KNN-imputed values are included"
+            else:
+                caveat = f"measured/imputed split unverified ({ACTIVE_LIBRARY.provenance_note})"
             provenance_detail = (
-                f"{source}; up to {PUBLISHED_IMPUTED_COUNT} published KNN-imputed values "
-                "are included because --provenance-mode acknowledge-unflagged was passed"
+                f"{source}; {caveat} because --provenance-mode acknowledge-unflagged was passed"
             )
         else:
             raise ProvenanceError(PROVENANCE_HELP.strip())
@@ -390,6 +561,11 @@ def load_universe(
         combos.append(combo)
         scores.append(score)
 
+    if unlabelled_skipped:
+        logger.warning(
+            "%d record(s) outside stage %r were dropped as unlabelled; the eligible "
+            "universe is the labelled split only.", unlabelled_skipped, required_stage
+        )
     if unmapped:
         logger.warning("%d record(s) did not map onto positions %s and were dropped.", unmapped, list(ACTIVE_SITE_POSITIONS))
     if len(ids) < 1000:
@@ -430,7 +606,13 @@ def load_universe(
     )
 
     best_id = max(universe.fitness, key=lambda v: universe.fitness[v])
-    if best_id != PUBLISHED_GLOBAL_OPTIMUM:
+    if PUBLISHED_GLOBAL_OPTIMUM is None:
+        # No published optimum recorded for this library, so there is nothing to check
+        # against. Log the observed best so a fitness-direction error is still visible.
+        logger.info("Global optimum in the eligible set: %s (%.4f); no published value "
+                    "on record for library %r to cross-check against.",
+                    best_id, universe.fitness[best_id], ACTIVE_LIBRARY.key)
+    elif best_id != PUBLISHED_GLOBAL_OPTIMUM:
         logger.warning(
             "Global optimum in the eligible set is %s, not the published %s. Check the dataset and "
             "the fitness direction before interpreting results.",
@@ -439,7 +621,13 @@ def load_universe(
     return universe
 
 
-def build_synthetic_universe(n_variants: int = 0, seed: int = 7) -> Universe:
+def build_synthetic_universe(
+    n_variants: int = 0,
+    seed: int = 7,
+    plant_sign_epistasis: bool = False,
+    solo_penalty: float = 0.60,
+    pair_bonus: float = 1.40,
+) -> Universe:
     """
     Builds a clearly-labelled SYNTHETIC four-site landscape for mechanism validation.
 
@@ -466,6 +654,34 @@ def build_synthetic_universe(n_variants: int = 0, seed: int = 7) -> Universe:
     else:
         combos = complete
 
+    # Optionally plant a SIGN-EPISTATIC pair with a known, hidden structure.
+    #
+    # Why this exists. The engine's measured weakness is conditional interactions: on
+    # TrpB, K227 has mean marginal effect -0.021 and is better than parent in only 39%
+    # of backgrounds, yet 100% of variants above 0.90 fitness carry it, because its
+    # benefit is conditional on G228. Any model fitted on marginals correctly learns
+    # "K227 is bad" and stops sampling it.
+    #
+    # Developing a fix on TrpB is unfalsifiable: we already know the answer, so a method
+    # tuned until it recovers that pair proves nothing about a landscape we have not
+    # seen. This plants an equivalent structure at a position/residue pair chosen by the
+    # generator's own RNG, so a policy can be tested on landscapes whose interaction it
+    # has never been told about. `planted` records the ground truth for the test
+    # harness; it is never placed in the Universe handed to a selector.
+    planted: Optional[Dict[str, Any]] = None
+    if plant_sign_epistasis:
+        slot_a, slot_b = rng.choice(len(ACTIVE_SITE_POSITIONS), size=2, replace=False)
+        res_a = AA_ALPHABET[int(rng.integers(len(AA_ALPHABET)))]
+        res_b = AA_ALPHABET[int(rng.integers(len(AA_ALPHABET)))]
+        planted = {
+            "slot_a": int(slot_a), "residue_a": res_a,
+            "slot_b": int(slot_b), "residue_b": res_b,
+            "position_a": ACTIVE_SITE_POSITIONS[int(slot_a)],
+            "position_b": ACTIVE_SITE_POSITIONS[int(slot_b)],
+            "solo_penalty": float(solo_penalty),
+            "pair_bonus": float(pair_bonus),
+        }
+
     ids: List[str] = []
     combo_list: List[str] = []
     scores: List[float] = []
@@ -476,6 +692,16 @@ def build_synthetic_universe(n_variants: int = 0, seed: int = 7) -> Universe:
             for j, residue_j in enumerate(combo):
                 if j > i:
                     value += pair[i, AA_INDEX[residue_i], j, AA_INDEX[residue_j]]
+        if planted is not None:
+            has_a = combo[planted["slot_a"]] == planted["residue_a"]
+            has_b = combo[planted["slot_b"]] == planted["residue_b"]
+            # Each residue alone is deleterious; together they are strongly beneficial.
+            # This is the shape of the TrpB K227/G228 effect, which makes the marginal
+            # effect of each one negative while the combination carries the optimum.
+            if has_a and has_b:
+                value += pair_bonus
+            elif has_a or has_b:
+                value -= solo_penalty
         ids.append(_canonical_variant_id(combo))
         combo_list.append(combo)
         scores.append(float(value))
@@ -499,7 +725,17 @@ def build_synthetic_universe(n_variants: int = 0, seed: int = 7) -> Universe:
             unique_variants=len(ids),
         ),
         provenance_status="SYNTHETIC_NOT_BIOLOGICAL",
-        provenance_detail="generated additive + pairwise values for mechanism validation only",
+        provenance_detail=(
+            "generated additive + pairwise values for mechanism validation only"
+            + (
+                f"; PLANTED sign epistasis at "
+                f"{planted['residue_a']}{planted['position_a']} x "
+                f"{planted['residue_b']}{planted['position_b']} "
+                f"(each alone -{solo_penalty}, together +{pair_bonus})"
+                if planted else ""
+            )
+        ),
+        planted_interaction=planted,
         excluded_imputed=0,
         duplicates_dropped=0,
         synthetic=True,
@@ -1008,7 +1244,9 @@ class AldeSelector(Selector):
             "work_dir": str(work_dir),
             "savedir_subdir": str(run_root),
             "data_npz": str(data_npz),
-            "protein": "TrpB_panoptes",
+            # ALDE uses this only to name its own cache and output folders; it must track
+            # the active library or two libraries share one encoded design space on disk.
+            "protein": f"{ACTIVE_LIBRARY.key}_panoptes",
             "seed": self.seed,
             "budget": n_rounds * batch_size,   # excludes the initial sample, per ALDE's convention
             "batch_size": batch_size,
@@ -1238,6 +1476,7 @@ class PanoptesSelector(Selector):
         pdb_path: Optional[Path],
         call_budget: Optional[int] = None,
         qualify_threshold: Optional[float] = None,
+        probe_after_qualify: bool = False,
         ablation: str = "none",
         prior_spread: Optional[float] = None,
         ablate_components: Optional[Set[str]] = None,
@@ -1255,10 +1494,15 @@ class PanoptesSelector(Selector):
             self.notes.append(
                 f"ABLATED_COMPONENTS={','.join(sorted(self.ablate_components))}"
             )
-        if qualify_threshold is not None:
+        if qualify_threshold is not None and probe_after_qualify:
+            self.name = "panoptes_conditional_probe"
+        elif qualify_threshold is not None:
             self.name = "panoptes_qualify_then_optimize"
         else:
             self.name = "panoptes_muse" if use_live_muse else "panoptes_default"
+        # Which policy runs after qualification: deterministic conditional enumeration
+        # (True) or greedy local frontier search (False).
+        self.probe_after_qualify = bool(probe_after_qualify)
         # The ablation is NOT folded into self.name: the method registry and the
         # --methods filter both key on that name, so renaming the arm matched nothing
         # and silently ran zero seeds. It goes in the description instead.
@@ -1425,6 +1669,91 @@ class PanoptesSelector(Selector):
             self.model_calls += 1
 
     # -- selection ----------------------------------------------------------------------------
+    def _conditional_probe_batch(
+        self, n: int, view: CandidateView, revealed: RevealedState,
+    ) -> List[str]:
+        """
+        Deterministic conditional enumeration: fix the best marginal identity, then
+        ENUMERATE a second position exhaustively.
+
+        What this tests. A substitution whose benefit is conditional on another has a
+        poor MARGINAL effect, so any surrogate fitted on marginals down-weights it, so
+        it is never measured and the condition stays undiscoverable. Measured on TrpB:
+        K227 mean marginal -0.021, better than parent in 38.9% of backgrounds, present
+        in 100% of variants above 0.90 fitness.
+
+        Why enumeration and not ranking. A previous version of this reserved batch slots
+        for carriers of the best identity and then filled them BY ACQUISITION VALUE,
+        which inherited the exact preference it was meant to bypass: fixing the good
+        identity and ranking its carriers returns carriers without the conditional
+        partner. Measured: K227 sampling unchanged at 1.00%, no tail hits, t=1.21. The
+        acquisition function must be excluded from this block, not consulted by it.
+
+        Mechanism, using only this campaign's own measurements:
+          1. anchor   - the (position, residue) with the best mean observed fitness.
+          2. scan     - a second position, the one with the fewest distinct residues
+                        measured so far in the anchor's presence, so the block buys
+                        coverage where the conditional structure is least constrained.
+          3. enumerate- every residue at the scan position, holding the anchor fixed and
+                        the remaining positions at the best observed background.
+
+        This asserts no biology and names no residue: the anchor comes from measurements
+        and the scan position from a coverage count. On a 4-site library a full scan is
+        at most 20 variants, so it fits inside one batch.
+        """
+        positions = list(ACTIVE_SITE_POSITIONS)
+
+        # The whole background is the best MEASURED variant, not a per-identity mean.
+        #
+        # An earlier version picked the anchor as the (position, residue) with the best
+        # mean observed fitness. With 25 starting measurements spread over 4 x 20 = 80
+        # identities, each identity has one to three observations, so that mean is
+        # noise: on a planted-epistasis landscape the probe anchored on an arbitrary
+        # residue every round and never found the planted pair. Conditioning on an
+        # actually-measured high-fitness variant needs no per-identity estimate at all.
+        if not revealed.measured:
+            return []
+        best_id = max(revealed.measured, key=lambda v: revealed.measured[v])
+        background = view.combos.get(best_id)
+        if not background:
+            return []
+
+        # Enumerate the position with the fewest residues already measured in this
+        # background's company — the one where the conditional structure is least
+        # constrained by what we have seen.
+        seen_at: Dict[int, Set[str]] = {s: set() for s in range(len(positions))}
+        for vid in revealed.measured:
+            combo = view.combos.get(vid)
+            if not combo:
+                continue
+            # Count only variants that share most of this background, so coverage is
+            # measured in the relevant neighbourhood rather than library-wide.
+            shared = sum(1 for a, b in zip(combo, background) if a == b)
+            if shared >= len(positions) - 2:
+                for slot, residue in enumerate(combo):
+                    seen_at[slot].add(residue)
+        scan_slot = min(range(len(positions)), key=lambda s: len(seen_at[s]))
+
+        proposals: List[str] = []
+        for residue in AA_ALPHABET:
+            if residue == background[scan_slot]:
+                continue
+            combo = list(background)
+            combo[scan_slot] = residue
+            vid = _canonical_variant_id("".join(combo))
+            if vid and vid in view.index_of and vid not in revealed.measured:
+                if vid not in proposals:
+                    proposals.append(vid)
+            if len(proposals) >= n:
+                break
+        if proposals:
+            self.notes.append(
+                f"conditional probe: background {best_id or 'WT'} "
+                f"(fitness {revealed.measured[best_id]:.4f}), enumerated position "
+                f"{positions[scan_slot]} ({len(proposals)} variants)"
+            )
+        return proposals
+
     def _frontier_batch(self, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
         """
         Greedy local search around the best measured variant, for use AFTER the
@@ -1488,19 +1817,43 @@ class PanoptesSelector(Selector):
         # top-1% yield or final best fitness, which is exactly what is being tested.
         if self.qualify_threshold is not None and revealed.measured:
             if max(revealed.measured.values()) >= self.qualify_threshold:
-                frontier = self._frontier_batch(n, view, revealed)
-                if frontier:
+                # After qualification, spend the remaining budget on whichever
+                # post-qualification policy this arm is configured for.
+                second_phase = (
+                    self._conditional_probe_batch(n, view, revealed)
+                    if self.probe_after_qualify
+                    else self._frontier_batch(n, view, revealed)
+                )
+                if second_phase:
                     if not self.qualified_at_round:
                         self.qualified_at_round = round_index
-                        self.notes.append(f"qualified before round {round_index}; frontier mode")
+                        mode = "conditional-probe" if self.probe_after_qualify else "frontier"
+                        self.notes.append(
+                            f"qualified before round {round_index}; {mode} mode"
+                        )
                     self.last_batch_predictions = {}
-                    return frontier
+                    return second_phase
 
         strategy = self._strategy(round_index, revealed)
         evidence = [
             {"variant_sequence": self._sequence_for(v), "computed_score": float(score)}
             for v, score in revealed.measured.items()
         ]
+        # On a pool-restricted library the design space is the measured variants, so hand
+        # the engine the untested ones instead of letting it generate Hamming neighbours
+        # that nobody assayed. Everything after generation - prior, DKL, Pareto, DPP -
+        # runs unchanged; only the source of candidates differs.
+        candidate_pool = None
+        if ACTIVE_LIBRARY.pool_restricted:
+            from controller.gatekeeper import Variant
+
+            candidate_pool = [Variant(notation=vid) for vid in view.untested(revealed)]
+            if not candidate_pool:
+                raise BenchmarkError(
+                    "pool-restricted library exhausted: every eligible variant is "
+                    "already measured"
+                )
+
         # select_next_micro_batch draws its Thompson sample from numpy's global RNG; seeding it
         # here is a caller-side action that makes the production path reproducible.
         np.random.seed((self.seed * 7919 + round_index) % (2**31 - 1))
@@ -1514,6 +1867,7 @@ class PanoptesSelector(Selector):
             random_seed=(self.seed or 0) * 1000 + round_index,
             apply_auxiliary_objective_weights=self.ablation in ("aux-weighted", "legacy"),
             ablate=self.ablate_components or None,
+            candidate_pool=candidate_pool,
         )
         self.last_batch_predictions = {}
         proposals: List[str] = []
@@ -2111,7 +2465,7 @@ def repository_state(ignore_prefixes: Sequence[str] = ()) -> Dict[str, Any]:
 # Orchestration
 # ==============================================================================================
 ALL_METHODS = ("random", "ridge", "random_forest", "alde", "panoptes_default", "panoptes_muse",
-               "panoptes_qualify_then_optimize")
+               "panoptes_qualify_then_optimize", "panoptes_conditional_probe")
 DEFAULT_METHODS = ("random", "ridge", "random_forest", "panoptes_default")
 
 
@@ -2155,7 +2509,13 @@ def build_selector_factories(
             status[method] = {"status": "available", "detail": "uniform random, no model"}
         elif method == "ridge":
             factories[method] = lambda seed: RidgeSelector(seed)
-            status[method] = {"status": "available", "detail": "sklearn Ridge(alpha=1.0) on 80 one-hot features"}
+            status[method] = {
+                "status": "available",
+                "detail": (
+                    f"sklearn Ridge(alpha=1.0) on "
+                    f"{len(ACTIVE_SITE_POSITIONS) * len(AA_ALPHABET)} one-hot features"
+                ),
+            }
         elif method == "random_forest":
             factories[method] = lambda seed: RandomForestSelector(seed)
             status[method] = {"status": "available", "detail": "sklearn RandomForestRegressor(n_estimators=300)"}
@@ -2194,9 +2554,15 @@ def build_selector_factories(
             else:
                 status[method] = {"status": "UNAVAILABLE", "detail": probe["reason"]}
             status[method]["probe"] = json.dumps(probe)
-        elif method in ("panoptes_default", "panoptes_muse", "panoptes_qualify_then_optimize"):
+        elif method in ("panoptes_default", "panoptes_muse",
+                        "panoptes_qualify_then_optimize", "panoptes_conditional_probe"):
             live = method == "panoptes_muse"
-            qualify = args.qualify_threshold if method == "panoptes_qualify_then_optimize" else None
+            qualify = (
+                args.qualify_threshold
+                if method in ("panoptes_qualify_then_optimize", "panoptes_conditional_probe")
+                else None
+            )
+            probe = method == "panoptes_conditional_probe"
             if live and not args.enable_live_muse:
                 status[method] = {
                     "status": "SKIPPED",
@@ -2218,12 +2584,12 @@ def build_selector_factories(
                 status[method] = {"status": "UNSUPPORTED", "detail": f"{type(exc).__name__}: {exc}"}
                 continue
             factories[method] = (
-                lambda seed, m=metadata, s=sequence, p=pdb_path, l=live, q=qualify:
+                lambda seed, m=metadata, s=sequence, p=pdb_path, l=live, q=qualify, pr=probe:
                 PanoptesSelector(seed, s, m, l, p, call_budget=args.max_model_calls,
                                  ablation=args.ablation,
                                  prior_spread=args.prior_spread,
                                  ablate_components=_parse_components(args.ablate_components),
-                                 qualify_threshold=q)
+                                 qualify_threshold=q, probe_after_qualify=pr)
             )
             detail = (
                 "production path: fetch_protein_metadata -> "
@@ -2262,7 +2628,13 @@ def execute(args: argparse.Namespace) -> int:
 
     # ---- Dataset ---------------------------------------------------------------------------
     self_checks: List[Tuple[str, bool, str]] = []
-    if args.smoke_test:
+    # A planted-epistasis run is a synthetic-landscape run by definition: there is no
+    # real dataset with an interaction we chose. Treating the flag as implying synthetic
+    # avoids the alternative, which is loading the real dataset and silently ignoring
+    # the plant.
+    use_synthetic = args.smoke_test or args.plant_sign_epistasis
+
+    if use_synthetic:
         self_checks = run_self_checks()
         failed = [name for name, passed, _ in self_checks if not passed]
         print("\nSelf-checks")
@@ -2271,7 +2643,11 @@ def execute(args: argparse.Namespace) -> int:
             print(f"  [{'PASS' if passed else 'FAIL'}] {name}" + (f"  ({detail})" if detail else ""))
         if failed:
             raise BenchmarkError(f"self-checks failed: {failed}")
-        universe = build_synthetic_universe(n_variants=args.synthetic_size, seed=7)
+        universe = build_synthetic_universe(
+            n_variants=args.synthetic_size,
+            seed=args.synthetic_seed,
+            plant_sign_epistasis=args.plant_sign_epistasis,
+        )
         logger.warning("SMOKE TEST: using a SYNTHETIC landscape. These numbers are not biology.")
     else:
         universe = load_universe(
@@ -2391,8 +2767,13 @@ def execute(args: argparse.Namespace) -> int:
         limitations.insert(0, "SYNTHETIC RUN: values are generated, not measured. These results say "
                               "nothing about biological performance.")
     if universe.provenance_status == "UNVERIFIED_INCLUDES_IMPUTED":
-        limitations.insert(0, f"Measurement provenance is UNVERIFIED: up to {PUBLISHED_IMPUTED_COUNT} "
-                              "published KNN-imputed values may be included in the eligible set.")
+        limitations.insert(0, (
+            f"Measurement provenance is UNVERIFIED: up to {PUBLISHED_IMPUTED_COUNT} published "
+            "KNN-imputed values may be included in the eligible set."
+            if PUBLISHED_IMPUTED_COUNT is not None else
+            f"Measurement provenance is UNVERIFIED for library "
+            f"{ACTIVE_LIBRARY.key!r}: {ACTIVE_LIBRARY.provenance_note}"
+        ))
     if not unchanged:
         limitations.insert(0, "WARNING: the repository source hash changed during this run - see manifest.")
 
@@ -2585,6 +2966,22 @@ examples:
                              "live comparison is reported as SKIPPED rather than silently mocked.")
     parser.add_argument("--max-model-calls", type=int, default=50,
                         help="Hard cap on live model calls across the whole run (default: %(default)s).")
+    parser.add_argument("--library", choices=tuple(sorted(LIBRARIES)), default="trpb",
+                        help="Which saturated library to run. 'trpb' is the development "
+                             "landscape and has been extensively analysed, so results on it "
+                             "are development evidence; 'gb1' is independent and is where a "
+                             "generalisation claim has to be earned (default: %(default)s).")
+    parser.add_argument("--synthetic-seed", type=int, default=7,
+                        help="RNG seed for the synthetic landscape. Varying it gives "
+                             "independent landscapes, which is how a policy is tested "
+                             "without being tuned to one interaction (default: %(default)s).")
+    parser.add_argument("--plant-sign-epistasis", action="store_true",
+                        help="Plant a sign-epistatic residue pair in the synthetic "
+                             "landscape: each residue alone is deleterious, together "
+                             "strongly beneficial. Reproduces the structure that defeats "
+                             "marginal-fitted surrogates on TrpB, at a pair chosen by the "
+                             "generator's RNG rather than one we already know. Requires "
+                             "--synthetic-size.")
     parser.add_argument("--qualify-threshold", type=float, default=0.70,
                         help="Fitness at which panoptes_qualify_then_optimize switches from the "
                              "baseline policy to frontier search (default: %(default)s). Under "
@@ -2633,13 +3030,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     _load_repo_dotenv()
 
-    logging.basicConfig(
+    logging.basicConfig(  # configured before configure_library so its log line is visible
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
     )
     logging.getLogger("workers").setLevel(logging.WARNING)
     logging.getLogger("controller").setLevel(logging.WARNING)
+
+    # Before anything reads a dataset, a position or a parent residue. The encoders and
+    # defaults are module globals, so this has to happen first.
+    spec = configure_library(args.library)
+    if args.dataset == str(LIBRARIES["trpb"].dataset) and args.library != "trpb":
+        # --dataset still carries the argparse default, so the user selected a library
+        # without naming a file. Point it at that library's dataset instead of silently
+        # scoring one library's variants against another's table.
+        args.dataset = str(spec.dataset)
 
     if args.smoke_test:
         # A bounded CPU run: small landscape, few seeds, short rounds, no paid calls.
@@ -2666,4 +3072,5 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 

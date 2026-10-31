@@ -1,4 +1,4 @@
-﻿"""
+"""
 controller/prompts.py â€” DOMAIN: Brains & Security (Pillar 2: Strategic Planner).
 
 Purpose:
