@@ -458,7 +458,13 @@ class TestManifestIsAuthoritative(unittest.TestCase):
         self.assertEqual(manifest["run"]["state"], "PARTIAL")
         reason = manifest["run"]["state_reason"]
         self.assertIn("short batch", reason)
-        self.assertIn("never backfilled", reason)
+        # A short batch is now BACKFILLED from the same policy first (defect 2: every
+        # baseline measured 125 unique variants and our arms did not, because rejected
+        # proposals were never replaced). So the reason no longer says "never backfilled";
+        # it has to say that the backfill was tried and could not fill the batch, and that
+        # the shortfall was not hidden by padding.
+        self.assertIn("backfill", reason)
+        self.assertIn("never padded with random draws", reason)
         self.assertNotIn("failed", reason)
 
     def test_components_enabled_and_disabled_are_both_listed(self) -> None:

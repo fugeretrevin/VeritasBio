@@ -40,7 +40,24 @@ Protocol (shared by every method):
       selected variants. 125 unique measurements per method per seed, including the start.
     - A method commits its batch before the evaluator reveals those outcomes.
     - Duplicate, already-observed, unknown and invalid selections are rejected and logged.
-      A short batch stays short; it is never backfilled with random picks.
+      A short batch is BACKFILLED from the same policy: the selector is asked for a longer
+      ranked list and the next eligible picks are taken, up to a bounded number of attempts.
+      It is never padded with random draws, and any secondary rule is named in the manifest
+      and in the round metrics. A batch that still cannot fill stays short, loudly.
+    - A DEGENERATE arm - one that cannot propose distinct candidates - is NOT backfilled.
+      An eligibility shortfall is recoverable and a collapsed proposer is a null arm, and
+      topping the second one up would turn a detectable null arm into a plausible result.
+      The two are separate statuses ('short_batch' and 'degenerate_proposals').
+
+Availability is not compatibility:
+    An external arm can be fully installed, importable and runnable and still be
+    incomputable on a given library, completing without error and returning a null
+    trajectory. Before an external arm is handed an encoded design space it is checked for
+    constant columns, which are what make a per-column min-max normaliser divide by zero;
+    an incompatible arm is reported as an ABSENT cell and is not run, and nothing is
+    substituted for it. A post-hoc check classifies any run that completed every round and
+    still measured far below budget. See check_external_arm_compatibility and
+    docs/alde-compatibility.md.
 
 Selection modes (kept explicit and distinct per library):
     POOL-RESTRICTED - the selector is handed the enumerated untested measured variants and
@@ -1239,6 +1256,59 @@ def build_synthetic_universe(
 # ==============================================================================================
 # Evaluator and per-method observation state
 # ==============================================================================================
+#: The qualification bar's default, expressed as a QUANTILE of the eligible universe
+#: (0-100) rather than as an absolute fitness.
+#:
+#: It used to be the absolute fitness 0.70. On TrpB, the landscape it was tuned on, that
+#: is the 99.9602nd percentile of the eligible universe: 64 of 159,999 variants, with
+#: P(a random 25-variant start already qualifies) = 0.0100. It was an extreme-tail gate.
+#:
+#: Fitness scales are not comparable across this corpus, so the same constant admits
+#: 31.6% of GB1, 9.11% of HER2 (1,027 of 11,276 - which is why every HER2 seed logged
+#: "qualified before round 1"), and 100% of CreiLOV, CR9114 H1 and both CR6261
+#: landscapes, where 0.70 lies below the global minimum because the bnAb assay floor is
+#: 7.0 on a -log10(Kd) scale. On 8 of 9 landscapes the bar sat BELOW that target's own
+#: top-1% threshold, so "qualifying" was an easier bar than being a hit, which inverts
+#: the stage's purpose.
+#:
+#: 99.96 is chosen to reproduce 0.70's behaviour on the landscape the parameter was tuned
+#: on: it resolves to 0.6998 on TrpB and accepts the IDENTICAL 64 variants, so the
+#: development result does not move. Resolved absolutes elsewhere: GB1 5.362, HER2 6.379,
+#: eqFP611 blue 1.588, eqFP611 red 1.521, CreiLOV 4.166, CR9114 H1 9.687, CR6261 H1
+#: 9.655, CR6261 H9 10.150.
+#:
+#: KNOWN CAVEAT, deliberately unresolved: at this quantile the qualifying set on CR6261
+#: H1/H9 is ONE variant, so qualification there becomes "find the global best". A
+#: quantile transfers the RARITY of the bar, not its ATTAINABILITY. No minimum-qualifying-
+#: set floor is applied; instead every run records `qualify_qualifying_count` in its
+#: manifest so a reader sees the attainability of the bar it actually ran under. A floor
+#: would have to be chosen by the protocol in advance, not by this module.
+DEFAULT_QUALIFY_QUANTILE = 99.96
+
+#: The pre-fix absolute. Kept so a run can reproduce the old bar deliberately via
+#: --qualify-threshold, and so the manifest can name what changed.
+LEGACY_QUALIFY_ABSOLUTE = 0.70
+
+#: How many extra candidate requests a round may make to fill a short batch.
+#:
+#: Bounded on purpose. Each attempt asks the policy for a longer ranked list, and the
+#: margin grows geometrically, so four attempts cover a rejection rate far above the
+#: ~6.65% that GB1's incomplete coverage produces. A batch that is still short after this
+#: is reported as short, loudly, rather than retried forever.
+BACKFILL_MAX_ATTEMPTS = 4
+
+#: Below this fraction of the nominal budget, a COMPLETED run is classified DEGENERATE.
+#:
+#: The case this exists for: HER2 ALDE recorded 26 unique measurements against a budget of
+#: 125 (0.208) across 48 seeds while writing a full-length trajectory, and was read as a
+#: performance number. The evidence was in round_metrics.csv and nothing looked at it.
+#:
+#: 0.9 is deliberately permissive. An arm that could not fill a few batches on a sparse
+#: library is a short-batch case, warned about separately and recoverable by backfilling;
+#: an arm that stopped searching altogether falls far below this.
+DEGENERATE_RUN_BUDGET_FRACTION = 0.9
+
+
 @dataclass
 class RevealedState:
     """A single method's private view: only what the evaluator has already revealed to it."""
@@ -1262,7 +1332,19 @@ class Evaluator:
     selector, logged into selector-visible structures, or exposed through candidate metadata.
     """
 
-    def __init__(self, universe: Universe) -> None:
+    def __init__(
+        self,
+        universe: Universe,
+        *,
+        qualify_quantile: Optional[float] = None,
+        qualify_threshold: Optional[float] = None,
+    ) -> None:
+        if qualify_quantile is not None and qualify_threshold is not None:
+            raise BenchmarkError(
+                "qualify_quantile and qualify_threshold are mutually exclusive: the first "
+                "states the bar as a quantile of the eligible universe, the second as an "
+                "absolute fitness. Passing both leaves it ambiguous which one gated the run."
+            )
         self._universe = universe
         self.harness_exports: List[str] = []
         values = np.array([universe.fitness[v] for v in universe.variant_ids], dtype=np.float64)
@@ -1272,6 +1354,34 @@ class Evaluator:
         self._top1: Set[str] = {v for v in universe.variant_ids if universe.fitness[v] >= self.top1_threshold}
         self.global_best = float(values.max())
         self.n_top1 = len(self._top1)
+
+        # The qualification bar is resolved HERE, from the same `values` array that defines
+        # top1_threshold just above. Using that exact array is the point: it guarantees ONE
+        # definition of the eligible universe - including a library's `labelled_stage`
+        # exclusion, which is what removes HER2's 25,114 unlabelled rows - so the
+        # qualification bar and the top-1% bar are expressed on one scale and cannot drift
+        # apart. np.percentile with linear interpolation is the same machinery used for
+        # top1_threshold and for veritas.calibration.qualification.absolute_for_quantile.
+        if qualify_threshold is not None:
+            self.qualify_quantile: Optional[float] = None
+            self.qualify_threshold_absolute = float(qualify_threshold)
+            self.qualify_threshold_source = "explicit-override"
+        else:
+            quantile = (
+                DEFAULT_QUALIFY_QUANTILE if qualify_quantile is None else float(qualify_quantile)
+            )
+            if not 0.0 <= quantile <= 100.0:
+                raise BenchmarkError(
+                    f"qualify_quantile must be a percentile in [0, 100], got {quantile}"
+                )
+            self.qualify_quantile = quantile
+            self.qualify_threshold_absolute = float(np.percentile(values, quantile))
+            self.qualify_threshold_source = "quantile"
+        # Recorded because a quantile transfers the RARITY of the bar, not its
+        # ATTAINABILITY: at the default quantile this is 1 on the CR6261 landscapes, which
+        # turns qualification into "find the global best". A run states this rather than
+        # having it inferred.
+        self.n_qualifying = int(np.count_nonzero(values >= self.qualify_threshold_absolute))
 
     @property
     def eligible_ids(self) -> List[str]:
@@ -1341,6 +1451,11 @@ class Selector:
         # that has no scoring stage simply ignores it; nothing here reads it back, so
         # it cannot influence a selection.
         self.candidate_trace: Optional[Any] = None
+        # Which selection rule produced the last proposed batch. Written into the round
+        # metrics so a reader can see which measurements came from the arm's own policy
+        # and which came from a secondary rule - a fallback that is not visible per round
+        # is indistinguishable from the policy it replaced.
+        self.last_batch_source: str = "policy"
 
     def propose(self, round_index: int, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
         raise NotImplementedError
@@ -2177,6 +2292,113 @@ def resolve_ablate_components(args: argparse.Namespace) -> Tuple[str, ...]:
     return tuple(cached)
 
 
+#: Arms that are handed an encoded design space and normalise it against per-column
+#: bounds, and so cannot tolerate a constant column. Listed by name rather than detected,
+#: because this is a property of the external implementation, not of our data.
+CONSTANT_COLUMN_INTOLERANT_METHODS: Tuple[str, ...] = ("alde",)
+
+
+def constant_encoding_columns(design_space: np.ndarray) -> List[int]:
+    """Indices of columns that take exactly one value across the whole design space.
+
+    `(X.max(0) == X.min(0))`, which is the condition under which a min-max normaliser
+    divides by zero.
+    """
+    X = np.asarray(design_space, dtype=np.float64)
+    if X.ndim != 2 or X.size == 0:
+        return []
+    constant = X.max(axis=0) == X.min(axis=0)
+    return [int(i) for i in np.flatnonzero(constant)]
+
+
+def check_external_arm_compatibility(
+    method: str,
+    design_space: Optional[np.ndarray],
+    library: "LibrarySpec",
+) -> Dict[str, Any]:
+    """
+    Whether `method` can be COMPUTED on this library's encoded design space at all.
+
+    AVAILABILITY IS NOT COMPATIBILITY, and conflating them is how a null arm reported
+    success. `probe_alde` checks the checkout, the interpreter, the dependencies and the
+    imports, and on all seven landscapes where ALDE is broken it correctly reports
+    `available: true`. The arm then runs to completion, writes a full-length trajectory,
+    and the trajectory is one variant picked 100 times.
+
+    THE MECHANISM, from docs/alde-compatibility.md. ALDE's `src/optimize.py:128` calls
+    `normalize(disc_X, domain)` with per-column bounds from `utils.domain_discrete`.
+    botorch's `normalize` is `(X - lower) / (upper - lower)`. A one-hot column for a
+    residue never observed at that library position is constant 0, so `upper == lower` and
+    the column becomes `0/0 = NaN`. Every row then carries a NaN, the first `Linear` layer
+    makes ALL predictions NaN, `acquisition.py:51` masks already-queried points with
+    `min(preds)` - which is NaN, so the mask is a no-op - and `np.argmax` over an all-NaN
+    array returns 0. It picks index 0 forever, without raising.
+
+    WHY THIS IS CHECKED BEFORE THE RUN RATHER THAN AFTER. Because the pick is always index
+    0, the arm's best-fitness is decided by CSV ROW ORDER. Our prepared tables are sorted
+    by fitness descending, so CR9114's row 0 is the global optimum: a completely broken arm
+    with an all-NaN surrogate would have posted a PERFECT best-fitness there and beaten the
+    repaired arm. Our own file-ordering convention and ALDE's bug would have combined into
+    a spurious baseline victory.
+
+    It fails only when some amino acid is unobserved at some position, which is true of
+    every landscape in this corpus except TrpB and GB1 - ALDE's README assumes
+    site-saturation libraries. Constant-column counts: HER2 55/200, CreiLOV 265/300,
+    CR9114 288/320, eqFP611 234/260, CR6261 198/220; TrpB and GB1 zero.
+
+    Nothing here repairs ALDE. Widening a constant column's bounds from (0, 0) to (0, 1)
+    is verified to make it a real searcher on all seven, but that is a modification to
+    published third-party code, and the protocol requires documenting an incompatibility
+    rather than substituting for it. A repaired arm would be a SEPARATELY NAMED arm
+    carrying the exact diff in its config.
+    """
+    if method not in CONSTANT_COLUMN_INTOLERANT_METHODS:
+        return {"checked": False, "compatible": True,
+                "reason": "method does not normalise an encoded design space per column"}
+    if design_space is None:
+        return {
+            "checked": False,
+            "compatible": True,
+            "reason": "no design space was supplied to check; compatibility is UNVERIFIED",
+        }
+    constant = constant_encoding_columns(design_space)
+    n_columns = int(np.asarray(design_space).shape[1]) if np.asarray(design_space).ndim == 2 else 0
+    if not constant:
+        return {
+            "checked": True,
+            "compatible": True,
+            "n_constant_columns": 0,
+            "n_columns": n_columns,
+            "reason": (
+                f"no constant one-hot column in {n_columns} encoded features, so the "
+                f"min-max normalisation in ALDE's optimize.py cannot divide by zero"
+            ),
+        }
+    return {
+        "checked": True,
+        "compatible": False,
+        "n_constant_columns": len(constant),
+        "n_columns": n_columns,
+        "constant_column_indices": constant[:64],
+        "reason": (
+            f"INCOMPATIBLE with library {library.key!r}: {len(constant)} of {n_columns} "
+            f"one-hot columns are constant, because those residues are never observed at "
+            f"those positions. ALDE's optimize.py normalises each column by "
+            f"(upper - lower) from utils.domain_discrete, so each constant column becomes "
+            f"0/0 = NaN; every row then carries a NaN, all predictions become NaN, the "
+            f"already-queried mask in acquisition.py is a no-op because it masks with "
+            f"NaN, and np.argmax over an all-NaN array returns 0. The arm would pick "
+            f"index 0 forever, complete without raising, and write a full-length "
+            f"trajectory of one variant. Because the pick is index 0 and the prepared "
+            f"tables are sorted by fitness descending, that trajectory can post a "
+            f"spuriously PERFECT best-fitness. This cell is ABSENT, not a result. ALDE's "
+            f"README assumes site-saturation libraries; this library is not one. See "
+            f"docs/alde-compatibility.md. Do not repair ALDE in place - a repaired arm "
+            f"must be separately named and carry its diff."
+        ),
+    }
+
+
 def enforce_requested_methods_available(
     methods: Sequence[str],
     method_status: Dict[str, Dict[str, Any]],
@@ -2538,6 +2760,45 @@ class PanoptesSelector(Selector):
 
         proposals: List[str] = []
         ballot: List[str] = []
+        if self.library.pool_restricted:
+            # Same defect as _frontier_batch: enumerating a residue scan over a sparse
+            # library produces genotypes nobody assayed, the batch comes back empty or
+            # near-empty, and propose() falls through to the baseline policy. On a
+            # pool-restricted library the scan is taken from the ENUMERATED POOL instead:
+            # the untested members that share this background at every position except
+            # the scan slot. That is the same conditional question - vary one position,
+            # hold the rest - asked only of candidates that exist.
+            for vid in view.untested(revealed):
+                combo = view.combos.get(vid)
+                if not combo or len(combo) != len(background):
+                    continue
+                differs = [s for s in range(len(background)) if combo[s] != background[s]]
+                if differs == [scan_slot]:
+                    ballot.append(vid)
+                    if vid not in proposals:
+                        proposals.append(vid)
+                if len(proposals) >= n:
+                    break
+            self._note_ballot(ballot, "conditional_probe_pool_restricted")
+            if not proposals:
+                # The conditional probe is a policy that genuinely cannot be expressed
+                # here: this background has no in-pool single-position variants at the
+                # chosen slot. Say so rather than degrading into the baseline arm.
+                raise BenchmarkError(
+                    f"conditional probe cannot be expressed on pool-restricted library "
+                    f"{self.library.key!r}: the untested pool holds no variant that differs "
+                    f"from background {best_id!r} at position {positions[scan_slot]} alone. "
+                    f"A sparse library does not contain the conditional slice this policy "
+                    f"enumerates. Refusing to return an empty batch, which would silently "
+                    f"degrade this arm into the baseline policy."
+                )
+            self.notes.append(
+                f"conditional probe (pool-restricted): background {best_id or 'WT'} "
+                f"(fitness {revealed.measured[best_id]:.4f}), position "
+                f"{positions[scan_slot]} ({len(proposals)} in-pool variants)"
+            )
+            return proposals
+
         for residue in AA_ALPHABET:
             if residue == background[scan_slot]:
                 continue
@@ -2582,17 +2843,51 @@ class PanoptesSelector(Selector):
         if not best_combo:
             return []
 
-        # Untested Hamming-1 neighbours of the incumbent: 4 positions x 19 residues.
-        neighbours = []
-        for slot in range(self.library.n_sites):
-            for aa in AA_ALPHABET:
-                if aa == best_combo[slot]:
-                    continue
-                combo = best_combo[:slot] + aa + best_combo[slot + 1:]
-                vid = _canonical_variant_id(combo, self.library)
-                if vid in view.index_of and vid not in revealed.measured:
-                    neighbours.append((vid, combo))
-        if not neighbours:
+        # Where the candidates come from depends on the library's SELECTION MODE, exactly
+        # as it does in propose(). propose() was made pool-restriction-aware and this was
+        # not, which is the whole of defect 3: on HER2 the median library member has ZERO
+        # in-library Hamming-1 neighbours (mean 0.18 of 190 possible), so this enumeration
+        # returned an empty list, propose() fell through to the pool path, and in 41 of 48
+        # seeds the frontier arm selected the IDENTICAL 125 variants as the reliability arm.
+        # Its reported 3.062 against reliability's 3.125 was a budget penalty, not a policy
+        # difference - the arm was not a distinct policy at all.
+        if self.library.pool_restricted:
+            # On a sparse library the design space IS the enumerated pool, so the frontier
+            # policy ranks the untested pool rather than Hamming-1 neighbours nobody
+            # assayed. The policy keeps its character - a greedy ridge surrogate with no
+            # diversity term, no Pareto weighting and no prior, deliberately the opposite
+            # of the baseline - over the candidates that actually exist.
+            candidates = [
+                (vid, view.combos[vid])
+                for vid in view.untested(revealed)
+                if vid in view.combos
+            ]
+            source = "frontier_pool_restricted"
+        else:
+            # Untested Hamming-1 neighbours of the incumbent: 4 positions x 19 residues.
+            candidates = []
+            for slot in range(self.library.n_sites):
+                for aa in AA_ALPHABET:
+                    if aa == best_combo[slot]:
+                        continue
+                    combo = best_combo[:slot] + aa + best_combo[slot + 1:]
+                    vid = _canonical_variant_id(combo, self.library)
+                    if vid in view.index_of and vid not in revealed.measured:
+                        candidates.append((vid, combo))
+            source = "frontier_hamming1"
+
+        if not candidates:
+            if self.library.pool_restricted:
+                # The pool is enumerated and finite, so an empty pool here means the
+                # library is exhausted, not that the policy is inexpressible. Fail loudly:
+                # returning [] would send propose() back to the baseline policy and the arm
+                # would silently stop being the frontier arm.
+                raise BenchmarkError(
+                    f"frontier policy has no candidates on pool-restricted library "
+                    f"{self.library.key!r}: every eligible variant is already measured. "
+                    f"Refusing to return an empty batch, which would silently degrade this "
+                    f"arm into the baseline policy."
+                )
             return []
 
         # Rank them by a ridge surrogate fitted on everything measured so far.
@@ -2604,12 +2899,12 @@ class PanoptesSelector(Selector):
                 ys.append(score)
         if len(rows) >= 10:
             model = Ridge(alpha=1.0).fit(np.asarray(rows), np.asarray(ys))
-            X = _one_hot_matrix([c for _, c in neighbours], self.library)
+            X = _one_hot_matrix([c for _, c in candidates], self.library)
             order = np.argsort(-model.predict(X))
         else:
-            order = np.arange(len(neighbours))
-        self._note_ballot([vid for vid, _ in neighbours], "frontier_hamming1")
-        return [neighbours[int(i)][0] for i in order[:n]]
+            order = np.arange(len(candidates))
+        self._note_ballot([vid for vid, _ in candidates], source)
+        return [candidates[int(i)][0] for i in order[:n]]
 
     def _note_ballot(self, candidates: Sequence[str], source: str) -> None:
         """
@@ -2631,6 +2926,11 @@ class PanoptesSelector(Selector):
     def propose(self, round_index: int, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
         from workers.math_worker import select_next_micro_batch
 
+        # What this round's measurements should be attributed to if execution reaches the
+        # baseline path below. It is "baseline" for the baseline arms, and a named
+        # fallback for a post-qualification arm whose own policy produced nothing.
+        baseline_source = "baseline"
+
         # Qualify-then-optimise: run the baseline policy unchanged until a measured
         # variant clears the qualifying threshold, then spend the remaining budget on
         # frontier search. Under this benchmark's deterministic reveal, every trajectory
@@ -2647,15 +2947,34 @@ class PanoptesSelector(Selector):
                     if self.probe_after_qualify
                     else self._frontier_batch(n, view, revealed)
                 )
+                mode = "conditional-probe" if self.probe_after_qualify else "frontier"
                 if second_phase:
                     if not self.qualified_at_round:
                         self.qualified_at_round = round_index
-                        mode = "conditional-probe" if self.probe_after_qualify else "frontier"
                         self.notes.append(
                             f"qualified before round {round_index}; {mode} mode"
                         )
                     self.last_batch_predictions = {}
+                    self.last_batch_source = mode
                     return second_phase
+                # The post-qualification policy produced nothing and this round is about
+                # to run the BASELINE policy instead. In pool-restricted mode that cannot
+                # happen - both second-phase generators now raise - so this is the
+                # generative case, where the incumbent's Hamming-1 shell can genuinely be
+                # exhausted late in a campaign. It is a real degradation of the arm into
+                # the baseline, so it is counted and named rather than left invisible:
+                # a reader who sees the frontier arm's number has to know how many of its
+                # rounds were actually the baseline policy.
+                self.notes.append(
+                    f"POLICY_FALLBACK[{mode}->baseline] at round {round_index}: the "
+                    f"post-qualification policy had no candidates, so this round ran the "
+                    f"BASELINE policy. This round's measurements are not this arm's policy."
+                )
+                logger.warning(
+                    "%s round %d: %s policy had no candidates; this round falls back to "
+                    "the baseline policy.", self.name, round_index, mode,
+                )
+                baseline_source = f"{mode}_fallback_to_baseline"
 
         strategy = self._strategy(round_index, revealed)
         evidence = [
@@ -2704,6 +3023,7 @@ class PanoptesSelector(Selector):
             variant_id = _canonical_variant_id(combo, self.library) if combo else variant.notation
             self.last_batch_predictions[variant_id] = float(mean)
             proposals.append(variant_id)
+        self.last_batch_source = baseline_source
         return proposals
 
     def observe(self, round_index: int, revealed_batch: Dict[str, float]) -> None:
@@ -2738,6 +3058,22 @@ class RoundMetrics:
     rejected: int
     status: str
     failure_reason: str
+    #: How many extra rounds of candidate requests it took to fill this batch. 0 means the
+    #: policy's first ranked list filled it outright.
+    backfill_attempts: int = 0
+    #: How many of `accepted` came from those extra requests rather than the first list.
+    backfill_added: int = 0
+    #: Which selection rule produced this round's measurements. "policy" is the arm's own
+    #: rule; anything else names a secondary rule, so a reader can see which measurements
+    #: did not come from the policy under test.
+    selection_source: str = "policy"
+    #: How many DISTINCT variants the arm proposed this round, before eligibility filtering
+    #: and before any backfill. This is the number that exposes a collapsed surrogate.
+    distinct_proposed: int = 0
+    #: True when the arm could not propose distinct candidates - a null arm. Kept separate
+    #: from a short batch because an eligibility shortfall is recoverable by backfilling
+    #: and this is not.
+    degenerate_proposals: bool = False
 
 
 @dataclass
@@ -2837,25 +3173,129 @@ def run_single(
 
         accepted: List[str] = []
         seen_this_batch: Set[str] = set()
-        for rank, variant_id in enumerate(proposals):
-            if len(accepted) >= view.batch_size:
-                reason = "over_batch_size"
-            elif variant_id in seen_this_batch:
-                reason = "duplicate_within_batch"
-            elif variant_id in revealed.measured:
-                reason = "already_observed"
-            elif variant_id not in view.index_of:
-                reason = "not_in_eligible_universe"
-            else:
-                reason = ""
-            if reason:
-                outcome.trace.append(TraceRow(
-                    method=selector.name, seed=seed, round_index=round_index, rank=rank,
-                    variant_id=variant_id, status="rejected", reason=reason, revealed_fitness=None,
-                ))
-                continue
-            seen_this_batch.add(variant_id)
-            accepted.append(variant_id)
+        # Every id this round has already passed judgement on, in an EARLIER attempt. It is
+        # used only to skip re-offers between attempts; within a single proposal list the
+        # ordinary rules apply, so a duplicate inside one batch is still rejected as
+        # `duplicate_within_batch` rather than quietly dropped.
+        judged: Set[str] = set()
+        n_rejected = 0
+
+        def _judge(candidates: Sequence[str], skip: Set[str]) -> int:
+            """Applies the rejection rules to a proposal list. Returns how many it accepted."""
+            nonlocal n_rejected
+            before = len(accepted)
+            for rank, variant_id in enumerate(candidates):
+                if variant_id in skip:
+                    # Already decided in an earlier attempt this round. A longer ranked
+                    # list repeats its own prefix, so this is a re-offer, not a new
+                    # candidate, and it must not be traced or counted twice.
+                    continue
+                judged.add(variant_id)
+                if len(accepted) >= view.batch_size:
+                    reason = "over_batch_size"
+                elif variant_id in seen_this_batch:
+                    reason = "duplicate_within_batch"
+                elif variant_id in revealed.measured:
+                    reason = "already_observed"
+                elif variant_id not in view.index_of:
+                    reason = "not_in_eligible_universe"
+                else:
+                    reason = ""
+                if reason:
+                    n_rejected += 1
+                    outcome.trace.append(TraceRow(
+                        method=selector.name, seed=seed, round_index=round_index, rank=rank,
+                        variant_id=variant_id, status="rejected", reason=reason,
+                        revealed_fitness=None,
+                    ))
+                    continue
+                seen_this_batch.add(variant_id)
+                accepted.append(variant_id)
+            return len(accepted) - before
+
+        _judge(proposals, set())
+        first_pass_accepted = len(accepted)
+        selection_source = getattr(selector, "last_batch_source", "policy")
+
+        # DEGENERATE PROPOSALS are a different failure from ineligible ones, and only the
+        # latter is recoverable.
+        #
+        # An arm whose surrogate has collapsed proposes the SAME variant over and over -
+        # ALDE on a library with an unobserved amino acid at some position produces an
+        # all-NaN prediction vector and np.argmax returns index 0 forever, so its
+        # "trajectory" is one variant picked 100 times. Backfilling must not paper over
+        # that: topping such an arm up to a full batch from its own degenerate ranking
+        # would convert a detectable null arm into a plausible-looking result. So the
+        # distinctness of what the arm PROPOSED is measured here, before any fill, and
+        # recorded per round.
+        distinct_proposed = len(set(proposals))
+        degenerate_proposals = bool(proposals) and distinct_proposed <= max(
+            1, len(proposals) // 10
+        )
+        if degenerate_proposals:
+            logger.warning(
+                "%s seed %d round %d: DEGENERATE PROPOSALS - %d proposal(s) but only %d "
+                "distinct variant(s). An arm that cannot propose distinct candidates is a "
+                "null arm, not a short batch; this is NOT backfilled.",
+                selector.name, seed, round_index, len(proposals), distinct_proposed,
+            )
+
+        # Backfill a short batch from the SAME policy.
+        #
+        # The protocol requires exactly `batch_size` unique measurements per round, and
+        # every published baseline measured all 125. Our arms did not: generated proposals
+        # that are not in the eligible universe were rejected and never replaced, so GB1
+        # reliability averaged 123.23 (min 120, under-filled in 42 of 48 seeds), GB1
+        # frontier 124.02 (min 107) and TrpB frontier 120.23 (min 116). GB1 covers 149,360
+        # of 160,000 possible 4-site combinations, so ~6.65% of free proposals do not
+        # exist as measured variants. That is a protocol violation, and it biases AGAINST
+        # our arms: they measured fewer variants than their competitors.
+        #
+        # The fill asks the policy for a LONGER ranked list and takes its next eligible
+        # picks. That is the policy's own ordering continued, not a second rule: nothing is
+        # padded with random draws. A campaign-style method (ALDE) precomputes every round
+        # at once and is left alone - its rounds are not re-requestable, and those baselines
+        # already fill their budget.
+        backfill_attempts = 0
+        if campaign is None and not degenerate_proposals and len(accepted) < view.batch_size:
+            untested_remaining = len(view.variant_ids) - len(revealed.measured)
+            overshoot = 0
+            for backfill_attempts in range(1, BACKFILL_MAX_ATTEMPTS + 1):
+                missing = view.batch_size - len(accepted)
+                if missing <= 0:
+                    backfill_attempts -= 1
+                    break
+                # Ask for the batch plus a growing margin, so the margin covers the
+                # observed rejection rate with room to spare and is still bounded.
+                overshoot = max(overshoot * 2, missing * 4, 8)
+                request = min(view.batch_size + overshoot, max(untested_remaining, 1))
+                already_judged = set(judged)
+                try:
+                    more = selector.propose(round_index, request, view, revealed)
+                except Exception as exc:
+                    logger.warning(
+                        "%s seed %d round %d: backfill request for %d candidates failed "
+                        "(%s: %s); the batch stays short.",
+                        selector.name, seed, round_index, request, type(exc).__name__, exc,
+                    )
+                    break
+                gained = _judge(more, already_judged)
+                if len(accepted) >= view.batch_size:
+                    break
+                if gained == 0 and not [v for v in more if v not in judged]:
+                    # The policy has nothing new to offer; further attempts cannot help.
+                    logger.warning(
+                        "%s seed %d round %d: the policy offered no new candidates on "
+                        "backfill attempt %d; the batch stays short at %d/%d.",
+                        selector.name, seed, round_index, backfill_attempts,
+                        len(accepted), view.batch_size,
+                    )
+                    break
+        backfill_added = len(accepted) - first_pass_accepted
+        if backfill_added:
+            # The backfilled picks came from the same ranked policy list, so the source is
+            # unchanged - but the fact that a fill was needed is recorded per round.
+            selection_source = f"{selection_source}+backfilled({backfill_added})"
 
         # The batch is committed here; only now does the evaluator reveal its outcomes.
         batch_results = evaluator.reveal(accepted)
@@ -2877,8 +3317,18 @@ def run_single(
                 selector.notes.append(f"observe failed at round {round_index}: {exc}")
 
         round_seconds = time.perf_counter() - round_started
-        rejected = len(proposals) - len(accepted)
-        status = "completed" if len(accepted) == view.batch_size else "short_batch"
+        # Counted as rejections were traced, not as `len(proposals) - len(accepted)`:
+        # with backfilling, `len(proposals)` is no longer the number of candidates offered.
+        rejected = n_rejected
+        if degenerate_proposals:
+            # A degenerate arm is not a short batch. Saying "short_batch" here would put it
+            # in the same bucket as a recoverable eligibility shortfall, which is exactly
+            # the conflation that let a null arm report success.
+            status = "degenerate_proposals"
+        elif len(accepted) == view.batch_size:
+            status = "completed"
+        else:
+            status = "short_batch"
         outcome.rounds.append(RoundMetrics(
             method=selector.name, seed=seed, round_index=round_index,
             n_measurements=len(revealed.measured), best_fitness=revealed.best(),
@@ -2892,12 +3342,29 @@ def run_single(
             token_usage="unknown" if selector.token_usage is None else str(selector.token_usage),
             requested=view.batch_size, accepted=len(accepted), rejected=rejected,
             status=status,
-            failure_reason="" if status == "completed" else f"{rejected} selection(s) rejected",
+            failure_reason=(
+                "" if status == "completed"
+                else f"DEGENERATE: {len(proposals)} proposal(s) but only "
+                     f"{distinct_proposed} distinct variant(s). The arm could not propose "
+                     f"distinct candidates, so this is a null arm rather than a "
+                     f"recoverable short batch, and it was NOT backfilled"
+                if status == "degenerate_proposals"
+                else f"{rejected} selection(s) rejected; backfill exhausted after "
+                     f"{backfill_attempts} attempt(s) at {len(accepted)}/{view.batch_size}"
+            ),
+            backfill_attempts=backfill_attempts,
+            backfill_added=backfill_added,
+            selection_source=selection_source,
+            distinct_proposed=distinct_proposed,
+            degenerate_proposals=degenerate_proposals,
         ))
         if status == "short_batch":
             logger.warning(
-                "%s seed %d round %d: only %d/%d selections were usable.",
+                "%s seed %d round %d: only %d/%d selections were usable AFTER %d backfill "
+                "attempt(s). The arm has now spent less than the stated budget, so its "
+                "result is not comparable with a baseline that measured the full batch.",
                 selector.name, seed, round_index, len(accepted), view.batch_size,
+                backfill_attempts,
             )
 
     outcome.model_calls = selector.model_calls
@@ -2998,8 +3465,14 @@ def run_self_checks(library: LibrarySpec) -> List[Tuple[str, bool, str]]:
     check("already-observed rejected", "already_observed" in reasons, str(sorted(reasons)))
     check("unknown variant rejected", "not_in_eligible_universe" in reasons, str(sorted(reasons)))
     check("accepted only valid picks", accepted == fresh, f"accepted={accepted}")
-    check("short batch is not backfilled", outcome.rounds[-1].status == "short_batch",
-          f"accepted {outcome.rounds[-1].accepted}/{outcome.rounds[-1].requested}")
+    # A policy with nothing new to offer cannot be backfilled, so the batch stays short and
+    # says so. What must NOT happen is a silent pad with random draws to hide the shortfall.
+    check("unfillable short batch is reported short", outcome.rounds[-1].status == "short_batch",
+          f"accepted {outcome.rounds[-1].accepted}/{outcome.rounds[-1].requested} after "
+          f"{outcome.rounds[-1].backfill_attempts} backfill attempt(s)")
+    check("an unfillable batch is not padded",
+          outcome.rounds[-1].accepted == len(fresh),
+          f"accepted {outcome.rounds[-1].accepted}, expected {len(fresh)}")
 
     # 4. Budget accounting: unique measurements == initial + accepted, never more.
     final = outcome.rounds[-1]
@@ -3712,6 +4185,7 @@ def _method_block(
     for method in methods:
         status = dict(method_status.get(method, {}))
         probe = status.pop("probe", None)
+        compatibility = status.pop("compatibility", None)
         entry: Dict[str, Any] = {
             "status": status.get("status", "unknown"),
             "status_detail": status.get("detail", ""),
@@ -3722,6 +4196,16 @@ def _method_block(
                 entry["availability_probe"] = json.loads(probe)
             except (TypeError, ValueError):
                 entry["availability_probe"] = {"raw": str(probe)}
+        # AVAILABILITY AND COMPATIBILITY ARE SEPARATE FACTS, recorded under separate keys.
+        # An arm can be fully available - checkout, interpreter, dependencies and imports
+        # all fine - and still be incomputable on this library, returning a null
+        # trajectory that looks like a result. Reading availability as compatibility is
+        # what let that happen, so the manifest never again carries only one of them.
+        if compatibility is not None:
+            try:
+                entry["compatibility"] = json.loads(compatibility)
+            except (TypeError, ValueError):
+                entry["compatibility"] = {"raw": str(compatibility)}
         block[method] = entry
     return block
 
@@ -3824,7 +4308,48 @@ def build_manifest(
             "requested_spec": getattr(args, "ablate_components", ""),
             "prior_ablation_arm": str(getattr(args, "ablation", "none")),
             "prior_spread_override": getattr(args, "prior_spread", None),
-            "qualify_threshold": getattr(args, "qualify_threshold", None),
+            # The qualification bar, in full. A run whose manifest does not state its
+            # qualification bar is not admissible evidence, so all four facts are recorded:
+            # what was asked for in each form, what it resolved to, and which form won.
+            #
+            # `qualify_threshold` is retained under its existing key for the readers and
+            # greps that already use it, but it now carries the RESOLVED ABSOLUTE the run
+            # was actually gated by, not the raw argument - which is None on a default run
+            # and would have recorded "no bar" for every run that had one.
+            "qualify_threshold": (
+                float(evaluator.qualify_threshold_absolute) if evaluator is not None
+                else getattr(args, "qualify_threshold", None)
+            ),
+            "qualify_threshold_absolute": (
+                float(evaluator.qualify_threshold_absolute) if evaluator is not None else None
+            ),
+            "qualify_threshold_source": (
+                evaluator.qualify_threshold_source if evaluator is not None else None
+            ),
+            "qualify_quantile": (
+                evaluator.qualify_quantile if evaluator is not None else None
+            ),
+            "qualify_quantile_requested": getattr(args, "qualify_quantile", None),
+            "qualify_threshold_requested": getattr(args, "qualify_threshold", None),
+            # How attainable that bar is on THIS landscape. A quantile transfers the
+            # rarity of the bar, not its attainability: a count of 1 means qualification
+            # is equivalent to finding the global best.
+            "qualify_qualifying_count": (
+                int(evaluator.n_qualifying) if evaluator is not None else None
+            ),
+            "qualify_bar_below_top1": (
+                bool(evaluator.qualify_threshold_absolute < evaluator.top1_threshold)
+                if evaluator is not None else None
+            ),
+            "qualify_minimum_set_floor": {
+                "enabled": False,
+                "note": "No minimum-qualifying-set floor is applied. At the default "
+                        "quantile the qualifying set is ONE variant on the CR6261 "
+                        "landscapes, which makes qualification equivalent to finding the "
+                        "global best; see qualify_qualifying_count. Applying a floor is a "
+                        "protocol decision that must be taken in advance, not resolved "
+                        "silently by the benchmark.",
+            },
         },
         "model": model,
         "dataset": _dataset_identity(universe, args),
@@ -3850,8 +4375,26 @@ def build_manifest(
             "total_unique_measurements": total_budget,
             "batch_schedule": schedule,
             "accounting": "unique variants only; duplicate, already-observed, unknown and "
-                          "over-budget selections are rejected and a short batch is never "
-                          "backfilled",
+                          "over-budget selections are rejected, and a short batch is then "
+                          "BACKFILLED from the same policy - the selector is asked for a "
+                          "longer ranked list and its next eligible picks are taken. A "
+                          "short batch is never padded with random draws. A batch that "
+                          "still cannot fill is reported short, and the round metrics "
+                          "carry backfill_attempts, backfill_added and selection_source "
+                          "so a reader can see which measurements came from where",
+            "backfill": {
+                "enabled": True,
+                "max_attempts": BACKFILL_MAX_ATTEMPTS,
+                "source": "the arm's own policy, asked for a longer ranked list",
+                "secondary_rule": None,
+                "note": "Before this was implemented every baseline measured exactly 125 "
+                        "unique variants while our arms did not (GB1 reliability mean "
+                        "123.23 / min 120, GB1 frontier mean 124.02 / min 107, TrpB "
+                        "frontier mean 120.23 / min 116), because proposals outside the "
+                        "eligible universe were rejected and never replaced. That "
+                        "under-filling biased AGAINST our arms. Per-round fill is recorded "
+                        "in round_metrics.csv.",
+            },
             "max_model_calls": getattr(args, "max_model_calls", None),
             "live_calls_permitted": bool(getattr(args, "enable_live_muse", False)),
         },
@@ -3881,8 +4424,81 @@ def build_manifest(
     short_batches = sum(
         1 for o in outcomes for m in o.rounds if m.status == "short_batch"
     )
+    degenerate_rounds = sum(
+        1 for o in outcomes for m in o.rounds if m.degenerate_proposals
+    )
+
+    # POST-HOC DEGENERATE-RUN DETECTION, the backstop for any arm.
+    #
+    # The signal was already in our own artifacts and nothing looked at it: the benchmark
+    # wrote n_unique_measurements = 26 into round_metrics.csv for HER2 ALDE across 48 seeds
+    # - a full-length trajectory that was one variant picked 100 times - and the run was
+    # read as a performance number. An arm whose final unique-measurement count is
+    # materially below the budget did not search; it is a degenerate run, and it is
+    # classified here rather than silently accepted, in the same spirit as the coverage
+    # classifier.
+    #
+    # This is deliberately independent of the pre-flight check: the pre-flight knows one
+    # named mechanism, and this catches any arm that stops proposing distinct candidates
+    # for any reason.
+    # The signature is "ran every round AND still measured far below budget". Requiring the
+    # full schedule is what separates a degenerate arm from a run that simply stopped
+    # early: a crash or an abort is already reported as a failure, and calling it
+    # degenerate as well would be two names for one event. It does not weaken the
+    # detector - the HER2 ALDE run completed all four rounds and wrote a full-length
+    # trajectory; measuring 26 of 125 while completing every round IS the signature.
+    degenerate_runs: List[Dict[str, Any]] = []
+    nominal_budget = int(args.initial_size + args.rounds * args.batch_size)
+    expected_rounds = int(args.rounds)
+    for outcome in outcomes:
+        if not outcome.rounds or outcome.status != "completed":
+            continue
+        selection_rounds = [m for m in outcome.rounds if m.round_index > 0]
+        if len(selection_rounds) < expected_rounds:
+            continue
+        measured = int(outcome.rounds[-1].n_measurements)
+        if measured < nominal_budget * DEGENERATE_RUN_BUDGET_FRACTION:
+            degenerate_runs.append({
+                "method": outcome.method,
+                "seed": outcome.seed,
+                "n_unique_measurements": measured,
+                "nominal_budget": nominal_budget,
+                "fraction_of_budget": round(measured / nominal_budget, 4)
+                if nominal_budget else None,
+                "degenerate_proposal_rounds": sum(
+                    1 for m in outcome.rounds if m.degenerate_proposals
+                ),
+            })
 
     warnings: List[str] = [str(w) for w in extra_warnings if str(w).strip()]
+    for record in degenerate_runs:
+        warnings.append(
+            f"DEGENERATE RUN: {record['method']} seed {record['seed']} ended with "
+            f"{record['n_unique_measurements']} unique measurements against a nominal "
+            f"budget of {record['nominal_budget']} "
+            f"({record['fraction_of_budget']:.1%}). An arm this far below budget did not "
+            f"search the landscape, so this is NOT a performance number for that method - "
+            f"report the cell as a null arm with its measured count. If the arm normalises "
+            f"an encoded design space, check configuration.methods."
+            f"{record['method']}.compatibility for a constant-column incompatibility."
+        )
+    if degenerate_rounds:
+        warnings.append(
+            f"{degenerate_rounds} round(s) recorded DEGENERATE PROPOSALS: the arm could not "
+            "propose distinct candidates. This is a different failure from a short batch - "
+            "an eligibility shortfall is backfilled from the policy and is recoverable, "
+            "while a collapsed proposer is a null arm and was deliberately NOT backfilled."
+        )
+    incompatible = [
+        (m, str(method_status.get(m, {}).get("detail", "")))
+        for m in methods
+        if str(method_status.get(m, {}).get("status", "")).upper() == "INCOMPATIBLE"
+    ]
+    for method, detail in incompatible:
+        warnings.append(
+            f"{method}: ABSENT CELL - the arm is available but cannot be computed on this "
+            f"library, so it was not run and nothing was substituted for it. {detail}"
+        )
     for failure in failures:
         warnings.append(
             f"{failure['method']} seed {failure['seed']}: {failure['status']} - "
@@ -3891,7 +4507,9 @@ def build_manifest(
     if short_batches:
         warnings.append(
             f"{short_batches} round(s) committed a short batch: selections were rejected and "
-            "were NOT backfilled, so those arms spent less than the stated budget."
+            "the policy could not supply enough eligible replacements within "
+            f"{BACKFILL_MAX_ATTEMPTS} backfill attempts, so those arms spent less than the "
+            "stated budget."
         )
     for method in methods:
         attempted = [o for o in outcomes if o.method == method]
@@ -3931,18 +4549,20 @@ def build_manifest(
     if run_state is None:
         if not outcomes:
             run_state = "FAILED"
-        elif failures or short_batches:
+        elif failures or short_batches or degenerate_runs or degenerate_rounds:
+            # A degenerate run must never leave the state SUCCESS. The HER2 ALDE run
+            # completed cleanly, wrote every file, and was a null arm.
             run_state = "PARTIAL"
         else:
             run_state = "SUCCESS"
     if run_state == "SUCCESS" and not completed:
         run_state = "FAILED"
 
-    # PARTIAL must not be readable as 'crashed'. On an incompletely-saturated library a
-    # short batch is the protocol working as designed - proposals outside the eligible
-    # universe are rejected and never backfilled - but the arm did then spend less than
-    # the stated budget, which a reader has to know. State the reason rather than leaving
-    # one word to carry both meanings.
+    # PARTIAL must not be readable as 'crashed'. On an incompletely-saturated library
+    # proposals outside the eligible universe are rejected; a short batch now means the
+    # policy could not supply enough eligible replacements even after backfilling, and the
+    # arm did then spend less than the stated budget, which a reader has to know. State the
+    # reason rather than leaving one word to carry both meanings.
     if run_state == "ABORTED":
         state_reason = abort_reason or "aborted before any measurement"
     elif run_state == "FAILED":
@@ -3956,9 +4576,27 @@ def build_manifest(
             parts.append(f"{len(failures)} (method, seed) run(s) failed")
         if short_batches:
             parts.append(
-                f"{short_batches} round(s) committed a short batch - rejected selections are "
-                "never backfilled, so those arms spent less than the stated budget. This is "
-                "expected on a library that does not saturate its combinatorial product"
+                f"{short_batches} round(s) committed a short batch - rejected selections "
+                f"are backfilled from the same policy, but it could not supply enough "
+                f"eligible replacements within {BACKFILL_MAX_ATTEMPTS} attempts, so those "
+                f"arms spent less than the stated budget. A short batch is never padded "
+                f"with random draws. This can happen on a library that does not saturate "
+                f"its combinatorial product"
+            )
+        if degenerate_runs:
+            worst = min(degenerate_runs, key=lambda r: r["n_unique_measurements"])
+            parts.append(
+                f"{len(degenerate_runs)} DEGENERATE run(s): an arm ended as low as "
+                f"{worst['n_unique_measurements']} unique measurements against a nominal "
+                f"budget of {worst['nominal_budget']} "
+                f"({worst['method']} seed {worst['seed']}). An arm that far below budget "
+                f"did not search, so its row is a null arm and not a performance number"
+            )
+        if degenerate_rounds:
+            parts.append(
+                f"{degenerate_rounds} round(s) recorded degenerate proposals - the arm "
+                f"could not propose distinct candidates, which is a null arm rather than "
+                f"a recoverable short batch and was deliberately not backfilled"
             )
         state_reason = "; ".join(parts)
     else:
@@ -3984,6 +4622,15 @@ def build_manifest(
             "arms_completed": sorted({o.method for o in completed}),
             "seeds_attempted": len({(o.method, o.seed) for o in outcomes}),
             "seeds_completed": len(completed),
+            # Runs that completed but did not search. Kept as structured records, not only
+            # as a warning string, so a reader or a script can exclude them from a
+            # comparison without re-deriving them from round_metrics.csv.
+            "degenerate_runs": degenerate_runs,
+            "degenerate_run_budget_fraction": DEGENERATE_RUN_BUDGET_FRACTION,
+            "degenerate_proposal_rounds": degenerate_rounds,
+            "incompatible_arms": [
+                {"method": method, "reason": detail} for method, detail in incompatible
+            ],
             "failures": failures,
             "warnings": warnings,
             "self_checks": [{"check": n, "passed": bool(p), "detail": d} for n, p, d in self_checks],
@@ -4088,12 +4735,21 @@ def write_round_metrics_csv(path: Path, outcomes: Sequence[RunOutcome], stamp: s
         ["provenance", "method", "seed", "round", "n_unique_measurements", "best_measured_fitness",
          "new_top1_hits", "cum_top1_hits_excluding_initial", "cum_top1_hits_including_initial",
          "found_top1", "round_seconds", "cumulative_seconds", "model_calls", "token_usage",
-         "requested", "accepted", "rejected", "status", "failure_reason"],
+         "requested", "accepted", "rejected", "status", "failure_reason",
+         # Budget fill and attribution, per round: how hard the batch was to fill, and
+         # which selection rule the measurements came from.
+         "backfill_attempts", "backfill_added", "selection_source",
+         # Degeneracy, per round. `distinct_proposed` is what exposes a collapsed
+         # surrogate: an arm picking one variant repeatedly writes a full-length
+         # trajectory and this column is the number that gives it away.
+         "distinct_proposed", "degenerate_proposals"],
         [
             [stamp, m.method, m.seed, m.round_index, m.n_measurements, f"{m.best_fitness:.9g}",
              m.new_top1_hits, m.cum_top1_excluding_initial, m.cum_top1_including_initial,
              int(m.found_top1), m.round_seconds, m.cumulative_seconds, m.model_calls, m.token_usage,
-             m.requested, m.accepted, m.rejected, m.status, m.failure_reason]
+             m.requested, m.accepted, m.rejected, m.status, m.failure_reason,
+             m.backfill_attempts, m.backfill_added, m.selection_source,
+             m.distinct_proposed, int(m.degenerate_proposals)]
             for outcome in outcomes for m in outcome.rounds
         ],
     )
@@ -4478,6 +5134,8 @@ def build_selector_factories(
     args: argparse.Namespace,
     methods: Sequence[str],
     library: LibrarySpec,
+    qualify_absolute: Optional[float] = None,
+    design_space: Optional[np.ndarray] = None,
 ) -> Tuple[Dict[str, Callable[[int], Selector]], Dict[str, Dict[str, str]]]:
     """
     Resolves each requested method into a factory, or a visible unavailable/unsupported status.
@@ -4515,6 +5173,27 @@ def build_selector_factories(
             checkout = resolution["checkout"]
             python_exe = resolution["python_exe"]
             probe = probe_alde(checkout, python_exe, resolution)
+            # AVAILABILITY IS NOT COMPATIBILITY. The probe above answers "can this arm be
+            # launched"; this answers "can it be computed on THIS library at all". They are
+            # recorded separately in the manifest because the arm is fully available and
+            # still returns a null trajectory on seven of the nine landscapes.
+            compatibility = check_external_arm_compatibility(method, design_space, library)
+            if probe["available"] and not compatibility["compatible"]:
+                logger.error(
+                    "%s is AVAILABLE but INCOMPATIBLE with library %r: %d of %d one-hot "
+                    "columns are constant. This cell is ABSENT, not a result. %s",
+                    method, library.key, compatibility.get("n_constant_columns"),
+                    compatibility.get("n_columns"), compatibility["reason"],
+                )
+                status[method] = {
+                    "status": "INCOMPATIBLE",
+                    "detail": compatibility["reason"],
+                }
+                status[method]["probe"] = json.dumps(probe)
+                status[method]["compatibility"] = json.dumps(compatibility)
+                # Deliberately no factory: the arm must not run, and nothing is
+                # substituted for it.
+                continue
             if probe["available"]:
                 workspace = (Path(args.alde_workspace).expanduser().resolve()
                              if args.alde_workspace else checkout.parent / "benchmark_runs")
@@ -4538,14 +5217,26 @@ def build_selector_factories(
             else:
                 status[method] = {"status": "UNAVAILABLE", "detail": probe["reason"]}
             status[method]["probe"] = json.dumps(probe)
+            status[method]["compatibility"] = json.dumps(compatibility)
         elif method in ("panoptes_default", "panoptes_muse",
                         "panoptes_qualify_then_optimize", "panoptes_conditional_probe"):
             live = method == "panoptes_muse"
+            # The ABSOLUTE the Evaluator resolved from the eligible universe - not
+            # args.qualify_threshold, which is now an optional override and is None on a
+            # default run. Reading the raw arg here is what let the bar never transfer.
             qualify = (
-                args.qualify_threshold
+                qualify_absolute
                 if method in ("panoptes_qualify_then_optimize", "panoptes_conditional_probe")
                 else None
             )
+            if qualify is None and method in (
+                "panoptes_qualify_then_optimize", "panoptes_conditional_probe"
+            ):
+                raise BenchmarkError(
+                    f"{method} needs a resolved qualification bar, but none was supplied. "
+                    f"Pass the Evaluator's qualify_threshold_absolute: an arm whose bar is "
+                    f"unset silently becomes the single-policy baseline."
+                )
             probe = method == "panoptes_conditional_probe"
             if live and not args.enable_live_muse:
                 status[method] = {
@@ -4687,7 +5378,38 @@ def _execute_run(
         "Eligible universe: %d variants (%s)", len(universe), stamp,
     )
 
-    evaluator = Evaluator(universe)
+    # The qualification bar is resolved inside the Evaluator, against the same eligible
+    # universe that defines the top-1% threshold. argparse has already guaranteed that at
+    # most one of the two forms was given.
+    evaluator = Evaluator(
+        universe,
+        qualify_quantile=getattr(args, "qualify_quantile", None),
+        qualify_threshold=getattr(args, "qualify_threshold", None),
+    )
+    logger.info(
+        "Qualification bar: %.4f (%s%s); %d of %d eligible variants qualify. Top-1%% "
+        "threshold is %.4f.",
+        evaluator.qualify_threshold_absolute,
+        evaluator.qualify_threshold_source,
+        f" q={evaluator.qualify_quantile}" if evaluator.qualify_quantile is not None else "",
+        evaluator.n_qualifying,
+        len(universe),
+        evaluator.top1_threshold,
+    )
+    if evaluator.n_qualifying <= 1:
+        logger.warning(
+            "Only %d eligible variant(s) meet the qualification bar %.4f, so qualifying is "
+            "equivalent to finding the global best on this landscape. A quantile transfers "
+            "the rarity of the bar, not its attainability.",
+            evaluator.n_qualifying, evaluator.qualify_threshold_absolute,
+        )
+    if evaluator.qualify_threshold_absolute < evaluator.top1_threshold:
+        logger.warning(
+            "The qualification bar %.4f sits BELOW this landscape's own top-1%% threshold "
+            "%.4f, so 'qualifying' is an easier bar than being a hit, which inverts the "
+            "stage's purpose.",
+            evaluator.qualify_threshold_absolute, evaluator.top1_threshold,
+        )
     view = CandidateView(
         variant_ids=universe.variant_ids,
         one_hot=universe.one_hot,
@@ -4709,7 +5431,13 @@ def _execute_run(
     if unknown:
         raise BenchmarkError(f"Unknown method(s) {unknown}. Choose from: {', '.join(ALL_METHODS)}")
     components_disabled = resolve_ablate_components(args)
-    factories, method_status = build_selector_factories(args, methods, library)
+    factories, method_status = build_selector_factories(
+        args, methods, library,
+        qualify_absolute=evaluator.qualify_threshold_absolute,
+        # The encoded design space an external arm would be handed, so compatibility is
+        # decided against the real matrix rather than against the library's declaration.
+        design_space=universe.one_hot,
+    )
 
     # The starting samples are drawn before anything runs: they are part of the
     # configuration, not a by-product of it, so the manifest can record the seed block
@@ -5100,12 +5828,31 @@ examples:
                              "marginal-fitted surrogates on TrpB, at a pair chosen by the "
                              "generator's RNG rather than one we already know. Requires "
                              "--synthetic-size.")
-    parser.add_argument("--qualify-threshold", type=float, default=0.70,
-                        help="Fitness at which panoptes_qualify_then_optimize switches from the "
-                             "baseline policy to frontier search (default: %(default)s). Under "
-                             "deterministic reveal, P(reach threshold) and time-to-threshold are "
-                             "preserved pathwise, because every trajectory is identical to the "
-                             "baseline until the protected event has already occurred.")
+    # The qualification bar, stated EITHER as a quantile of the eligible universe (the
+    # default, because it is the only form that transfers between landscapes) or as an
+    # absolute fitness (an explicit override). Mutually exclusive: a run gated by two
+    # different bars cannot say which one it ran under.
+    qualify = parser.add_mutually_exclusive_group()
+    qualify.add_argument("--qualify-quantile", type=float, default=None,
+                         help=f"Quantile (0-100) of the eligible universe at which "
+                              f"panoptes_qualify_then_optimize switches from the baseline "
+                              f"policy to frontier search (default: "
+                              f"{DEFAULT_QUALIFY_QUANTILE}). Resolved to an absolute fitness "
+                              f"inside the Evaluator, from the same values array that defines "
+                              f"the top-1%% threshold, so the two bars cannot drift apart. The "
+                              f"default reproduces the old absolute 0.70 on TrpB exactly "
+                              f"(0.6998, the identical 64 variants). Mutually exclusive with "
+                              f"--qualify-threshold.")
+    qualify.add_argument("--qualify-threshold", type=float, default=None,
+                         help=f"Absolute fitness at which panoptes_qualify_then_optimize "
+                              f"switches to frontier search - an EXPLICIT OVERRIDE of "
+                              f"--qualify-quantile. There is no default: an absolute is not "
+                              f"comparable across landscapes (the pre-fix default "
+                              f"{LEGACY_QUALIFY_ABSOLUTE} admitted 100%% of three of them), so "
+                              f"it has to be asked for. Under deterministic reveal, P(reach "
+                              f"threshold) and time-to-threshold are preserved pathwise, "
+                              f"because every trajectory is identical to the baseline until "
+                              f"the protected event has already occurred.")
     parser.add_argument("--verbose", action="store_true", help="Debug-level console logging.")
     return parser
 
