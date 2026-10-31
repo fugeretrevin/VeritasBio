@@ -5,7 +5,9 @@ rules in **§2 are load-bearing**: each one is written down because violating it
 already produced a wrong result in this project, in one case silently inverting a
 published conclusion.
 
-Main is at `6ba8d1d`, pushed. Suite: **664 passing, 0 failures**.
+Suite: **664 passing, 0 failures**. Everything described here is committed and pushed
+to `origin/main`; run `git log --oneline -40` for the day's work rather than trusting a
+commit hash quoted in prose, which goes stale the moment this file is edited.
 
 ---
 
@@ -384,15 +386,33 @@ Review" doc it responds to.
 
 ---
 
-## 6. Decisions only the user can make
+## 6. Decisions — all three that were open are now closed
 
-- **The CR6261 qualification floor.** Blocks any CR6261 frontier arm. Either floor
-  the qualifying set at a declared minimum count, or declare the stage inapplicable
-  below a stated library size. Must be fixed *before* the arm runs.
-- **The frontier policy's exhausted shell** (open problem 1) — a policy change, not a
-  correctness fix.
-- **Whether to redefine the covariate** (open problem 3), which means amending a
-  frozen pre-registration before any results exist.
+Recorded because an earlier version of this file listed them as blocking, and a
+session reading a stale copy would stop for no reason:
+
+- **The CR6261 qualification floor — dissolved, not decided.** The question was
+  whether to floor the qualifying set at a minimum count or declare the stage
+  inapplicable below some library size. §5.2 removes the global-quantile bar from
+  online decisions entirely, so there is no floor to set. Do not re-raise it.
+- **The frontier policy's exhausted shell — answered.** §5.1, `frontier_pool_v2`.
+- **Whether to redefine the covariate — answered.** §5.4: keep the pre-registered
+  primary, add a distribution-relative secondary and a continuous depth analysis.
+
+### What genuinely still needs a human
+
+- **Hackathon framing and timing.** The demo narrative is already fully supported by
+  what exists and needs no new runs; see §1. Given that the pre-registration predicts
+  across-the-board regression (§8), a result is unlikely to improve the story.
+- **Whether to publish or raise on a within-protein result.** The external review
+  declined to promise publication from a paired result alone and named what a strong
+  outcome needs instead: the H2 contrast, frozen-state evidence identifying the stage,
+  a full-campaign intervention demonstrating it, **and** confirmation on at least one
+  further independent family. That is a strategy call, not a technical one.
+- **Whether to report the ALDE constant-column bug upstream.** It is a genuine
+  correctness defect in published code that makes the method silently return index 0
+  on any library with an unobserved residue at a position. We have not contacted the
+  authors and would not without being asked.
 
 ---
 
