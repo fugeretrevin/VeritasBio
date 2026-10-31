@@ -34,6 +34,10 @@ individual component contributes to the result; that the measured advantage tran
 wet-lab campaigns. The second is the subject of the 2^5 joint ablation
 (`docs/NEXT_STEPS.md` §3.1) and the third of nothing in this repository.
 
+A fourth thing is **not a finding of this project at all**: the shallow-shell enrichment
+**ordering** of §6.5. It is substantially a transcription of published figures into this
+protocol's units (§6.5.1) and is a legitimate covariate, never a result.
+
 ### 1.1 Protocol deviation that must accompany every external claim
 
 The protocol is **25 shared initial observations, then 4 rounds of 25, for 125 unique
@@ -625,17 +629,17 @@ is where the power actually is.
 The covariate is computed and frozen here. The independent landscapes, ranked by primary
 shallow-shell enrichment, with the development anchors shown for scale:
 
-| rank | landscape | level | shell cut | shell size | hits | shell hit rate | enrichment (95% CI) |
-|---|---|---|---|---|---|---|---|
-| — | TrpB | development | 1–2 | 2,242 | 168 | 7.4933% | 7.49x |
-| — | GB1 | development | 1–2 | 2,167 | 72 | 3.3226% | 3.32x (2.64–4.16) |
-| 1 | `creilov` | final test | 1–7 | 62,790 | 1,178 | 1.8761% | **1.875x** (1.77–1.98) |
-| 2 | `eqfp611_blue` | final test | 1–6 | 4,095 | 76 | 1.8559% | **1.854x** (1.48–2.31) |
-| 3 | `eqfp611_combined` | final test | 1–6 | 4,095 | 75 | 1.8315% | **1.830x** (1.46–2.29) |
-| 4 | `eqfp611_red` | final test | 1–6 | 4,095 | 26 | 0.6349% | **0.634x** (0.43–0.93) |
-| 5 | `cr9114_h1` | final test | 1–8 | 38,835 | 227 | 0.5845% | **0.584x** (0.51–0.67) |
-| 6 | `cr6261_h1` | final test | 1–5 | 945 | 4 | 0.4233% | **0.210x** (0.08–0.54) |
-| 7 | `cr6261_h9` | final test | 1–5 | 917 | 0 | 0.0000% | **0.000x** (0.00–0.21) |
+| rank | landscape | level | shell cut | shell size | hits | shell hit rate | enrichment (95% CI) | published anticipation |
+|---|---|---|---|---|---|---|---|---|
+| — | TrpB | development | 1–2 | 2,242 | 168 | 7.4933% | 7.49x | **none** — Johnston 2024 publishes no fitness-versus-mutation-count object |
+| — | GB1 | development | 1–2 | 2,167 | 72 | 3.3226% | 3.32x (2.64–4.16) | **none** — Wu 2016 never stratifies by mutation count |
+| 1 | `creilov` | final test | 1–7 | 62,790 | 1,178 | 1.8761% | **1.875x** (1.77–1.98) | **anticipated** — Chen Fig 3c |
+| 2 | `eqfp611_blue` | final test | 1–6 | 4,095 | 76 | 1.8559% | **1.854x** (1.48–2.31) | **anticipated** — Poelwijk Fig 6a |
+| 3 | `eqfp611_combined` | final test | 1–6 | 4,095 | 75 | 1.8315% | **1.830x** (1.46–2.29) | **anticipated** — Poelwijk Fig 6a |
+| 4 | `eqfp611_red` | final test | 1–6 | 4,095 | 26 | 0.6349% | **0.634x** (0.43–0.93) | **anticipated** — Poelwijk Fig 6a |
+| 5 | `cr9114_h1` | final test | 1–8 | 38,835 | 227 | 0.5845% | **0.584x** (0.51–0.67) | **anticipated** — Phillips Fig 1D, scoped to H1 (§6.9.2) |
+| 6 | `cr6261_h1` | final test | 1–5 | 945 | 4 | 0.4233% | **0.210x** (0.08–0.54) | **partly anticipated** — Phillips Fig 1E/1F |
+| 7 | `cr6261_h9` | final test | 1–5 | 917 | 0 | 0.0000% | **0.000x** (0.00–0.21) | **partly anticipated** — Phillips Fig 1E/1F |
 
 **Ranks 1–3 are a near-tie and ranks 4–5 are a near-tie,** at 1.875/1.854/1.830 and
 0.634/0.584, with heavily overlapping intervals. The ordering within each cluster is not
@@ -648,15 +652,66 @@ not reported as a clean monotone result.
 
 The per-protein rows the primary test uses, from the means of the above:
 
-| protein | landscapes | mean primary enrichment |
-|---|---|---|
-| CreiLOV | 1 | 1.875x |
-| eqFP611 / mTagBFP2 | 3 | 1.439x (spread 0.634–1.854) |
-| CR9114 | 1 | 0.584x |
-| CR6261 | 2 | 0.105x (spread 0.000–0.210) |
+| protein | landscapes | mean primary enrichment | position anticipated by | status |
+|---|---|---|---|---|
+| CreiLOV | 1 | 1.875x | **Chen Fig 3c** — "fraction of sampled genotypes observed to be >WT" against number of mutated residues, falling monotonically from ~0.52 at depth 2 to ~0 by depth 13 | anticipated |
+| eqFP611 / mTagBFP2 | 3 | 1.439x (spread 0.634–1.854) | **Poelwijk Fig 6a** — above-threshold genotypes coloured blue for steps 0–~6 and red for ~7–13 | anticipated |
+| CR9114 | 1 | 0.584x | **Phillips Fig 1D, scoped to H1** — per-shell affinity boxplots whose interquartile range enters the ceiling band only from ~depth 9–10 (§6.9.2) | anticipated |
+| CR6261 | 2 | 0.105x (spread 0.000–0.210) | **Phillips Fig 1E/1F** — the CR6261 germline binds *neither* antigen, both pinned at the ≤7.0 floor, while Fig 1C/1D shows the CR9114 germline already binding H1 at −logK_D ≈ 8.4 | partly anticipated, leaning anticipated |
+
+Citations in full:
+
+- **Poelwijk FJ, Socolich M, Ranganathan R (2019).** *Learning the pattern of epistasis linking
+  genotype and phenotype in a protein.* Nat Commun 10:4213. DOI
+  [10.1038/s41467-019-12130-8](https://doi.org/10.1038/s41467-019-12130-8).
+- **Chen Y, Hu R, Li K, Zhang Y, Fu L, Zhang J, Si T (2023).** *Deep mutational scanning of an
+  oxygen-independent fluorescent protein CreiLOV…* ACS Synth Biol 12(5):1461–1473. DOI
+  [10.1021/acssynbio.2c00662](https://doi.org/10.1021/acssynbio.2c00662).
+- **Phillips AM, Lawrence KR, Moulana A, et al. (2021).** *Binding affinity landscapes constrain
+  the evolution of broadly neutralizing anti-influenza antibodies.* eLife 10:e71393. DOI
+  [10.7554/eLife.71393](https://doi.org/10.7554/eLife.71393).
+- Clean negatives: **Johnston et al. (2024)** PNAS 121:e2400439121, DOI
+  [10.1073/pnas.2400439121](https://doi.org/10.1073/pnas.2400439121) — no fitness-versus-mutation-count
+  object of any kind; **Wu NC et al. (2016)** eLife 5:e16965, DOI
+  [10.7554/eLife.16965](https://doi.org/10.7554/eLife.16965) — a global fitness distribution,
+  never stratified by mutation count.
 
 Four proteins, a strict ordering, no ties — and, unlike the landscape-level ordering, one
 that is **unchanged** by the depth-0 convention.
+
+#### 6.5.1 The ordering is pre-published. The relationship is not.
+
+**At most one of H1's four positions is genuinely blind, and arguably zero.** Three published
+figures fix all four positions in direction and three of four in rank, once this protocol's
+floor(S/2) cut is supplied. The full audit is `docs/ordering-anticipation.md`; the verdicts
+are in the tables above. Note what this does *not* rescue: it is no use pleading that our cut
+rule was needed to produce the exact numbers, because the cut rule is in this document and a
+reader has it.
+
+The distinction that saves H1, in exactly these terms:
+
+> **The covariate column is published. The outcome column is not.**
+
+H1 asserts a **relationship** between shallow-shell enrichment and this project's
+**per-landscape effect sizes**. The ordering was knowable from the literature; the effect
+sizes are not, and §6.5's prediction of across-the-board loss to ridge is **entirely blind**.
+So H1 is not void. The compact formulation, to be used verbatim rather than paraphrased:
+
+> **H1's derivation was original and unpublished; its test set is pre-published.**
+
+**What must be struck.** Any sentence presenting **the ordering itself** as a finding of this
+project. The enrichment ordering is a transcription of published figures into this protocol's
+units. It is a legitimate covariate and an illegitimate result. Every table reporting the
+ordering carries the anticipation column above.
+
+**What survives untouched.** The per-landscape effect sizes, the §12.2 reporting set, the
+material-regression and minimum-improvement findings, H2 (§6.7), and the prediction below.
+
+**Two of this corpus's five characterised proteins are clean negatives — and they are the
+development pair.** TrpB and GB1, where the mechanism was derived, have no published
+depth-stratified object at all. So the derivation genuinely could not have been read off the
+literature; only the test set could. That is the right way round for honesty about the
+derivation and the wrong way round for the strength of the test.
 
 **Required alongside this ordering, every time it is reported: each target's library site
 count** — 16 for CR9114, 15 for CreiLOV, 13 for eqFP611, 11 for CR6261. This is disclosure,
@@ -679,6 +734,13 @@ that is a more interesting result than the one predicted.
 Registering a prediction of across-the-board failure is the point of doing this before the
 runs. It is also the result that would be hardest to publish and easiest to re-narrate
 afterwards, which is why it is written down first.
+
+**This prediction is not weakened by §6.5.1 and is not to be softened in response to it.** The
+anticipation audit struck the *ordering* as a finding; it leaves this prediction entirely
+blind, because no published figure says anything about how the VeritasBio reliability policy
+performs against one-hot ridge on any of these landscapes. With the ordering demoted to a
+covariate, **this prediction is now the main thing H1 tests**, and it is the part of H1 that
+was always the real content.
 
 Two features of this corpus are worth naming before the numbers arrive, because they make
 the test sharper than n = 3 families usually allows:
@@ -717,7 +779,27 @@ Recommended, with three caveats that reduce what it buys the H1 test specificall
   budget sensitivity.
 
 So the H1 test would go from n = 4 to **n = 7 proteins**, where a perfect ordering gives an
-exact one-sided p of 1/5,040 instead of 1/24. That is the real gain, and it is large.
+exact one-sided p of 1/5,040 instead of 1/24.
+
+#### Standing prohibition: no n-expansion without an anticipation audit first
+
+That apparent gain is a trap, and it is recorded here as a precondition rather than left as a
+temptation:
+
+> **No reserve protein may be promoted into the H1 test until the §6.5.1 anticipation audit
+> has been run on it and its verdict recorded in this document.**
+
+The reasoning. Promoting four more **pre-published** positions would move the exact attainable
+one-sided p from **1/24 to 1/5,040** while adding **not a single blind prediction**. It would
+read as a decisive power gain and be nothing of the kind: a longer transcription of published
+figures is still a transcription. The audit is cheap — it is a literature read, not a compute
+job — and it must precede promotion, because after promotion the number looks authoritative
+and the question stops being asked.
+
+Each promoted protein's row carries its anticipation verdict in the §6.5 tables, and the
+promoted test reports **how many of its n positions are blind** alongside the p-value. A
+p-value from an ordering with zero blind positions is reported as what it is: a measure of how
+well published figures agree with each other.
 
 Their covariates are already computed and frozen alongside the others, so promoting them
 later is not a fresh look: HIV-1 protease 1.357x, SaCas9 1.560x, SpCas9 2.500x, RhlA
@@ -754,6 +836,28 @@ The primary instance is **eqFP611 blue against eqFP611 red**.
 | tier (1%), tier size (82 hits), base rate (1.0010%) | |
 | diversity ceiling geometry (d≥2: 38 blue, 28 red) | |
 | censoring (both effectively uncensored, 0.012% at each extreme) | |
+
+**This is a natural experiment Poelwijk built, not a manipulation this protocol selected —
+and that is stronger provenance, not weaker.** The library is not "13 mutated sites" in the
+abstract. It is the **complete 2^13 space between two named parents**: **mTagBFP2** (blue, at
+depth 0) and **mKate2** (red, at depth 13). The pinned wild-type file is literally
+`eqFP611(mTagBFP2).fasta`, so depth *is* the interpolation coordinate between the two
+phenotypes, by the original authors' design. Blue's hits sit near its own parent and red's
+near the other one because that is what the library is.
+
+Poelwijk Fig 6a makes it explicit: every above-threshold genotype is coloured by mutational
+step, **blue from 0 to ~6 and red from ~7 to 13**. This protocol's cut is floor(13/2) = **6**,
+so the **published colour switch lands exactly on it.** The cut was derived from the
+resolvability argument of §6.3, not from that figure, and it coincides.
+
+Why this is better provenance than a contrast of our own construction: the blue/red split
+**cannot have been chosen after seeing our results**, because it was fixed by a 2019
+publication designing an interpolation between two fluorescent proteins. A within-protein
+covariate manipulation that predates the hypothesis by seven years is about as clean a causal
+handle as an observational corpus can offer. It is still not cross-protein generalization
+evidence (§6.7.5), and it is now also a position the literature anticipates (§6.5.1) — but
+H2's content was never the ordering; it is the **effect-size difference**, which no figure
+publishes.
 
 The cross-protein comparison of H1 varies protein, fold, library width, alphabet, saturation,
 tier, censoring and ceiling geometry **all at once**, and then asks which of them explains a
@@ -912,6 +1016,15 @@ failed H2. Reported in this order: H2 first, because it is the better-powered te
 narrower question; then H1, with its power limitation restated; then the per-protein effects
 of §12.2, which stand on their own regardless of either hypothesis.
 
+**The reporting order matters more than it did when it was fixed.** §6.5.1 established that
+H1's covariate ordering is substantially a transcription of published figures into this
+protocol's units — at most one of four positions blind, arguably zero. H1 retains real content
+(the relationship, and the blind across-the-board-loss prediction of §6.5), but **H2 now
+carries more of the study's weight** than when this order was written. H2's own content was
+never an ordering: it is the per-seed effect-size difference between two readouts, which no
+publication reports. H2 first was the right call for power; it is now also the right call for
+originality.
+
 **The most likely outcome is pre-named: H2 confirmed, H1 unresolved.** That combination is
 **mechanism supported, generalization undetermined**, and it is a legitimate and reportable
 result. It is not a failure and must not be narrated as one; nor may it be narrated as a
@@ -957,17 +1070,45 @@ manufacture a depth gradient of the kind the covariate measures. The §6.5 order
 **0.584x** at the primary cut and CR9114 stays at rank 5 of 7 landscapes and rank 3 of 4
 proteins — the position is unchanged, now on trustworthy numbers.
 
-**Its position is anticipated, not predicted.** Per `docs/label-provenance.md`, **Phillips
-Figure 5A already publishes maximum affinity against mutation depth for CR9114.** Anyone who
-had read that figure would expect CR9114's hits to sit deep and its shallow shell to be
-depleted. So CR9114's place in the H1 ordering is **recoverable from the published
-literature** and is not a novel prediction of this protocol.
+**Its position is anticipated, not predicted** — but **the citation given for that in the
+first version of this section was the wrong figure, and read literally it points the other
+way.** The correction, recorded rather than quietly swapped:
+
+- **What was cited: Phillips Fig 5A. Withdrawn.** Fig 5A plots the **maximum** −logK_D per
+  mutation count. For **H1 — the only CR9114 landscape in this pin** — that maximum is ≈8.4 at
+  depth 0 and already ≈9.4 by **depth 1**, then flat. Read as a statement about this
+  protocol's covariate, Fig 5A says CR9114's *shallow* shell is where the good variants are,
+  which is the **opposite** of the measured 0.584x depletion. The deep structure visible in
+  Fig 5A belongs to the **H3 and influenza B** traces, and the widely quoted "eight mutations
+  required" figure is about **influenza B**. Neither landscape is in this corpus. Phillips'
+  main text is explicit: *"For H1, only a few mutations are needed to improve from the
+  germline affinity."*
+- **What is cited now: Phillips Fig 1D, scoped to H1.** Fig 1D plots **boxplots of the
+  affinity distribution per mutation count**. Its upper whiskers reach near-ceiling early —
+  which is exactly what Fig 5A reports, and why the two are easy to confuse — while the
+  **interquartile range only enters the ceiling band from ~depth 9–10**. A *per-shell
+  distribution* is the object whose shape this protocol's hit-rate statistic depends on; a
+  *per-shell maximum* is not, because one variant cannot set a shell's hit rate.
+
+**The verdict stands and the evidence was misattributed.** CR9114's position is still
+anticipated, on Fig 1D.
+
+**Methods note, because this is the second citation error in this chain and both failed the
+same way.** The earlier one was the claim that CombinGym's cleaning changed the H1 censoring
+value from 6.0 (§9.4); this one was Fig 5A. **Both were caught by reading the figure rather
+than the caption or the summary**, and both would have survived any number of re-readings of
+the surrounding prose. Where this protocol cites a published figure as anticipating a
+covariate, the citation is only valid if someone has **read that figure's axes and scoping**
+— which trace, which antigen, maximum or distribution — and recorded what they read. A caption
+is not a citation. Applied to §6.5.1's audit: its three load-bearing citations are each marked
+in `docs/ordering-anticipation.md` as figure-reads rather than caption-reads, which is why
+they are usable.
 
 Both statements hold at once and neither cancels the other:
 
 - fixing the attrition makes the number **trustworthy**; it does not make it **novel**;
-- CR9114 remains legitimate held-out evidence about **arm performance**, which Figure 5A says
-  nothing about — the figure describes the landscape, not any method's behaviour on it;
+- CR9114 remains legitimate held-out evidence about **arm performance**, which no Phillips
+  figure speaks to — Fig 1D describes the landscape, not any method's behaviour on it;
 - but **H1's ordering may not be presented as though all four positions were blind**. Where
   the ordering is reported, CR9114's is flagged as literature-anticipated. With n = 4 proteins
   and one position anticipated, the ordering's evidential value is weaker still than §6.4's
@@ -1775,13 +1916,14 @@ step 6's eqFP611 cells.
 | O-3 | **ALDE compatibility on this corpus is unprobed.** The binary per-site alphabets and the 121-/1,053-residue genotype representations are not the saturated-site encoding its published code assumes. | Likely absent cells, to be documented per §7.2 rather than substituted. |
 | O-4 | ~~TrpB's shallow-shell figures were not recomputed here.~~ **Resolved on 2026-10-31.** TrpB has now been reproduced by a **second, independent implementation** — a parallel agent's own genotype canonicalisation and shell profiler, run against the real landscape files — giving shallow 168/2,242 = **7.4933%**, deep 1,432/157,757 = **0.9077%**, per-depth 15.79% / 7.20% / 2.33% / 0.608% at depths 1–4 and a depth-4 maximum of 1.0000. The same implementation gives GB1 shallow 72/2,167 = **3.3226%**, deep 1,422/147,193 = **0.9661%**, depth-4 maximum 8.7620. `freeze_cross_protein_corpus.py stats` reproduces GB1's figures **exactly** under the §6.3 depth-0 convention. Both anchors now come from agreeing implementations; the earlier 2,168 / 3.3210% was the depth-0 convention difference and nothing else. | none |
 | O-5 | **The upstream corpus has seven recorded discrepancies or inconsistencies** (§3.6, D-1 to D-7), two of them unexplained one-row differences and one — SpCas9, 948 claimed against 597 usable — a factor of 1.6. | The clean file wins where they disagree; D-5 means RhlA's provenance is unestablished. |
-| O-6 | **H1's power is marginal by construction and it will probably be recorded as unresolved** (§6.4). With n = 4 proteins the smallest attainable exact one-sided p is 0.042, so only a perfect ordering reaches alpha; the covariate's top three landscape values are a near-tie; and the demonstration is that excluding one wild-type row from a denominator swapped ranks 1 and 2 on a 0.02x margin. H1 is additionally ranking the *magnitudes of four losses*, since every independent value sits below GB1's 3.32x. | H1 is kept but is no longer the only formal test of the mechanism: **H2 (§6.7)** tests the mechanism at n = 48 seeds on a design where only the covariate moves. Expanding to the reserve proteins (§6.5) would take H1 to n = 7. |
+| O-15 | **Whether the four reserve proteins' positions are also pre-published is unchecked**, and §6.5's standing prohibition blocks promoting any of them into the H1 test until it is. Promoting four pre-published positions would move the exact attainable one-sided p from 1/24 to 1/5,040 while adding **zero** blind predictions. | The only sanctioned route to n = 7 runs the §6.5.1 audit first and records each verdict. A promoted test must report how many of its n positions are blind alongside its p-value. |
+| O-6 | **H1's power is marginal by construction and it will probably be recorded as unresolved** (§6.4). With n = 4 proteins the smallest attainable exact one-sided p is 0.042, so only a perfect ordering reaches alpha; the covariate's top three landscape values are a near-tie; and the demonstration is that excluding one wild-type row from a denominator swapped ranks 1 and 2 on a 0.02x margin. H1 is additionally ranking the *magnitudes of four losses*, since every independent value sits below GB1's 3.32x — and, per O-13, at most one of those four positions is blind. | H1 is kept but is no longer the only formal test of the mechanism: **H2 (§6.7)** tests the mechanism at n = 48 seeds on a design where only the covariate moves, and now carries more of the study's weight (§6.8). Expanding to the reserve proteins would take H1 to n = 7 **only subject to the §6.5 anticipation prohibition** (O-15). |
 | O-9 | **A8 is a budget-matched re-implementation, not MULTI-evolve** (§7.5). The published schedule assumes a singles screen plus ~100–200 pairwise measurements; this protocol's entire budget is 125. The adaptation rule is fixed on first use but has not been written or tested. | A8 results are evidence about a fixed depth schedule at a 125-measurement budget, never a reproduction of the published result. |
 | O-10 | **ALDE runs at 26% of its own demonstrated budget here** (§7.6): 125 against 96 + 4×96 = 480, and at batch 25 rather than 96. ALDE publishes no batch-size sensitivity analysis, so a deficit at these budgets is partly a statement about the budget. | ALDE must not carry the claim; ridge is the reference baseline. Mitigation is the 480-measurement development runs on TrpB and GB1, which have not been run. |
 | O-11 | **The CR6261 H1/H9 genotype intersection has not been computed** (§6.7.5). H2's replication instance needs it, because the two antigens have 1,887 and 1,842 rows and the shared-initial-sample construction applies only to genotypes present in both. | Compute and record before running the replication contrast. |
 | O-12 | **Whether the policy's selection depth scales with library width is unmeasured — and this matters because it governs whether the mechanism means anything beyond four sites at all, not because it confounds H1.** The depth bias (reliability 2.63 / 2.56; baselines 3.48–3.60) was measured on **two libraries of identical four-site width**, which cannot distinguish an absolute constant from a proportion of sites. **The serious branch: under the proportional reading** (~65% of sites) the policy selects near depth 8.5 of 13 on eqFP611 and 10.4 of 16 on CR9114, i.e. it is **not a shallow exploiter on any library wider than four sites**. The shallow-exploitation mechanism would then describe **only TrpB and GB1 — both development data — and would not apply to a single independent target.** That is a more serious threat to the project than the generalization result itself, because it would void the mechanism's relevance rather than merely weaken the evidence for it. Under the **absolute** reading the policy instead gets effectively shallower as libraries widen (2.6 of 4 sites is 65% of positions, 2.6 of 16 is 16%) and performance should degrade monotonically with site count. **Correction to an earlier draft of this item:** it claimed site count covaries with the enrichment ordering strongly enough to confound H1. Checked against the frozen per-protein values — CR9114 16 sites / **0.584x**, CreiLOV 15 / 1.875x, eqFP611 13 / 1.439x, CR6261 11 / 0.105x — the Spearman correlation between site count and enrichment is **rho_s = +0.400, exact one-sided p = 9/24 = 0.3750**. (The CR9114 re-preparation of §6.9 moved that value from 0.622x to 0.584x and left the rank pattern, and therefore rho_s and p, **unchanged**.) The two orderings differ at one position and it is the decisive one: **CR9114 is the widest library in the corpus (16 sites) yet only third of four in enrichment.** That single inversion decorrelates width from the covariate enough that **H1 is not seriously confounded by it**. The confound framing was an overstatement and is withdrawn; the premise-undercutting branch above is the reason this item is a priority. | **Testable from the §10 rows at zero extra compute**, by the read-out pre-specified in §10.1, and it must be done before P2 (§6.7.4) is scored. Site count is still reported alongside enrichment in every H1 table (§6.5) — as disclosure, not as a correction for a confound that the data does not support. |
 | O-7 | **The size of the mode effect is still unknown** (§7.3). The mitigation — running reliability and frontier pool-restricted on TrpB and GB1 — is **now in progress on held-out seeds 48–95**, against the fixed GFlowNet-enabled anchors of §7.4 (TrpB 45.21 / 40.50, GB1 15.02 / 37.21). | Until those runs land, the aggregate, the H1 test and the gate decision are all blocked by §7.4. |
-| O-13 | **How much of the H1 ordering is recoverable from published literature is unchecked.** CR9114's position is **anticipated, not predicted**: Phillips Figure 5A already publishes maximum affinity against mutation depth for it (§6.9.2). Whether eqFP611, CreiLOV and CR6261 have equivalent published depth-versus-fitness figures has not been checked. | An ordering every position of which is recoverable from the literature is not a test of anything. Check before the H1 ordering is interpreted, and flag each anticipated position where the ordering is reported. |
+| O-13 | ~~How much of the H1 ordering is recoverable from published literature is unchecked.~~ **Answered, before any run** (`docs/ordering-anticipation.md`, §6.5.1). **At most one of H1's four positions is genuinely blind, and arguably zero.** eqFP611 — Poelwijk Fig 6a, anticipated. CreiLOV — Chen Fig 3c, which publishes the fraction of each depth shell beating WT and is the only published object of this protocol's own statistic type found in the audit, anticipated. CR6261 — Phillips Fig 1E/1F, partly anticipated. CR9114 — anticipated, on **Fig 1D scoped to H1**, after the Fig 5A citation was withdrawn as wrong and pointing the other way (§6.9.2). TrpB and GB1 are **clean negatives**, so the derivation could not have been read off the literature; only the test set could. | H1 is **not void**: the covariate column is published, the outcome column is not, so the relationship and the §6.5 across-the-board-loss prediction remain blind. What is struck is any presentation of **the ordering itself** as a finding of this project. Consequences recorded: anticipation columns in §6.5, the standing prohibition on n-expansion without an audit (§6.5), and H2 carrying more weight (§6.8). |
 | O-14 | **The clean/raw divergence was only checked for CR9114.** D-8's filter was found because a depth-correlated retention pattern was noticed in one landscape. The other nine CombinGym clean workbooks have **not** been diffed against their raw counterparts, and four of them — CreiLOV, eqFP611, CR6261 H1 and H9 — are final-test targets whose covariates this protocol has pre-registered. | A second silent exclusion of the D-8 kind would move a pre-registered covariate after the freeze. Diff every clean workbook against its raw table, and record the result, before the arms are interpreted. Cheap: the raw tables are at the same pin. |
 | O-8 | **No wet-lab validation of anything here.** Every figure is a retrospective simulation over a fully-measured library. | Nothing in this study is evidence about a real campaign. |
 
@@ -1809,7 +1951,12 @@ written after cross-protein results have been examined must say so in its first 
 | **2026-10-31** | §5.1, §6.3, §6.5, §8.2, §9.1, §9.3, §9.4, §9.5, §16 O-12, `cross_protein_corpus_stats.json` | **values moved**: eligible universe 48,841 → **65,094** rows (65,093 mutants); top-1% hits 489 → **651**; tier boundary 9.6077550214 → **9.6088080625**; primary enrichment 0.622x → **0.584x** (−6.0% relative); d≤2 enrichment **0.000x, unchanged** (shell of 134); mean hit depth 8.91 → **9.27**; max observed depth 15 → **16**; d≥2 ceiling 280 → **365** (+30.4%); d≥3 ceiling 118 → **143**; 125-measurement budget share 0.26% → **0.19%**; floor mass 1.91% → **2.57%** (1,675 rows); top 0.1% / 0.01% tiers 49 / 5 → **66 / 7**. The fractional-budget cap now binds on `cr9114_h1` above 0.5% rather than 1%. Regenerated the stats artifact; **only the `cr9114_h1` block changed**, the other 13 landscapes are byte-identical. The per-protein H1 ordering and `rho_s = +0.400, p = 9/24` are unchanged | the stats artifact is generated from the corpus, so it had to be regenerated from the raw table rather than hand-edited; its generator read the clean workbook and would otherwise have reproduced the hole |
 | **2026-10-31** | §3.4, §3.5, `cross_protein_corpus.lock.json`, `freeze_cross_protein_corpus.py` | **the pin did not change; the lock gained one entry.** `Data/DMS/Raw/bnAbs_CR9114_raw.csv` is now pinned (git blob `8ac7352f…`, sha256 `ee31f8fc…`, 12,258,680 bytes) at the same commit `c5dccd51`. The `corpus` block is byte-identical and **no existing entry changed** — all 20 were recomputed and came out identical — taking the lock from 20 to 21 files. `verify` now also **fails if any pinned path, or any file a landscape reads, is absent from the lock**; it reports 21/21 | the lock recorded only upstream blobs and no derived table, so a landscape repointed at an unlisted file would have been scored against unhashed bytes while `verify` still exited 0. Pinning the raw table closes that for CR9114 and the new guard closes the class |
 | **2026-10-31** | §6.9.1 | recorded that the pre-fix **depth-blind reweighting bound predicted 0.5622x against the measured 0.5845x** — right direction, 3.8% relative — and that two independent routes agreeing is the best available evidence the re-preparation introduced no new error | it validates reweighting as a usable bound when a full table cannot be obtained, which is a reusable method rather than a one-off observation |
-| **2026-10-31** | §6.9.2, §16 O-13 | recorded that CR9114's position in the H1 ordering is **anticipated, not predicted** — Phillips Figure 5A already publishes max affinity against depth for it — so fixing the attrition makes the number trustworthy but not novel, and the ordering may not be presented as though all four positions were blind | an ordering recoverable from published figures is not a test; whether the other three positions are likewise recoverable is unchecked (O-13) |
+| **2026-10-31** | §6.9.2, §16 O-13 | recorded that CR9114's position in the H1 ordering is **anticipated, not predicted** — ~~Phillips Figure 5A already publishes max affinity against depth for it~~ **(citation superseded two rows below: the correct figure is Fig 1D; Fig 5A was wrong and pointed the other way)** — so fixing the attrition makes the number trustworthy but not novel, and the ordering may not be presented as though all four positions were blind | an ordering recoverable from published figures is not a test; whether the other three positions are likewise recoverable is unchecked (O-13) |
+| **2026-10-31** | §6.5, §6.5.1, §16 O-13 | **O-13 answered, before any run: H1's covariate ordering is substantially pre-published.** At most one of its four positions is genuinely blind, arguably zero. eqFP611 — **Poelwijk Fig 6a** (Nat Commun 10:4213, 10.1038/s41467-019-12130-8); CreiLOV — **Chen Fig 3c** (ACS Synth Biol 12(5):1461–1473, 10.1021/acssynbio.2c00662), the only published object of this protocol's own statistic type in the audit; CR6261 — **Phillips Fig 1E/1F** (eLife 10:e71393, 10.7554/eLife.71393); CR9114 — Phillips **Fig 1D**. TrpB (Johnston 2024) and GB1 (Wu 2016) are clean negatives. Anticipation columns added to both §6.5 tables, with the citations in full | an ordering recoverable from published figures is not a finding. H1 survives because **the covariate column is published and the outcome column is not** — it asserts a relationship, and the per-landscape effect sizes plus §6.5's across-the-board-loss prediction remain entirely blind. **H1's derivation was original and unpublished; its test set is pre-published.** What is struck is any sentence presenting the ordering itself as this project's finding |
+| **2026-10-31** | §6.9.2 | **withdrew the Phillips Fig 5A citation for CR9114 and replaced it with Fig 1D scoped to H1.** Fig 5A plots per-shell **maxima**, and for H1 — the only CR9114 landscape in the pin — that maximum is ≈8.4 at depth 0 and ≈9.4 by **depth 1**, flat thereafter, so read literally it says the shallow shell is rich, the **opposite** of the measured 0.584x depletion. Its deep structure belongs to the H3 and influenza B traces and the "eight mutations" figure is about influenza B; neither is in this corpus. Fig 1D's per-shell **distributions** have an interquartile range entering the ceiling band only from ~depth 9–10, which is the object a hit-rate statistic depends on. Added a methods note: this is the second citation error in this chain, both were caught by reading the figure rather than the caption, and a caption is not a citation | the verdict was right and the evidence was misattributed. An anticipation claim is valid only if someone has read the figure's axes and scoping — which trace, which antigen, maximum or distribution — and recorded it |
+| **2026-10-31** | §6.7.1 | **re-framed eqFP611 blue-versus-red as a natural experiment Poelwijk built**, not a manipulation this protocol selected: the library is the complete 2^13 space **between two named parents**, mTagBFP2 (blue, depth 0) and mKate2 (red, depth 13) — the pinned WT file being `eqFP611(mTagBFP2).fasta` — and Fig 6a's published colour switch at step ~6 lands exactly on the independently derived floor(13/2) = 6 cut | stronger provenance, not weaker: a covariate manipulation fixed by a 2019 publication **cannot have been chosen after seeing our results**. H2's content was never the ordering but the effect-size difference, which no figure publishes |
+| **2026-10-31** | §6.5, §16 O-15 | added a **standing prohibition**: no reserve protein may be promoted into the H1 test until the §6.5.1 anticipation audit has been run on it and its verdict recorded; a promoted test reports how many of its n positions are blind alongside its p-value | promoting four more pre-published positions would move the exact attainable one-sided p from **1/24 to 1/5,040 while adding not a single blind prediction**. It would read as a decisive power gain and be nothing of the kind. The audit is a literature read, not a compute job, and must precede promotion because afterwards the number looks authoritative and the question stops being asked |
+| **2026-10-31** | §6.5, §6.8 | recorded that §6.5's across-the-board-failure prediction is **not weakened by the anticipation audit and is not to be softened in response to it** — it is now the main thing H1 tests — and that **H2 carries more of the study's weight** than when the reporting order was fixed | no published figure says anything about how the reliability policy performs against one-hot ridge, so that prediction stays blind. H2 first was already right for power; it is now also right for originality |
 | **2026-10-31** | §9.4, §16 O-14 | **corrected an inventory claim**: the raw bnAb tables do **not** floor H1 at 6.0. Raw `h1_mean` has a minimum of 7.0 with 1,675 rows at the floor, identical to clean; the 6.0 floor applies to `h3_mean` and `fluB_mean` only. The "cleaning changed the censoring value" caveat is false for H1 and applies to no landscape this protocol scores. Also opened O-14: the other nine clean workbooks have not been diffed against their raw counterparts | a false caveat about censoring would have been carried into the censored-endpoint reasoning of §9.4; and D-8 was found in the one landscape anyone looked at, which says nothing about the other nine |
 | 2026-10-31 | §4.5, §8.3, §12.2 | added: **CR6261 is excluded from the pooled aggregate** on three pre-computable grounds — 125 measurements is 6.63% of its 1,886 mutants against 0.08% on TrpB; its top-1% tier is 19 variants so the budget exceeds the hit set and an oracle scores like a good method; and its H9 covariate is degenerate at zero under both cut definitions. Retained in full as the qualitative demonstration that the covariate can invert, and as H2's replication instance. The pooled aggregate is now over **3 proteins** | a target can be legitimately held out and still be the wrong instrument; the ratio and the tier size are properties of the dataset, not of any result |
 | 2026-10-31 | §7.6 | added the named threat that ALDE runs at 26% of its own demonstrated budget (125 against 96 + 4×96 = 480, batch 25 rather than 96, no published batch-size sensitivity), with the mitigation of also running the grid at 96 + 4×96 on TrpB and GB1 | both are development data, so the mitigation costs nothing held-out, and without it an ALDE deficit cannot be attributed to the method rather than the budget |
