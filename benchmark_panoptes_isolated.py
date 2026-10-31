@@ -1283,6 +1283,17 @@ LEGACY_QUALIFY_ABSOLUTE = 0.70
 #: is reported as short, loudly, rather than retried forever.
 BACKFILL_MAX_ATTEMPTS = 4
 
+#: Below this fraction of the nominal budget, a COMPLETED run is classified DEGENERATE.
+#:
+#: The case this exists for: HER2 ALDE recorded 26 unique measurements against a budget of
+#: 125 (0.208) across 48 seeds while writing a full-length trajectory, and was read as a
+#: performance number. The evidence was in round_metrics.csv and nothing looked at it.
+#:
+#: 0.9 is deliberately permissive. An arm that could not fill a few batches on a sparse
+#: library is a short-batch case, warned about separately and recoverable by backfilling;
+#: an arm that stopped searching altogether falls far below this.
+DEGENERATE_RUN_BUDGET_FRACTION = 0.9
+
 
 @dataclass
 class RevealedState:
@@ -2265,6 +2276,113 @@ def resolve_ablate_components(args: argparse.Namespace) -> Tuple[str, ...]:
         cached = parse_ablate_components(getattr(args, "ablate_components", ""))
         args.ablate_components_resolved = cached
     return tuple(cached)
+
+
+#: Arms that are handed an encoded design space and normalise it against per-column
+#: bounds, and so cannot tolerate a constant column. Listed by name rather than detected,
+#: because this is a property of the external implementation, not of our data.
+CONSTANT_COLUMN_INTOLERANT_METHODS: Tuple[str, ...] = ("alde",)
+
+
+def constant_encoding_columns(design_space: np.ndarray) -> List[int]:
+    """Indices of columns that take exactly one value across the whole design space.
+
+    `(X.max(0) == X.min(0))`, which is the condition under which a min-max normaliser
+    divides by zero.
+    """
+    X = np.asarray(design_space, dtype=np.float64)
+    if X.ndim != 2 or X.size == 0:
+        return []
+    constant = X.max(axis=0) == X.min(axis=0)
+    return [int(i) for i in np.flatnonzero(constant)]
+
+
+def check_external_arm_compatibility(
+    method: str,
+    design_space: Optional[np.ndarray],
+    library: "LibrarySpec",
+) -> Dict[str, Any]:
+    """
+    Whether `method` can be COMPUTED on this library's encoded design space at all.
+
+    AVAILABILITY IS NOT COMPATIBILITY, and conflating them is how a null arm reported
+    success. `probe_alde` checks the checkout, the interpreter, the dependencies and the
+    imports, and on all seven landscapes where ALDE is broken it correctly reports
+    `available: true`. The arm then runs to completion, writes a full-length trajectory,
+    and the trajectory is one variant picked 100 times.
+
+    THE MECHANISM, from docs/alde-compatibility.md. ALDE's `src/optimize.py:128` calls
+    `normalize(disc_X, domain)` with per-column bounds from `utils.domain_discrete`.
+    botorch's `normalize` is `(X - lower) / (upper - lower)`. A one-hot column for a
+    residue never observed at that library position is constant 0, so `upper == lower` and
+    the column becomes `0/0 = NaN`. Every row then carries a NaN, the first `Linear` layer
+    makes ALL predictions NaN, `acquisition.py:51` masks already-queried points with
+    `min(preds)` - which is NaN, so the mask is a no-op - and `np.argmax` over an all-NaN
+    array returns 0. It picks index 0 forever, without raising.
+
+    WHY THIS IS CHECKED BEFORE THE RUN RATHER THAN AFTER. Because the pick is always index
+    0, the arm's best-fitness is decided by CSV ROW ORDER. Our prepared tables are sorted
+    by fitness descending, so CR9114's row 0 is the global optimum: a completely broken arm
+    with an all-NaN surrogate would have posted a PERFECT best-fitness there and beaten the
+    repaired arm. Our own file-ordering convention and ALDE's bug would have combined into
+    a spurious baseline victory.
+
+    It fails only when some amino acid is unobserved at some position, which is true of
+    every landscape in this corpus except TrpB and GB1 - ALDE's README assumes
+    site-saturation libraries. Constant-column counts: HER2 55/200, CreiLOV 265/300,
+    CR9114 288/320, eqFP611 234/260, CR6261 198/220; TrpB and GB1 zero.
+
+    Nothing here repairs ALDE. Widening a constant column's bounds from (0, 0) to (0, 1)
+    is verified to make it a real searcher on all seven, but that is a modification to
+    published third-party code, and the protocol requires documenting an incompatibility
+    rather than substituting for it. A repaired arm would be a SEPARATELY NAMED arm
+    carrying the exact diff in its config.
+    """
+    if method not in CONSTANT_COLUMN_INTOLERANT_METHODS:
+        return {"checked": False, "compatible": True,
+                "reason": "method does not normalise an encoded design space per column"}
+    if design_space is None:
+        return {
+            "checked": False,
+            "compatible": True,
+            "reason": "no design space was supplied to check; compatibility is UNVERIFIED",
+        }
+    constant = constant_encoding_columns(design_space)
+    n_columns = int(np.asarray(design_space).shape[1]) if np.asarray(design_space).ndim == 2 else 0
+    if not constant:
+        return {
+            "checked": True,
+            "compatible": True,
+            "n_constant_columns": 0,
+            "n_columns": n_columns,
+            "reason": (
+                f"no constant one-hot column in {n_columns} encoded features, so the "
+                f"min-max normalisation in ALDE's optimize.py cannot divide by zero"
+            ),
+        }
+    return {
+        "checked": True,
+        "compatible": False,
+        "n_constant_columns": len(constant),
+        "n_columns": n_columns,
+        "constant_column_indices": constant[:64],
+        "reason": (
+            f"INCOMPATIBLE with library {library.key!r}: {len(constant)} of {n_columns} "
+            f"one-hot columns are constant, because those residues are never observed at "
+            f"those positions. ALDE's optimize.py normalises each column by "
+            f"(upper - lower) from utils.domain_discrete, so each constant column becomes "
+            f"0/0 = NaN; every row then carries a NaN, all predictions become NaN, the "
+            f"already-queried mask in acquisition.py is a no-op because it masks with "
+            f"NaN, and np.argmax over an all-NaN array returns 0. The arm would pick "
+            f"index 0 forever, complete without raising, and write a full-length "
+            f"trajectory of one variant. Because the pick is index 0 and the prepared "
+            f"tables are sorted by fitness descending, that trajectory can post a "
+            f"spuriously PERFECT best-fitness. This cell is ABSENT, not a result. ALDE's "
+            f"README assumes site-saturation libraries; this library is not one. See "
+            f"docs/alde-compatibility.md. Do not repair ALDE in place - a repaired arm "
+            f"must be separately named and carry its diff."
+        ),
+    }
 
 
 def enforce_requested_methods_available(
@@ -4053,6 +4171,7 @@ def _method_block(
     for method in methods:
         status = dict(method_status.get(method, {}))
         probe = status.pop("probe", None)
+        compatibility = status.pop("compatibility", None)
         entry: Dict[str, Any] = {
             "status": status.get("status", "unknown"),
             "status_detail": status.get("detail", ""),
@@ -4063,6 +4182,16 @@ def _method_block(
                 entry["availability_probe"] = json.loads(probe)
             except (TypeError, ValueError):
                 entry["availability_probe"] = {"raw": str(probe)}
+        # AVAILABILITY AND COMPATIBILITY ARE SEPARATE FACTS, recorded under separate keys.
+        # An arm can be fully available - checkout, interpreter, dependencies and imports
+        # all fine - and still be incomputable on this library, returning a null
+        # trajectory that looks like a result. Reading availability as compatibility is
+        # what let that happen, so the manifest never again carries only one of them.
+        if compatibility is not None:
+            try:
+                entry["compatibility"] = json.loads(compatibility)
+            except (TypeError, ValueError):
+                entry["compatibility"] = {"raw": str(compatibility)}
         block[method] = entry
     return block
 
@@ -4281,8 +4410,71 @@ def build_manifest(
     short_batches = sum(
         1 for o in outcomes for m in o.rounds if m.status == "short_batch"
     )
+    degenerate_rounds = sum(
+        1 for o in outcomes for m in o.rounds if m.degenerate_proposals
+    )
+
+    # POST-HOC DEGENERATE-RUN DETECTION, the backstop for any arm.
+    #
+    # The signal was already in our own artifacts and nothing looked at it: the benchmark
+    # wrote n_unique_measurements = 26 into round_metrics.csv for HER2 ALDE across 48 seeds
+    # - a full-length trajectory that was one variant picked 100 times - and the run was
+    # read as a performance number. An arm whose final unique-measurement count is
+    # materially below the budget did not search; it is a degenerate run, and it is
+    # classified here rather than silently accepted, in the same spirit as the coverage
+    # classifier.
+    #
+    # This is deliberately independent of the pre-flight check: the pre-flight knows one
+    # named mechanism, and this catches any arm that stops proposing distinct candidates
+    # for any reason.
+    degenerate_runs: List[Dict[str, Any]] = []
+    nominal_budget = int(args.initial_size + args.rounds * args.batch_size)
+    for outcome in outcomes:
+        if not outcome.rounds:
+            continue
+        measured = int(outcome.rounds[-1].n_measurements)
+        if measured < nominal_budget * DEGENERATE_RUN_BUDGET_FRACTION:
+            degenerate_runs.append({
+                "method": outcome.method,
+                "seed": outcome.seed,
+                "n_unique_measurements": measured,
+                "nominal_budget": nominal_budget,
+                "fraction_of_budget": round(measured / nominal_budget, 4)
+                if nominal_budget else None,
+                "degenerate_proposal_rounds": sum(
+                    1 for m in outcome.rounds if m.degenerate_proposals
+                ),
+            })
 
     warnings: List[str] = [str(w) for w in extra_warnings if str(w).strip()]
+    for record in degenerate_runs:
+        warnings.append(
+            f"DEGENERATE RUN: {record['method']} seed {record['seed']} ended with "
+            f"{record['n_unique_measurements']} unique measurements against a nominal "
+            f"budget of {record['nominal_budget']} "
+            f"({record['fraction_of_budget']:.1%}). An arm this far below budget did not "
+            f"search the landscape, so this is NOT a performance number for that method - "
+            f"report the cell as a null arm with its measured count. If the arm normalises "
+            f"an encoded design space, check configuration.methods."
+            f"{record['method']}.compatibility for a constant-column incompatibility."
+        )
+    if degenerate_rounds:
+        warnings.append(
+            f"{degenerate_rounds} round(s) recorded DEGENERATE PROPOSALS: the arm could not "
+            "propose distinct candidates. This is a different failure from a short batch - "
+            "an eligibility shortfall is backfilled from the policy and is recoverable, "
+            "while a collapsed proposer is a null arm and was deliberately NOT backfilled."
+        )
+    incompatible = [
+        (m, str(method_status.get(m, {}).get("detail", "")))
+        for m in methods
+        if str(method_status.get(m, {}).get("status", "")).upper() == "INCOMPATIBLE"
+    ]
+    for method, detail in incompatible:
+        warnings.append(
+            f"{method}: ABSENT CELL - the arm is available but cannot be computed on this "
+            f"library, so it was not run and nothing was substituted for it. {detail}"
+        )
     for failure in failures:
         warnings.append(
             f"{failure['method']} seed {failure['seed']}: {failure['status']} - "
@@ -4333,7 +4525,9 @@ def build_manifest(
     if run_state is None:
         if not outcomes:
             run_state = "FAILED"
-        elif failures or short_batches:
+        elif failures or short_batches or degenerate_runs or degenerate_rounds:
+            # A degenerate run must never leave the state SUCCESS. The HER2 ALDE run
+            # completed cleanly, wrote every file, and was a null arm.
             run_state = "PARTIAL"
         else:
             run_state = "SUCCESS"
@@ -4365,6 +4559,21 @@ def build_manifest(
                 f"with random draws. This can happen on a library that does not saturate "
                 f"its combinatorial product"
             )
+        if degenerate_runs:
+            worst = min(degenerate_runs, key=lambda r: r["n_unique_measurements"])
+            parts.append(
+                f"{len(degenerate_runs)} DEGENERATE run(s): an arm ended as low as "
+                f"{worst['n_unique_measurements']} unique measurements against a nominal "
+                f"budget of {worst['nominal_budget']} "
+                f"({worst['method']} seed {worst['seed']}). An arm that far below budget "
+                f"did not search, so its row is a null arm and not a performance number"
+            )
+        if degenerate_rounds:
+            parts.append(
+                f"{degenerate_rounds} round(s) recorded degenerate proposals - the arm "
+                f"could not propose distinct candidates, which is a null arm rather than "
+                f"a recoverable short batch and was deliberately not backfilled"
+            )
         state_reason = "; ".join(parts)
     else:
         state_reason = (
@@ -4389,6 +4598,15 @@ def build_manifest(
             "arms_completed": sorted({o.method for o in completed}),
             "seeds_attempted": len({(o.method, o.seed) for o in outcomes}),
             "seeds_completed": len(completed),
+            # Runs that completed but did not search. Kept as structured records, not only
+            # as a warning string, so a reader or a script can exclude them from a
+            # comparison without re-deriving them from round_metrics.csv.
+            "degenerate_runs": degenerate_runs,
+            "degenerate_run_budget_fraction": DEGENERATE_RUN_BUDGET_FRACTION,
+            "degenerate_proposal_rounds": degenerate_rounds,
+            "incompatible_arms": [
+                {"method": method, "reason": detail} for method, detail in incompatible
+            ],
             "failures": failures,
             "warnings": warnings,
             "self_checks": [{"check": n, "passed": bool(p), "detail": d} for n, p, d in self_checks],
@@ -4496,13 +4714,18 @@ def write_round_metrics_csv(path: Path, outcomes: Sequence[RunOutcome], stamp: s
          "requested", "accepted", "rejected", "status", "failure_reason",
          # Budget fill and attribution, per round: how hard the batch was to fill, and
          # which selection rule the measurements came from.
-         "backfill_attempts", "backfill_added", "selection_source"],
+         "backfill_attempts", "backfill_added", "selection_source",
+         # Degeneracy, per round. `distinct_proposed` is what exposes a collapsed
+         # surrogate: an arm picking one variant repeatedly writes a full-length
+         # trajectory and this column is the number that gives it away.
+         "distinct_proposed", "degenerate_proposals"],
         [
             [stamp, m.method, m.seed, m.round_index, m.n_measurements, f"{m.best_fitness:.9g}",
              m.new_top1_hits, m.cum_top1_excluding_initial, m.cum_top1_including_initial,
              int(m.found_top1), m.round_seconds, m.cumulative_seconds, m.model_calls, m.token_usage,
              m.requested, m.accepted, m.rejected, m.status, m.failure_reason,
-             m.backfill_attempts, m.backfill_added, m.selection_source]
+             m.backfill_attempts, m.backfill_added, m.selection_source,
+             m.distinct_proposed, int(m.degenerate_proposals)]
             for outcome in outcomes for m in outcome.rounds
         ],
     )
@@ -4888,6 +5111,7 @@ def build_selector_factories(
     methods: Sequence[str],
     library: LibrarySpec,
     qualify_absolute: Optional[float] = None,
+    design_space: Optional[np.ndarray] = None,
 ) -> Tuple[Dict[str, Callable[[int], Selector]], Dict[str, Dict[str, str]]]:
     """
     Resolves each requested method into a factory, or a visible unavailable/unsupported status.
@@ -4925,6 +5149,27 @@ def build_selector_factories(
             checkout = resolution["checkout"]
             python_exe = resolution["python_exe"]
             probe = probe_alde(checkout, python_exe, resolution)
+            # AVAILABILITY IS NOT COMPATIBILITY. The probe above answers "can this arm be
+            # launched"; this answers "can it be computed on THIS library at all". They are
+            # recorded separately in the manifest because the arm is fully available and
+            # still returns a null trajectory on seven of the nine landscapes.
+            compatibility = check_external_arm_compatibility(method, design_space, library)
+            if probe["available"] and not compatibility["compatible"]:
+                logger.error(
+                    "%s is AVAILABLE but INCOMPATIBLE with library %r: %d of %d one-hot "
+                    "columns are constant. This cell is ABSENT, not a result. %s",
+                    method, library.key, compatibility.get("n_constant_columns"),
+                    compatibility.get("n_columns"), compatibility["reason"],
+                )
+                status[method] = {
+                    "status": "INCOMPATIBLE",
+                    "detail": compatibility["reason"],
+                }
+                status[method]["probe"] = json.dumps(probe)
+                status[method]["compatibility"] = json.dumps(compatibility)
+                # Deliberately no factory: the arm must not run, and nothing is
+                # substituted for it.
+                continue
             if probe["available"]:
                 workspace = (Path(args.alde_workspace).expanduser().resolve()
                              if args.alde_workspace else checkout.parent / "benchmark_runs")
@@ -4948,6 +5193,7 @@ def build_selector_factories(
             else:
                 status[method] = {"status": "UNAVAILABLE", "detail": probe["reason"]}
             status[method]["probe"] = json.dumps(probe)
+            status[method]["compatibility"] = json.dumps(compatibility)
         elif method in ("panoptes_default", "panoptes_muse",
                         "panoptes_qualify_then_optimize", "panoptes_conditional_probe"):
             live = method == "panoptes_muse"
@@ -5162,7 +5408,11 @@ def _execute_run(
         raise BenchmarkError(f"Unknown method(s) {unknown}. Choose from: {', '.join(ALL_METHODS)}")
     components_disabled = resolve_ablate_components(args)
     factories, method_status = build_selector_factories(
-        args, methods, library, qualify_absolute=evaluator.qualify_threshold_absolute,
+        args, methods, library,
+        qualify_absolute=evaluator.qualify_threshold_absolute,
+        # The encoded design space an external arm would be handed, so compatibility is
+        # decided against the real matrix rather than against the library's declaration.
+        design_space=universe.one_hot,
     )
 
     # The starting samples are drawn before anything runs: they are part of the

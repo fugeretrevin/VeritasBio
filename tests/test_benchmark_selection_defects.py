@@ -1,4 +1,4 @@
-"""Regression tests for three defects that made a benchmark result non-comparable.
+"""Regression tests for four defects that made a benchmark result non-comparable.
 
 Each one was measured on real runs, and each test here fails against the code as it stood
 before the corresponding fix.
@@ -7,7 +7,7 @@ Defect 1 - THE QUALIFICATION BAR NEVER TRANSFERRED.
     `--qualify-threshold` was an absolute fitness defaulting to 0.70. On TrpB, the only
     landscape it was tuned on, that is the 99.9602nd percentile of the eligible universe
     (64 of 159,999 variants). Fitness scales are not comparable across the corpus, so the
-    same constant admitted 31.6% of GB1, 9.11% of HER2 and 100% of three bnAb landscapes
+    same constant admitted 3.16% of GB1, 9.11% of HER2 and 100% of three bnAb landscapes
     whose assay floor is 7.0 on a -log10(Kd) scale. On 8 of 9 landscapes it sat BELOW that
     target's own top-1% threshold, making "qualifying" easier than being a hit.
 
@@ -22,6 +22,20 @@ Defect 3 - `_frontier_batch` WAS NOT POOL-RESTRICTION-AWARE.
     the median library member has zero in-library Hamming-1 neighbours, so the frontier
     batch came back empty and `propose()` fell through to the baseline pool path: in 41 of
     48 seeds the frontier arm selected the IDENTICAL 125 variants as the reliability arm.
+
+Defect 4 - ALDE WAS A NULL ARM ON 7 OF 9 LANDSCAPES AND REPORTED SUCCESS.
+    ALDE's `src/optimize.py:128` normalises the encoded design space by `(upper - lower)`
+    per column. A one-hot column for a residue never observed at that library position is
+    constant, so the column becomes `0/0 = NaN`; every prediction becomes NaN, the
+    already-queried mask in `acquisition.py:51` is a no-op because it masks with NaN, and
+    `np.argmax` over an all-NaN array returns 0. The arm picks index 0 forever without
+    raising, completes, and writes a full-length trajectory of one variant. On HER2 it
+    recorded 26 unique measurements of 125 across 48 seeds and found zero hits.
+
+    `probe_alde` reported `available: true` on all seven, so AVAILABILITY IS NOT
+    COMPATIBILITY. Worse, because the pick is always index 0 and the prepared tables are
+    sorted by fitness descending, CR9114's row 0 is the global optimum - a broken arm would
+    have posted a perfect best-fitness there. Detection only; ALDE is not repaired here.
 """
 from __future__ import annotations
 
@@ -649,6 +663,304 @@ class TestFrontierIsPoolRestrictionAware(unittest.TestCase):
         for vid in batch:
             with self.subTest(variant=vid):
                 self.assertEqual(_hamming(universe.combos[vid], best_combo), 1)
+
+
+# ==============================================================================================
+# Defect 4: an available arm that cannot be computed must be an ABSENT cell, not a result
+# ==============================================================================================
+class TestConstantColumnPreflight(unittest.TestCase):
+    """Pre-flight: refuse an arm whose normaliser would divide by zero."""
+
+    def test_her2_encoded_space_has_55_constant_columns_of_200(self) -> None:
+        """The concrete fixture named in the defect report."""
+        universe = _real_universe("her2")
+        constant = bench.constant_encoding_columns(universe.one_hot)
+        self.assertEqual(universe.one_hot.shape[1], 200)
+        self.assertEqual(len(constant), 55)
+
+    def test_trpb_and_gb1_have_no_constant_columns(self) -> None:
+        """ALDE is computable on exactly these two, and must not be refused on them."""
+        for key in ("trpb", "gb1"):
+            with self.subTest(library=key):
+                universe = _real_universe(key)
+                self.assertEqual(bench.constant_encoding_columns(universe.one_hot), [])
+                compatibility = bench.check_external_arm_compatibility(
+                    "alde", universe.one_hot, universe.library,
+                )
+                self.assertTrue(compatibility["compatible"])
+                self.assertEqual(compatibility["n_constant_columns"], 0)
+
+    def test_her2_is_reported_incompatible_with_the_count_and_the_reason(self) -> None:
+        universe = _real_universe("her2")
+        compatibility = bench.check_external_arm_compatibility(
+            "alde", universe.one_hot, universe.library,
+        )
+        self.assertTrue(compatibility["checked"])
+        self.assertFalse(compatibility["compatible"])
+        self.assertEqual(compatibility["n_constant_columns"], 55)
+        self.assertEqual(compatibility["n_columns"], 200)
+        reason = compatibility["reason"]
+        self.assertIn("55 of 200", reason)
+        self.assertIn("NaN", reason)
+        self.assertIn("ABSENT", reason)
+
+    def test_the_detector_is_the_max_equals_min_condition(self) -> None:
+        """`(X.max(0) == X.min(0)).any()` - a column with one value, whatever that value."""
+        X = np.array([[0.0, 1.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]])
+        # Column 1 is constant 1 and column 2 is constant 0; both divide by zero.
+        self.assertEqual(bench.constant_encoding_columns(X), [1, 2])
+        self.assertEqual(bench.constant_encoding_columns(X[:, :1]), [])
+
+    def test_an_unaffected_method_is_not_checked(self) -> None:
+        """Only arms that normalise an encoded design space per column are in scope."""
+        universe = _real_universe("her2")
+        for method in ("ridge", "random", "random_forest", "panoptes_default"):
+            with self.subTest(method=method):
+                compatibility = bench.check_external_arm_compatibility(
+                    method, universe.one_hot, universe.library,
+                )
+                self.assertTrue(compatibility["compatible"])
+                self.assertFalse(compatibility["checked"])
+        self.assertEqual(bench.CONSTANT_COLUMN_INTOLERANT_METHODS, ("alde",))
+
+    def test_an_incompatible_arm_gets_no_factory_and_nothing_is_substituted(self) -> None:
+        """It must not run, and no other method may stand in for it."""
+        from unittest import mock
+
+        universe = _real_universe("her2")
+        args = bench.build_parser().parse_args([])
+        available_probe = {
+            "available": True,
+            "reason": "",
+            "checkout_path": "/fake/ALDE",
+            "commit": "0" * 40,
+            "dependencies": {"torch": "2.0.0"},
+        }
+        with mock.patch.object(bench, "resolve_alde_paths",
+                               lambda a: {"checkout": Path("/fake/ALDE"),
+                                          "python_exe": Path("/fake/python")}), \
+             mock.patch.object(bench, "probe_alde", lambda *a, **k: available_probe):
+            factories, status = bench.build_selector_factories(
+                args, ["alde"], universe.library, design_space=universe.one_hot,
+            )
+        self.assertNotIn("alde", factories)
+        self.assertEqual(status["alde"]["status"], "INCOMPATIBLE")
+        self.assertIn("55 of 200", status["alde"]["detail"])
+        # Availability and compatibility are recorded as separate facts.
+        self.assertIn("probe", status["alde"])
+        self.assertIn("compatibility", status["alde"])
+
+    def test_an_incompatible_arm_aborts_the_run_rather_than_becoming_a_row(self) -> None:
+        """The existing requested-baseline gate must treat INCOMPATIBLE as not-available."""
+        with self.assertRaises(bench.BenchmarkError):
+            bench.enforce_requested_methods_available(
+                ["alde"],
+                {"alde": {"status": "INCOMPATIBLE", "detail": "55 of 200 columns constant"}},
+            )
+
+    def test_the_manifest_separates_availability_from_compatibility(self) -> None:
+        """Reading one as the other is what let a null arm report success."""
+        universe = _synthetic()
+        args = bench.build_parser().parse_args(
+            ["--smoke-test", "--synthetic-size", "400", "--synthetic-seed", "5",
+             "--seeds", "1", "--initial-size", "5", "--rounds", "1", "--batch-size", "5"]
+        )
+        manifest = bench.build_manifest(
+            run_id="run_defect4_0001",
+            args=args,
+            universe=universe,
+            evaluator=bench.Evaluator(universe),
+            methods=["alde"],
+            method_status={"alde": {
+                "status": "INCOMPATIBLE",
+                "detail": "55 of 200 one-hot columns are constant",
+                "probe": '{"available": true}',
+                "compatibility": '{"checked": true, "compatible": false, '
+                                 '"n_constant_columns": 55, "n_columns": 200}',
+            }},
+            method_configs={"alde": {}},
+            components_disabled=(),
+            seeds=[0],
+            initial_sets={0: universe.variant_ids[:5]},
+            outcomes=[],
+            started=_UTC,
+            finished=_UTC,
+            repository_state_before={
+                "git_available": True, "head": "0" * 40, "status_lines": [],
+                "source_tree_sha256": "f" * 64, "files_hashed": 1,
+            },
+        )
+        entry = manifest["configuration"]["methods"]["alde"]
+        # Available...
+        self.assertTrue(entry["availability_probe"]["available"])
+        # ...and yet incompatible. Both facts, under separate keys.
+        self.assertFalse(entry["compatibility"]["compatible"])
+        self.assertEqual(entry["compatibility"]["n_constant_columns"], 55)
+        self.assertEqual(entry["status"], "INCOMPATIBLE")
+        self.assertTrue(
+            any("ABSENT CELL" in w for w in manifest["run"]["warnings"]),
+            manifest["run"]["warnings"],
+        )
+
+
+class _DegenerateSelector(bench.Selector):
+    """An arm whose surrogate has collapsed: it proposes index 0 forever.
+
+    This is ALDE's observed behaviour on a library with an unobserved amino acid at some
+    position - an all-NaN prediction vector makes `np.argmax` return 0 every round.
+    """
+
+    name = "degenerate"
+
+    def __init__(self, seed: int, pick: str) -> None:
+        super().__init__(seed)
+        self.pick = pick
+
+    def propose(self, round_index, n, view, revealed):
+        return [self.pick] * n
+
+
+class TestDegenerateRunsAreDetected(unittest.TestCase):
+    """Post-hoc backstop: a completed run far below budget did not search."""
+
+    def _degenerate_outcome(self):
+        universe = _synthetic(n=400)
+        evaluator = bench.Evaluator(universe)
+        view = _view(universe, batch_size=10, n_rounds=4)
+        initial = universe.variant_ids[:5]
+        selector = _DegenerateSelector(0, universe.variant_ids[100])
+        return universe, bench.run_single(selector, evaluator, view, initial, seed=0)
+
+    def test_a_collapsed_arm_is_flagged_degenerate_not_short(self) -> None:
+        """Only an eligibility shortfall is recoverable; this is a null arm."""
+        _, outcome = self._degenerate_outcome()
+        first = outcome.rounds[1]
+        self.assertEqual(first.status, "degenerate_proposals")
+        self.assertTrue(first.degenerate_proposals)
+        self.assertEqual(first.distinct_proposed, 1)
+        self.assertIn("DEGENERATE", first.failure_reason)
+
+    def test_a_collapsed_arm_is_not_backfilled_to_a_full_batch(self) -> None:
+        """Topping it up would turn a detectable null arm into a plausible result."""
+        _, outcome = self._degenerate_outcome()
+        for metrics in outcome.rounds[1:]:
+            with self.subTest(round=metrics.round_index):
+                self.assertEqual(metrics.backfill_attempts, 0)
+                self.assertEqual(metrics.backfill_added, 0)
+        # It measured one variant in round 1 and nothing new after that.
+        self.assertLess(outcome.rounds[-1].n_measurements, 10)
+
+    def test_the_two_failure_modes_are_distinguishable(self) -> None:
+        """"ineligible, backfilled" and "proposed the same variant" are different."""
+        _, degenerate = self._degenerate_outcome()
+
+        universe = _synthetic(n=400)
+        view = _view(universe, batch_size=10, n_rounds=1)
+        initial = universe.variant_ids[:5]
+        pool = [v for v in universe.variant_ids if v not in set(initial)]
+        recoverable = bench.run_single(
+            _IneligibleThenEligible(0, pool), bench.Evaluator(universe), view, initial,
+            seed=0,
+        )
+
+        self.assertEqual(degenerate.rounds[1].status, "degenerate_proposals")
+        self.assertEqual(recoverable.rounds[1].status, "completed")
+        self.assertTrue(degenerate.rounds[1].degenerate_proposals)
+        self.assertFalse(recoverable.rounds[1].degenerate_proposals)
+        # The recoverable one was filled from the policy; the degenerate one was not.
+        self.assertGreater(recoverable.rounds[1].backfill_added, 0)
+        self.assertEqual(degenerate.rounds[1].backfill_added, 0)
+
+    def test_the_run_state_cannot_be_success_for_a_degenerate_run(self) -> None:
+        """The HER2 ALDE run completed cleanly, wrote every file, and was a null arm."""
+        universe, outcome = self._degenerate_outcome()
+        args = bench.build_parser().parse_args(
+            ["--smoke-test", "--synthetic-size", "400", "--synthetic-seed", "5",
+             "--seeds", "1", "--initial-size", "5", "--rounds", "4", "--batch-size", "10"]
+        )
+        manifest = bench.build_manifest(
+            run_id="run_defect4_0002",
+            args=args,
+            universe=universe,
+            evaluator=bench.Evaluator(universe),
+            methods=["degenerate"],
+            method_status={"degenerate": {"status": "available", "detail": "collapsed"}},
+            method_configs={"degenerate": {}},
+            components_disabled=(),
+            seeds=[0],
+            initial_sets={0: universe.variant_ids[:5]},
+            outcomes=[outcome],
+            started=_UTC,
+            finished=_UTC,
+            repository_state_before={
+                "git_available": True, "head": "0" * 40, "status_lines": [],
+                "source_tree_sha256": "f" * 64, "files_hashed": 1,
+            },
+        )
+        self.assertNotEqual(manifest["run"]["state"], "SUCCESS")
+        records = manifest["run"]["degenerate_runs"]
+        self.assertTrue(records)
+        self.assertEqual(records[0]["method"], "degenerate")
+        # The MEASURED count is reported, as the defect report requires.
+        self.assertEqual(
+            records[0]["n_unique_measurements"], outcome.rounds[-1].n_measurements,
+        )
+        self.assertEqual(records[0]["nominal_budget"], 45)
+        self.assertIn("DEGENERATE", manifest["run"]["state_reason"])
+        self.assertTrue(
+            any("DEGENERATE RUN" in w for w in manifest["run"]["warnings"]),
+            manifest["run"]["warnings"],
+        )
+
+    def test_a_full_budget_run_is_not_flagged(self) -> None:
+        """The detector must not fire on a healthy arm."""
+        universe = _synthetic(n=400)
+        view = _view(universe, batch_size=10, n_rounds=2)
+        initial = universe.variant_ids[:5]
+        outcome = bench.run_single(
+            bench.RandomSelector(0), bench.Evaluator(universe), view, initial, seed=0,
+        )
+        args = bench.build_parser().parse_args(
+            ["--smoke-test", "--synthetic-size", "400", "--synthetic-seed", "5",
+             "--seeds", "1", "--initial-size", "5", "--rounds", "2", "--batch-size", "10"]
+        )
+        manifest = bench.build_manifest(
+            run_id="run_defect4_0003",
+            args=args,
+            universe=universe,
+            evaluator=bench.Evaluator(universe),
+            methods=["random"],
+            method_status={"random": {"status": "available", "detail": "uniform"}},
+            method_configs={"random": {}},
+            components_disabled=(),
+            seeds=[0],
+            initial_sets={0: universe.variant_ids[:5]},
+            outcomes=[outcome],
+            started=_UTC,
+            finished=_UTC,
+            repository_state_before={
+                "git_available": True, "head": "0" * 40, "status_lines": [],
+                "source_tree_sha256": "f" * 64, "files_hashed": 1,
+            },
+        )
+        self.assertEqual(manifest["run"]["degenerate_runs"], [])
+        self.assertEqual(manifest["run"]["state"], "SUCCESS")
+
+    def test_the_round_metrics_csv_carries_the_degeneracy_columns(self) -> None:
+        import csv
+        import tempfile
+
+        _, outcome = self._degenerate_outcome()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "round_metrics.csv"
+            bench.write_round_metrics_csv(path, [outcome], "stamp")
+            with path.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+        for column in ("distinct_proposed", "degenerate_proposals"):
+            self.assertIn(column, rows[0])
+        selected = [r for r in rows if r["round"] == "1"][0]
+        self.assertEqual(selected["distinct_proposed"], "1")
+        self.assertEqual(selected["degenerate_proposals"], "1")
 
 
 if __name__ == "__main__":
