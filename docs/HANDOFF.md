@@ -195,14 +195,134 @@ On TrpB, held-out seeds 48–95, 25 initial + 4×25 = 125 measurements:
 
 | result | figure |
 | --- | --- |
-| `panoptes_default` ("reliability"), raw top-1% hits | 45.21 (50.44 with `dkl,gflownet` ablated) |
-| vs ridge, diversity-adjusted at d≥2 | **+7.93, t=+17.1** — larger than the raw t of +8.4 |
-| at a 50-measurement budget | **6.3×** the best baseline, decaying to 1.7× at 125 |
+| `panoptes_default` ("reliability"), raw top-1% hits | ~~45.21~~ → **51.42** re-measured; see below |
+| vs ridge, diversity-adjusted at d≥2 | ~~+7.93, t=+17.1~~ → **+7.75, t=+13.4** re-measured |
+| at a 50-measurement budget | ~~**6.3×** the best baseline, decaying to 1.7× at 125~~ — **WITHDRAWN, the figure is wrong** |
+| vs the strongest of a seven-arm baseline panel | **+12.88, t=+3.57, 31/16/1** — the margin survives |
 | GB1 | ~~parity at every budget~~ — **WITHDRAWN**, measured as a loss; see above |
+
+> **The 6.3× front-loading figure is WITHDRAWN as incorrect, independently of any
+> re-measurement.** It was computed as `frontier−dkl,dpp,gflownet` (14.12) ÷ **ALDE**
+> (2.25) — but at a 50-measurement budget ALDE is **not** the best baseline. Ridge is, at
+> 2.83, which gives **5.0×**; and `panoptes_default` itself gives **3.7×**, not 6.3×.
+> `budget_report.txt` fixes its comparator at budget 125 and then reuses that comparator
+> at every budget. Worse, the two ends of the quoted range use **different engine arms**:
+> 14.12 is one arm and 50.44 is another, so "6.3× decaying to 1.7×" is not one curve.
+> Do not re-state any front-loading multiple until it is re-derived with a
+> per-budget-best comparator and a single arm. The same figure appears in
+> `docs/preregistration-cross-protein.md` §63 and §1434, which are frozen and must not be
+> edited — cite this withdrawal alongside them instead.
+>
+> **The 45.21 and +7.93 are superseded, not wrong.** Same held-out block, today's
+> defaults: **51.42** raw and **+7.75 at d≥2 (t=+13.4)**. This is the "different arms
+> under one name" hazard the note below describes, now realised — `DPP_DIVERSITY_ENABLED`
+> and `TWO_STAGE_GP_ENABLED` changed default between the two measurements.
 
 That arm was budget-matched at exactly 125, and TrpB is the one landscape where the
 corrected qualification bar accepts the identical variant set, so none of the
 2026-10-31 fixes touch it.
+
+> **Measured 2026-11-01 — a seven-arm baseline panel, 48 paired seeds, budgets
+> gate-verified matched (all 8 arms spent all 125 measurements on all 48 seeds).** Branch
+> `worktree-agent-a8325f2a02fbcdc90` (`493826b`). Arms added: `random_forest`,
+> `gbm_onehot`, `knn_hamming`, `gp_onehot`, and `greedy_measured` — a rule with **zero
+> learned parameters**.
+>
+> | landscape | strongest baseline | it scores | engine | Δ | t | b/w/t |
+> | --- | --- | --- | --- | --- | --- | --- |
+> | TrpB | `gp_onehot` | 38.54 | 51.42 | **+12.88** | +3.57 | 31/16/1 |
+> | CR9114-H1 | `greedy_measured` | 11.60 | 5.00 | **−6.60** | −6.25 | 10/36/2 |
+> | CreiLOV | `ridge` | 57.23 | 6.94 | **−50.29** | −32.01 | 0/48/0 |
+>
+> **Ridge is not a uniformly fair reference: it is 1st of seven on CreiLOV, 2nd on TrpB,
+> and 6th of seven on CR9114.** So a single-reference design reports advantages that are
+> not comparable across landscapes. The predictor of ridge's strength is **assay
+> censoring, not library size** — strong where the landscape is near-additive over a wide
+> range, weak where the assay floors so most of the library carries no gradient. CreiLOV
+> (15 sites) and CR9114 (16 sites, floored −log₁₀K_D) sit at opposite ends with nearly
+> identical site counts.
+>
+> **The CR9114 "+3.17 win" must be narrowed to "a win over `ridge` only."** The engine
+> loses there to four standard baselines: RF −6.40 (t=−4.84), gbm −4.00 (t=−3.90), knn
+> −5.98 (t=−7.18), greedy −6.60 (t=−6.25). The local-exploit objection was tested rather
+> than argued: greedy's and RF's leads do dissolve at d≥3, but **`knn_hamming` beats the
+> engine at raw, d≥2 and d≥3** (+1.79, t=+5.6), so the conclusion survives all three
+> endpoints. And `ridge − random` on CR9114 needs both tests quoted: Δ=+0.958, t=+2.46,
+> Wilcoxon p=0.044, but **21/19/8 seeds, sign test p=0.875** — a coin flip on a
+> seed-majority basis, while every other arm is separable from random at sign p ≤ 1.8e−6.
+>
+> **So: no engine win against the strongest available baseline on any landscape except
+> TrpB, and none at all off development data.** CreiLOV is the only non-development
+> landscape in the panel and the engine loses there to every arm except `random`. The one
+> surviving result is on development data *and* on the one landscape where the fabricated
+> `y = 0.0` WT row cannot show itself (0.35 label SDs). **CR9114 is a genuine
+> counter-example to "the WT row explains the losses"**: 14.14 SDs of violation and the
+> engine still beats ridge. The WT-anchor defect and the weak-comparator problem are
+> **two independent deficiencies**; fixing either leaves the other.
+>
+> A draft amendment is written and **deliberately not enacted** (that branch's
+> `docs/baseline-panel-results.md` §7). It promotes nothing — `ridge` stays the registered
+> reference and `DEFAULT_METHODS` is unchanged, now pinned by a test so the one-line edit
+> that would quietly amend a frozen hypothesis fails CI. It is labelled **POST-HOC**,
+> because §5.4's "dated before analysis" condition cannot be met once outcomes are known
+> and a false blindness claim is worse than no amendment. It adds a *reporting
+> requirement* rather than changing the test: a comparative claim must carry the ridge
+> contrast, the contrast against the highest-mean panel arm, `ridge − random` with **both**
+> t and sign test, and the d≥2 contrast — or be stated as *"advantage over ridge,
+> comparator strength unmeasured"*, never as an advantage over "the baselines".
+
+> **Measured 2026-11-01 — the GP's feature space as an arm, 48 paired seeds.** Branch
+> `worktree-agent-a14c69a80e0afa44a` (`a779422`), component `biophysical_features`, with
+> the default path proven untouched rather than asserted: against the parent commit,
+> **15,840 cells across all 22 behavioural columns of `round_metrics.csv` agree exactly**
+> over 3 arms × 48 seeds × 5 rounds, the only differences being wall clock.
+>
+> | landscape | default | one-hot | Δ | p | W/L/T |
+> | --- | --- | --- | --- | --- | --- |
+> | TrpB | 49.65 | **57.35** | **+7.71** | **2.6e−08** | 41/3/4 |
+> | GB1 | 20.40 | 24.71 | **+4.31** | 0.0031 | 34/12/2 |
+> | CreiLOV | 6.94 | 7.73 | +0.79 | 0.33 | 25/16/7 |
+>
+> **Better surrogate rho does NOT predict a better campaign.** Rho gain was GB1 (+0.107)
+> > CreiLOV (+0.077) > TrpB (+0.025); campaign gain is the reverse order — TrpB > GB1 >
+> CreiLOV, Spearman −0.5. The pre-registration predicted a null on TrpB and was
+> **falsified** there and on GB1's sign, and the bars were not moved. Mechanism offered:
+> the redundant 10-D block is 33% of the biophysical columns on TrpB/GB1 and only 12% on
+> CreiLOV, where one-hot is the *narrower* encoding — a geometry the fixed-matrix rho
+> protocol could not see. **GB1's +4.31 is confounded** (the GFlowNet reward scores
+> through this GP, and deep-enrichment moved 0.690 → 0.801); TrpB's is not pool-explained.
+>
+> **The two one-hot implementations DISAGREE, and the disagreement is named.** At 48
+> seeds with the prior ablated, the one-hot effect is **−0.19, CI [−1.04, +0.65],
+> p=0.547** — an interval that **excludes** the +3.67 measured at 12 seeds on branch
+> `worktree-agent-a83565bcde59a81f3`, so it is not an underpowered estimate of the same
+> quantity. Prime suspect is **scope**: `physchem_features` there moves all five
+> featurisation call sites including `AssayAdaptedHead`, while `biophysical_features` here
+> moves only the GP's fit/predict inputs. With the prior ablated `zero_shot_scores` is
+> zero and `AssayAdaptedHead` becomes the dominant non-GP term, so **"one-hot is worth
+> +7.08 once the prior is gone" may be an `AssayAdaptedHead` effect attributed to the
+> GP.** The decisive experiment is both components on one branch and one seed block. The
+> prior ablation itself **replicates**: 6.94 → 10.94, +4.00 at 48 seeds against +4.25 at
+> 12.
+>
+> **`test_regret_stopping` is FLAKY on the completely unchanged default** — 6 identical
+> pytest invocations at one commit gave **5 passed, 1 failed**, and a fresh-process probe
+> gave 3 of 8 failing. So the earlier report that "flipping the featurisation broke
+> `test_regret_stopping`" is fully consistent with one unlucky draw and **must not be
+> cited as evidence about the featurisation**. It pins an **absolute** EI threshold on a
+> scale the kernel sets; de-flake it before using it to decide anything, and make the
+> threshold relative to round-1 `max_pool_ei` before any feature-space change reaches the
+> orchestrator. The featurisation does nonetheless change a user-visible behaviour: the
+> final-round median `max_pool_ei` collapses ~860× (3.45e−03 → 4.00e−06), so the campaign
+> converges and stops earlier.
+>
+> **Root cause of the `threshold.<lib>` gate failure, found and NOT fixed:**
+> `veritas/preflight.py::QUALIFICATION_MANIFEST_PATHS` resolves at
+> `configuration.components.qualify_threshold`, which is a **scalar**, and the reader
+> wraps it as `{quantile: None, source: None}` — while the manifest *does* record
+> `qualify_quantile = 99.96` and `qualify_threshold_source = 'quantile'` as **siblings**.
+> It is a reader/schema mismatch, not missing data, and it fails the published runs
+> identically.
 
 > **`panoptes_default` changed meaning on 2026-10-31.** `DPP_DIVERSITY_ENABLED` and
 > `TWO_STAGE_GP_ENABLED` now default **False**, because both were measured to *hurt*

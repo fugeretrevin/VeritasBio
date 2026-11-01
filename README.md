@@ -279,15 +279,47 @@ H1 antigen (Phillips et al. 2021), 65,093 eligible variants, 651 qualifying.
 
 | comparison | metric | delta | t | better/worse/tied | verdict |
 |---|---|---|---|---|---|
-| engine vs ridge | top-1% | **+4.67** | **+7.39** | 12/0/0 | engine better |
-| engine vs ridge | peak fitness | **+0.068** | **+4.49** | 11/0/1 | engine better |
+| engine vs **ridge** | top-1% | **+4.67** | **+7.39** | 12/0/0 | better **than ridge** |
+| engine vs **ridge** | peak fitness | **+0.068** | **+4.49** | 11/0/1 | better **than ridge** |
 | ridge vs random | top-1% | +0.50 | +1.00 | 5/5/2 | **not separable** |
 | ridge vs random | peak fitness | −0.011 | −0.90 | 4/5/3 | **not separable** |
 
 One seed reached **9.8345** — the global optimum of the landscape
 (`S31N:T57S:T71S:K74I:S75F:T76S:S77N`, mutation depth 7, which the old depth-4 ceiling made
-unreachable by construction). Note the third and fourth rows: on this landscape ridge, the
-standard baseline, is **no better than guessing**.
+unreachable by construction).
+
+> **This is a win over `ridge`, and on this landscape that is a low bar. Measured
+> 2026-11-01 at 48 paired seeds with a seven-arm panel, budgets gate-verified matched, the
+> engine LOSES on CR9114 to four standard baselines:**
+>
+> | arm | top-1% | engine Δ vs it | t |
+> |---|---|---|---|
+> | `greedy_measured` — **no model at all** | **11.60** | **−6.60** | −6.25, 10/36/2 |
+> | `random_forest` | 11.40 | −6.40 | −4.84 |
+> | `knn_hamming` | 10.98 | −5.98 | −7.18 |
+> | `gbm_onehot` | 9.00 | −4.00 | −3.90 |
+> | `panoptes_default` | 5.00 | — | — |
+> | **`ridge`** — the registered reference, **6th of seven** | 1.83 | +3.17 | +6.10 |
+> | `random` | 0.88 | | |
+>
+> `greedy_measured` has **zero learned parameters** — lexicographic Hamming distance to the
+> fitness-ordered measured variants — and it beats the engine by 6.60 hits on 36 of 48
+> seeds. The obvious objection, that local-exploit arms return one dense basin, was
+> **tested rather than argued**: `greedy_measured` and `random_forest` leads do dissolve at
+> d≥3, but **`knn_hamming` beats the engine at raw, d≥2 and d≥3** (+1.79, t=+5.6), so the
+> conclusion survives all three endpoints.
+>
+> And the "ridge is no better than guessing" reading below needs **both** tests, not one.
+> At 48 seeds `ridge − random` is Δ=+0.958, t=+2.46, Wilcoxon p=0.044 — but **21/19/8
+> seeds, sign test p=0.875.** The t is carried by a heavy tail (sd 2.60 on a mean of 1.83);
+> on a seed-majority basis it is a coin flip, while every other arm separates from random
+> at sign p ≤ 1.8e−6. Ridge's weakness here is **assay censoring, not library size**: the
+> −log₁₀K_D readout floors, so most of the library carries no gradient. Branch
+> `worktree-agent-a8325f2a02fbcdc90` (`493826b`), not merged.
+
+Note the third and fourth rows: on this landscape ridge, the standard baseline, is **no
+better than guessing** on a seed-majority basis — read with the blockquote above, which
+gives both tests and the four arms that beat us here.
 
 Two disclosures on this run. Its state is `PARTIAL`, because the live-planner arm was
 requested and failed on all 12 seeds (`target_accession` was `None` for this library — a
@@ -309,8 +341,40 @@ sample. Reproduce with `scripts/analysis/generality_sweep.ps1`.
 | CR9114-H1 | **+3.17** | **+6.10** | 41/5/2 | win — but development data |
 | HER2 | — | — | — | **endpoint gate FAILED, not quotable** |
 
-**One win on development data, one tie, three losses.** That is the honest summary of
-generality for the selection engine, and it is in this README because a
+> **Narrowed 2026-11-01 by a seven-arm baseline panel at 48 paired seeds** (branch
+> `worktree-agent-a8325f2a02fbcdc90`, `493826b`; budgets gate-verified matched, all arms
+> spending all 125 measurements on all 48 seeds). The sweep above uses only `random`,
+> `ridge` and the engine, and **`ridge` is not a uniformly fair reference**: it is 1st of
+> seven on CreiLOV, 2nd on TrpB, and **6th of seven on CR9114**. Against the strongest
+> arm per landscape:
+>
+> | landscape | strongest baseline | it scores | engine | Δ | t | b/w/t |
+> |---|---|---|---|---|---|---|
+> | TrpB | `gp_onehot` | 38.54 | 51.42 | **+12.88** | +3.57 | 31/16/1 |
+> | CR9114-H1 | `greedy_measured` | 11.60 | 5.00 | **−6.60** | −6.25 | 10/36/2 |
+> | CreiLOV | `ridge` | 57.23 | 6.94 | **−50.29** | −32.01 | 0/48/0 |
+>
+> So the honest summary is **not** "one win, one tie, three losses" but: **no win against
+> the strongest available baseline on any landscape except TrpB, and none at all off
+> development data.** CreiLOV is the only non-development landscape in the panel and the
+> engine loses there to every arm except `random`. The TrpB margin is real, large and
+> diversity-robust (+8.69 at d≥2 on 48 of 48 seeds) — and it is on development data *and*
+> on the one landscape where the fabricated `y = 0.0` WT row cannot show itself. That is
+> evidence the method works on a 4-site saturated library with a zero-centred assay: the
+> single configuration in which nothing known to be broken is exercised.
+>
+> Also re-measured on the same held-out block: `panoptes_default` on TrpB is **51.42**, not
+> the 45.21 recorded earlier, and the d≥2 figure is **+7.75 (t=+13.4)**, not +7.93
+> (t=+17.1) — different arms under one name, since `DPP_DIVERSITY_ENABLED` and
+> `TWO_STAGE_GP_ENABLED` changed default between the two measurements. And the
+> front-loading claim of "6.3× the best baseline at 50 measurements" is **withdrawn as
+> incorrect**: it divided by ALDE (2.25) when ridge is the best baseline at that budget
+> (2.83 → 5.0×), `panoptes_default` itself gives 3.7×, and the two ends of the quoted range
+> use different engine arms. See [`docs/HANDOFF.md`](docs/HANDOFF.md) §1.
+
+**One win on development data, one tie, three losses** — ~~the honest summary of
+generality~~, now narrowed by the panel above; read that blockquote in its place. It is in
+this README because a
 [pre-registration](docs/preregistration-cross-protein.md) written **before** the sweep ran
 predicted across-the-board regression against ridge. It was right. That is why these
 numbers are reportable rather than re-narrated: the prediction is in the repository, dated,
@@ -334,8 +398,26 @@ Each had been plausible enough to act on, and two of them were ours.
 2. **"The candidate pool was too shallow."** False on all nine landscapes; see the
    blockquote under check 2 above. The depth ceiling costs 1 hit of 1,655 on CreiLOV and 0
    elsewhere.
-3. **"The biophysical featurisation was the problem."** `physchem_features` against one-hot
-   is a **null** on CreiLOV standalone: +0.167, p=0.74, better on 4 of 12 seeds.
+3. **"The biophysical featurisation was the problem."** Measured twice, independently, and
+   a **null on CreiLOV both times**: +0.167 (p=0.74, 12 seeds) and **+0.79 (p=0.33, 48
+   paired seeds)**. The 48-seed arm comes with the default path proven unchanged rather
+   than asserted — **15,840 cells across all 22 behavioural columns of `round_metrics.csv`
+   agree exactly** against the parent commit over 3 arms × 48 seeds × 5 rounds, the only
+   differences being wall clock. Branch `worktree-agent-a14c69a80e0afa44a` (`a779422`).
+
+   **It is not a null everywhere, and that is a product result rather than a
+   falsification.** On **TrpB** the one-hot GP is worth **+7.71 (p=2.6e−08, 41/3/4)**,
+   taking the engine from 49.65 to **57.35**; on GB1 **+4.31** (p=0.0031), though GB1's is
+   confounded because the GFlowNet reward scores candidates *through* this GP and
+   deep-enrichment moved 0.690 → 0.801. TrpB's is not pool-explained. The
+   pre-registration predicted a **null on TrpB** and was falsified there, and the bars were
+   not moved.
+
+   **Better surrogate rho does not predict a better campaign.** Rho gain ran GB1 (+0.107) >
+   CreiLOV (+0.077) > TrpB (+0.025); campaign gain runs the other way round — TrpB > GB1 >
+   CreiLOV, Spearman −0.5 over the three. Offered mechanism: the redundant 10-D block is
+   33% of the biophysical columns on TrpB and GB1 but only 12% on CreiLOV, where one-hot is
+   the *narrower* encoding — a geometry a fixed-matrix rho protocol cannot see.
 
 What CreiLOV binds on is **ranking**, and the dominant cause is a defect in our own training
 data: `select_next_micro_batch` injects one row per round for the wild type carrying the
@@ -359,6 +441,18 @@ there, so this is not a complete theory of the result set.
 > *and* every TrpB figure above changes meaning. The fix is deliberately an **ablatable
 > component, not a default**: correcting or dropping that row re-bases every number on this
 > page. Do not quote the −9.00 as a result until the confirmation lands.
+>
+> **One term of the three-way stack is now actively disputed, so −9.00 is weaker than it
+> reads.** At 48 paired seeds with the prior ablated, the one-hot increment measures
+> **−0.19, CI [−1.04, +0.65], p=0.547** — an interval that **excludes** the +3.67 measured
+> at 12 seeds, so it is not an underpowered estimate of the same quantity. The two
+> implementations differ in **scope**: one moves all five featurisation call sites including
+> `AssayAdaptedHead`, the other only the GP's fit/predict inputs. With the prior ablated
+> `zero_shot_scores` is zero and `AssayAdaptedHead` becomes the dominant non-GP term, so
+> **"one-hot is worth +7.08 once the prior is gone" may be an `AssayAdaptedHead` effect
+> attributed to the GP.** The prior ablation itself does replicate: 6.94 → 10.94, **+4.00**
+> at 48 seeds against +4.25 at 12. The decisive experiment is both components on one
+> branch and one seed block, and it has not been run.
 
 ## Limitations
 
