@@ -134,14 +134,23 @@ REFERENCE_CONSTANT_COLUMNS: Dict[str, Tuple[int, int]] = {
     "eqfp611_red": (234, 260),
     "cr6261_h1": (198, 220),
     "cr6261_h9": (198, 220),
+    # The reserved landscape: 8 sites x 20 ALDE columns = 160, of which the mixed
+    # 2.2.3.3.3.2.2.3 design can occupy only 20. 140 constant columns, so the ALDE
+    # family is INCOMPATIBLE here and must not be entered as an arm (rule 2.6).
+    "sacas9_sg5": (140, 160),
 }
 
 #: sha256 of a prepared table under `scripts/data/`, where one has been published. The
 #: corpus lock hashes the UPSTREAM corpus only, so a prepared table - the file an arm
 #: actually reads - has no hash coverage unless it is pinned here.
 #: cr9114_h1: `docs/cr9114-reprep.md` §4.
+#: sacas9_sg5: `docs/prereg-reserved-sacas9.md` §3. A RESERVED landscape's bytes are
+#: part of the pre-registration - if the table can change after the document is
+#: committed, the document seals nothing - so this pin is what makes "unscored against
+#: this label" checkable rather than asserted.
 PREPARED_TABLE_DIGESTS: Dict[str, str] = {
     "cr9114_h1": "1d9a57745636f27d5fdea5f8798a852f4852b9dc7fa2e60884d49bd930972d83",
+    "sacas9_sg5": "3d9722c3cb3ce628e80e691e11565fa74b0bdf397ba78e011782ce82e9b85a00",
 }
 
 # Budget shortfall classifications. They are different failures and must not collapse.

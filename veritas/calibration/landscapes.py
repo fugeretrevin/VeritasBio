@@ -131,6 +131,40 @@ REGISTRY: Dict[str, LandscapeSpec] = {
         parent_residues="TSANQKSTSAL", protein="CR6261",
         tier_fraction=0.02,
     ),
+    # ----------------------------------------------------------------------------------
+    # RESERVED, AND UNSCORED. Sealed by `docs/prereg-reserved-sacas9.md` on 2026-11-01,
+    # when this project held no non-development landscape among its measured results:
+    # rule 2.4 had fired on HER2 and, that day, on CreiLOV.
+    #
+    # Do not run a method, an arm or a campaign on this landscape without reading that
+    # document first. Its whole value is that no outcome on it exists.
+    #
+    # The library definition is validated four ways by `scripts/data/prepare_sacas9.py
+    # validate` - CombinGym's registry, the positions that actually vary, the wild-type
+    # FASTA (whose bytes equal the single n_mut = 0 row), and the raw table's own
+    # position header - and `load_landscape` re-checks positions and parent residues on
+    # every load.
+    #
+    # The LABEL is one named readout, not CombinGym's `Mean`. The clean workbook averages
+    # three of the six sgRNAs the raw table measures (`docs/corpus-audit.md` §5.2), the
+    # six are close to rank-independent (|rho| <= 0.15), and on all three that the `Mean`
+    # covers the KKH parent already sits at the 99.6th-100th percentile of the 1,295
+    # mutants - so every member of their top tier is WORSE than the starting enzyme. sg5
+    # is the readout with the largest parent-relative headroom; sg6 and sg7 are the
+    # pre-declared second and third reserve and are deliberately NOT registered here.
+    #
+    # `tier_fraction` is 0.05 because the protocol's own tier ladder picks it: 1% is 13
+    # members and 2% is 26, both under `MIN_TIER_MEMBERS = 30`, and the 2% tier is also
+    # NEAR-DEGENERATE at d >= 2 (3.85% removed, under the 5% floor). The registered
+    # budget is 50, not 125 - see the pre-registration §4.
+    "sacas9_sg5": LandscapeSpec(
+        key="sacas9_sg5",
+        label="KKH-SaCas9 eight-site, sgRNA sg5 / PAM TGCCGT (Thean et al. 2022)",
+        csv_name="SACAS9_KKH_SG5_Thean_2022.csv",
+        positions=(887, 888, 889, 985, 986, 988, 989, 991),
+        parent_residues="LNANNLLR", protein="SaCas9 (KKH)",
+        tier_fraction=0.05,
+    ),
 }
 
 
