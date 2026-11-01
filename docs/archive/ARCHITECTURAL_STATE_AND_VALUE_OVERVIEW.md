@@ -1,4 +1,15 @@
-# VeritasBio — Comprehensive Technical Architecture, Math Specification & Value Overview
+﻿> **SUPERSEDED — ARCHIVED 2026-11-01. DO NOT QUOTE THIS FILE.**
+>
+> This is a planning or positioning document written before the measurements were taken.
+> It is kept for history, not for reference, and parts of it are now known to be wrong:
+> it describes gaps that have since been closed, and it carries claims that
+> [`README.md`](../../README.md) and [`docs/HANDOFF.md`](../HANDOFF.md) explicitly
+> withdraw. Where any of it disagrees with those two files, those two are correct.
+>
+> In particular, nothing here should be read as a statement of what the system was
+> measured to do. The measured results, with their limitations, are in `README.md`; the
+> run artifacts behind them are in [`evidence/`](../../evidence/README.md).
+# VeritasBio â€” Comprehensive Technical Architecture, Math Specification & Value Overview
 
 > **Target Audience:** Engineering Partners, AI Agents, Technical Evaluators, and Biopharma Stakeholders.  
 > **Source of Truth:** Codebase state as of October 27, 2026 (`v3.2 Production Ready`).  
@@ -25,29 +36,29 @@ VeritasBio solves this by decoupling strategy from execution through a **fail-cl
 ## 2. Layer-by-Layer Architectural & Mathematical Specification
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                             VERITASBIO 7-LAYER ENGINE                            │
-└──────────────────────────────────────────────────────────────────────────────────┘
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚                             VERITASBIO 7-LAYER ENGINE                            â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
   [Layer 1: RAG Knowledge Harvester]   (workers/rag_worker.py)
-        │ Pulls WT sequence, functional domains, and 3D PDB coordinates (<8.5Å)
-        ▼
+        â”‚ Pulls WT sequence, functional domains, and 3D PDB coordinates (<8.5Ã…)
+        â–¼
   [Layer 2: Strategic Prior Planner]  (controller/prompts.py & Meta Llama 3.1)
-        │ Strict JSON Mechanistic CoT (pocket geometry, cofactor proximity, chemistries)
-        ▼
+        â”‚ Strict JSON Mechanistic CoT (pocket geometry, cofactor proximity, chemistries)
+        â–¼
   [Layer 3: Quant Engine & Surrogate] (workers/math_worker.py & spatial_filter.py)
-        │ Featurization + DKL (Matern 5/2) + GFlowNet Boltzmann + k-DPP Diversity + CoT Prior
-        ▼
+        â”‚ Featurization + DKL (Matern 5/2) + GFlowNet Boltzmann + k-DPP Diversity + CoT Prior
+        â–¼
   [Layer 4: Fail-Closed Gatekeeper]   (controller/gatekeeper.py)
-        │ Biophysical notation validation + Two-State Cold/Warm Container ROI Sizing
-        ▼
+        â”‚ Biophysical notation validation + Two-State Cold/Warm Container ROI Sizing
+        â–¼
   [Layer 5: Micro-USD Spend Ledger]   (ledger/database.py & schema.sql)
-        │ Atomic authorize_spend() in micro-USD ($0.000001); immutability triggers
-        ▼
+        â”‚ Atomic authorize_spend() in micro-USD ($0.000001); immutability triggers
+        â–¼
   [Layer 6: Cloud Muscle Inference]   (workers/esm_worker.py & Modal A10G)
-        │ Batched masked-marginal log-likelihood + [CLS] latent embeddings
-        ▼
+        â”‚ Batched masked-marginal log-likelihood + [CLS] latent embeddings
+        â–¼
   [Layer 7: Physical Wet-Lab Handshake] (workers/wetlab_worker.py)
-        └──> Twist/IDT Synthesis Order CSV + Opentrons OT-2 Script + FDA SHA-256 JSON
+        â””â”€â”€> Twist/IDT Synthesis Order CSV + Opentrons OT-2 Script + FDA SHA-256 JSON
 ```
 
 ### Layer 1: UniProt RAG Knowledge Harvester (`workers/rag_worker.py`)
@@ -61,7 +72,7 @@ VeritasBio solves this by decoupling strategy from execution through a **fail-cl
 - **Output:** Emits `SearchStrategy` JSON specifying residue clusters, forbidden invariant positions, and structured `BiophysicalHypothesis` objects:
   - `pocket_name`: e.g. Substrate Entrance Loop 1 `[183, 184]`, Communication Loop 2 `[227, 228]`.
   - `mechanism`: Steric volume relaxation, aromatic pi-stacking, or salt-bridge stabilization.
-  - `structural_rationale`: Distance to catalytic core or cofactor (e.g. 6.2Å from Lys87 PLP Schiff base in TrpB).
+  - `structural_rationale`: Distance to catalytic core or cofactor (e.g. 6.2Ã… from Lys87 PLP Schiff base in TrpB).
   - `suggested_chemistries`: Target amino acid classes per position (e.g. branched hydrophobics `{"184": ["I", "V"]}`).
   - `epistatic_coupling`: Predicted cooperative or antagonistic synergy across interacting loops.
 - **Mathematical Coupling:** Injected as a grounded biophysical prior reward bonus into the discrete GFlowNet candidate sampler ($+0.12$ to $+0.36$), mathematically guiding surrogate exploration toward structurally rational regions without violating determinism.
@@ -98,7 +109,7 @@ This is the core mathematical engine of VeritasBio:
 
 ### Layer 4: 3D Spatial Pre-Filter & Fail-Closed Gatekeeper (`controller/gatekeeper.py`, `workers/spatial_filter.py`)
 1. **Automated 3D Pocket Tessellation:**
-   Automates $C_\alpha$ Euclidean sphere extraction ($<8.5\text{Å}$) directly from PDB coordinates, safeguarding catalytic invariant cores.
+   Automates $C_\alpha$ Euclidean sphere extraction ($<8.5\text{Ã…}$) directly from PDB coordinates, safeguarding catalytic invariant cores.
 2. **Biophysical Stability Pre-Filter ($\Delta\Delta G$ kcal/mol):**
    Prunes dead variants *before* spending cloud money:
    - Severe core steric clashes: bulky Trp/Tyr/Phe in packed cavities.
@@ -107,7 +118,7 @@ This is the core mathematical engine of VeritasBio:
 3. **Two-State Cold/Warm Container Pricing:**
    Calculates exact GPU billing:
    $$\text{Cost} = (t_{\text{active}} + t_{\text{boot}}) \times \text{Rate}_{\text{A10G}}, \quad t_{\text{boot}} = \begin{cases} 20.0\text{s} & \text{Cold container} \\ 0.0\text{s} & \text{Warm container} \end{cases}$$
-   Using Modal's keep-alive window (`scaledown_window=45–120s`), consecutive active-learning rounds run at $0.0\text{s}$ boot overhead (~21x cheaper).
+   Using Modal's keep-alive window (`scaledown_window=45â€“120s`), consecutive active-learning rounds run at $0.0\text{s}$ boot overhead (~21x cheaper).
 4. **ROI Gate:**
    Computes $\text{ROI} = \frac{\sum EI}{\text{Estimated Cost USD}}$. Validates mutation syntax against WT sequence. If invalid or ROI $\le 0$, fails closed.
 
@@ -142,7 +153,7 @@ VeritasBio was rigorously evaluated across two authentic, real-world biological 
 
 ```
 ================================================================================
- VERITASBIO FULL PRODUCTION BENCHMARK — SIDE-BY-SIDE PERFORMANCE
+ VERITASBIO FULL PRODUCTION BENCHMARK â€” SIDE-BY-SIDE PERFORMANCE
 ================================================================================
 Metric                               | TrpB (TRPB_TM9D8)    | avGFP (P42212)      
 ----------------------------------------------------------------------------------
@@ -166,7 +177,7 @@ Cloud Efficiency Multiplier          | 73.9x Cheaper        | 1.4x Cheaper
 ```
 
 ### Key Takeaways
-1. **TrpB Active-Site Mastery:** On the complete 159,999-member TrpB landscape, screening just 125–200 variants achieved **44.96x enrichment** over random screening, with **43.5% of all draws landing in the top 1%** of the entire library.
+1. **TrpB Active-Site Mastery:** On the complete 159,999-member TrpB landscape, screening just 125â€“200 variants achieved **44.96x enrichment** over random screening, with **43.5% of all draws landing in the top 1%** of the entire library.
 2. **High Global Optimum Attainment:** Reached **80.1% of the theoretical maximum** in TrpB (`F184I:V227M:S228G`, 0.8005) and **89.9% in avGFP** (`M153T`, 3.7069) for under **$0.015** total compute spend.
 3. **No Wasted Dollars:** The dual exit handshake (Bayesian regret convergence + fitness plateau stagnation) automatically halted execution when marginal returns dropped, saving **98.7% of allocated capital**.
 
@@ -221,3 +232,4 @@ python scripts/run_trpb_benchmark.py --rounds 5 --batch-size 25
 # 4. Run Complete 99-Test Suite
 python -m unittest discover tests -v
 ```
+

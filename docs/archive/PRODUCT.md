@@ -1,3 +1,14 @@
+﻿> **SUPERSEDED — ARCHIVED 2026-11-01. DO NOT QUOTE THIS FILE.**
+>
+> This is a planning or positioning document written before the measurements were taken.
+> It is kept for history, not for reference, and parts of it are now known to be wrong:
+> it describes gaps that have since been closed, and it carries claims that
+> [`README.md`](../../README.md) and [`docs/HANDOFF.md`](../HANDOFF.md) explicitly
+> withdraw. Where any of it disagrees with those two files, those two are correct.
+>
+> In particular, nothing here should be read as a statement of what the system was
+> measured to do. The measured results, with their limitations, are in `README.md`; the
+> run artifacts behind them are in [`evidence/`](../../evidence/README.md).
 # Product
 
 <!-- impeccable:product-schema 1 -->
@@ -13,7 +24,7 @@ web
 
 ## Product Purpose
 
-PanoptesBio is a deterministic cloud-economics engine and auditable active-learning platform for computational biologics and protein therapeutics. It solves the massive compute waste of unguided brute-force screening ($>\$500$–$\$30,000$) by coupling a strictly constrained LLM strategic prior with a 3D Deep Kernel Learning Gaussian Process, determinantal point process ($k$-DPP) diversity, and an unbypassable micro-USD ledger that enforces fail-closed execution.
+PanoptesBio is a deterministic cloud-economics engine and auditable active-learning platform for computational biologics and protein therapeutics. It solves the massive compute waste of unguided brute-force screening ($>\$500$â€“$\$30,000$) by coupling a strictly constrained LLM strategic prior with a 3D Deep Kernel Learning Gaussian Process, determinantal point process ($k$-DPP) diversity, and an unbypassable micro-USD ledger that enforces fail-closed execution.
 
 Success means:
 - Slashing in silico screening compute spend by $98.0\%\text{ to }99.98\%$ while discovering empirical global and Pareto optima.
@@ -47,7 +58,7 @@ Unlike point-tool GPU brokers and brute-force AI resellers (e.g., Tamarind Bio) 
 
 ## Brand Commitments
 
-- **Brand Name:** **PanoptesBio** (evoking Panoptes, the mythical all-seeing hundred-eyed sentinel—representing total transparency, auditability, biosecurity, and biophysical oversight).
+- **Brand Name:** **PanoptesBio** (evoking Panoptes, the mythical all-seeing hundred-eyed sentinelâ€”representing total transparency, auditability, biosecurity, and biophysical oversight).
 - **Sub-Brand / Engine Heritage:** Powered by the Veritas active-learning quant engine.
 - **Voice & Tone:** Authoritative, uncompromisingly precise, mathematically rigorous, institutional-grade, and enterprise-credible. No vague AI hype or hand-waving claims.
 - **Visual Identity Direction:** Deep obsidian, luminescent emerald/bioluminescence accents, precision tabular data, cryptographic monospace audit hashes, and high-fidelity 3D molecular WebGL surfaces.
@@ -68,4 +79,5 @@ Unlike point-tool GPU brokers and brute-force AI resellers (e.g., Tamarind Bio) 
 2. **Empirical Truth Over In Silico Hallucination:** Computations must translate to the physical bench; zero-shot predictions are hypothesis inputs, never final answers.
 3. **All-Seeing Traceability (Panoptes Standard):** Every mutation proposal, score, spend authorization, and synthesis manifest must be immutably recorded in a tamper-evident Merkle chain.
 4. **Developability as a First-Class Objective:** A high-affinity variant that precipitates or deamidates in CMC manufacturing is a failure; developability screening is non-negotiable from iteration zero.
+
 

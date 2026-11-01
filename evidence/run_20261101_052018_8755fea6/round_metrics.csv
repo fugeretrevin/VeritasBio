@@ -1,0 +1,2 @@
+provenance,method,seed,round,n_unique_measurements,best_measured_fitness,new_top1_hits,cum_top1_hits_excluding_initial,cum_top1_hits_including_initial,found_top1,round_seconds,cumulative_seconds,model_calls,token_usage,requested,accepted,rejected,status,failure_reason,backfill_attempts,backfill_added,selection_source,distinct_proposed,degenerate_proposals
+provenance=HISTORICAL_UNKNOWN_PROVENANCE legacy=UNVERIFIED_INCLUDES_IMPUTED,panoptes_muse,0,0,25,9.52962755,0,0,0,0,0.0001,0.0001,0,unknown,25,25,0,completed,,0,0,policy,0,0

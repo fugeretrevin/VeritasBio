@@ -1,371 +1,425 @@
-# VeritasBio — Deterministic Cloud Economics Engine for Computational Biology
+# VeritasBio
 
-[![Meta AI Hackathon](https://img.shields.io/badge/Meta_Global_AI_Hackathon-2026-blue.svg)](https://lablab.ai)
-[![Llama 3.1 Powered](https://img.shields.io/badge/Llama_3.1-Strict_JSON_Priors-purple.svg)](https://llama.meta.com/)
-[![Modal GPU](https://img.shields.io/badge/Modal-NVIDIA_A10G-green.svg)](https://modal.com)
-[![Tests Passing](https://img.shields.io/badge/Tests-197%2F197_Passing-brightgreen.svg)]()
-[![Compliance](https://img.shields.io/badge/FDA_21_CFR_Part_11-Cryptographically_Verified-darkgreen.svg)]()
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)]()
+**An autonomous design agent that refuses to spend your budget on a campaign that cannot
+work — because we built one that did, and our own metrics could not tell.**
 
-> **VeritasBio** is a deterministic cloud economics engine and active learning platform for generative protein engineering. An LLM (*Meta Llama 3.1*) only proposes biophysical search boundaries; a Gaussian Process actively selects high-yield micro-batches; and an immutable SQLite ledger with a fail-closed Python Gatekeeper guarantees that paid GPU compute (*Modal NVIDIA A10G + ESM-2*) never exceeds the user's hard budget.
+Meta Global AI Developer Hackathon (with Cerebral Valley), track **Push the Frontier**.
+First commit `cd313c4`, 2026-10-26 12:17 ET, the day the event opened. Everything in this
+repository was built during the event; `git log --reverse` is the record.
 
----
+VeritasBio is two things in one repository. The first is an autonomous protein-design
+agent: each round a Meta model (`muse-spark-1.3` on `api.meta.ai`) reads the target's
+structure and annotations, the assay results so far, and the residuals from its own
+previous predictions, then emits a search strategy as schema-validated JSON — which
+positions to mutate, which residue clusters, how deep — and the campaign executes that
+plan against a real measured fitness landscape. The second is the verification layer that
+decides whether the plan is worth paying for. The second exists because of what we found
+while measuring the first.
 
-![VeritasBio Benchmark Results](scripts/benchmark_results.png)
+## The finding
 
----
+When a generative system proposes candidates that are filtered *before* they are scored, a
+low score is **ambiguous**. It can mean the model ranked badly, or it can mean nothing the
+model produced was ever eligible to be ranked. Aggregate metrics cannot separate those two.
+They need opposite fixes. The second is invisible unless you instrument for it.
 
-## 1. The Problem: The Cloud-Cost Trap in Generative Biology
+We hit it. On the CR9114 antibody landscape our own engine's arm:
 
-In computational drug discovery and protein engineering, running foundation model inference (e.g. ESM-2 650M, AlphaFold 3, RoseTTAFold) across combinatorial mutation libraries creates runaway cloud infrastructure bills:
-1. **Combinatorial Explosion**: Testing double and triple mutants on a 238-amino-acid protein yields $>1.1 \times 10^7$ variants — costing over **$35,000** in brute-force GPU forward passes.
-2. **Cold-Start Waste**: Cloud serverless instances incur 15–30s container boot times on every invocation, wasting up to 90% of GPU compute budgets on container spin-up rather than tensor operations.
-3. **Agentic Hallucination**: Open-ended autonomous AI agents lack cost predictability, frequently looping or executing hundreds of unconstrained inference calls.
+| what the arm did | figure |
+|---|---|
+| candidate proposals built | **757,829**, none above mutation depth 4 |
+| offered to the eligibility judge | **25,712 rejected, 32 accepted** |
+| rejection reasons | **100% `not_in_eligible_universe`**, no other reason once |
+| measurement budget spent | **26 of 125** |
+| rounds that committed a short batch | **192 of 192** |
+| top-1% variants found | **0 of 651** |
+| what the harness reported | **`Run state: SUCCESS`** |
 
-### The VeritasBio Solution
-VeritasBio replaces unpredictable open-ended agents with a **deterministic, fail-closed 6-step active learning cycle**. The engine optimizes proteins for highest biological fitness while mathematically maximizing the **Return on Investment (ROI)** per dollar of cloud spend.
+Source: [`docs/day1-reachability.md`](docs/day1-reachability.md) §, reproduced in the
+summary block of [`scripts/demo/gate_catches_planner.py`](scripts/demo/gate_catches_planner.py).
 
----
+The cause was not the model or the surrogate. The candidate generator was hardcoded to one
+library geometry — four saturated sites, 20 residues each, depth capped at 4 by a pydantic
+validator in `controller/prompts.py`. Six of the nine standard landscapes in this corpus
+are binary or mixed-alphabet. The two the generator was validated on, TrpB and GB1, are the
+only two of its native shape — and they are also the two the MLDE/ALDE literature
+benchmarks on. The `le=4` bound alone put 647 of CR9114's 651 top-1% hits out of reach at
+any budget. No metric in the results table distinguished that from a method that searched
+and simply lost.
 
-## 2. Benchmark Results
+## Verify the Meta model is real
 
-All figures below come from the controlled protocol in `benchmark_panoptes_isolated.py`:
-**48 paired random seeds**, an identical 25-variant random starting sample given to every
-method, then 4 rounds x 25 newly chosen variants - 125 unique measurements including the
-start. Outcomes are revealed to a method only after it commits a batch.
+One command, one live call, no mock path:
 
-The authoritative write-up, including the protocol, the limitations and the open questions,
-is [`docs/PIPELINE_FOR_BIO_REVIEW.md`](docs/PIPELINE_FOR_BIO_REVIEW.md). Regenerate these
-numbers rather than trusting this table:
-
-```bash
-python benchmark_panoptes_isolated.py --seeds 48 --rounds 4 --batch-size 25
+```powershell
+.venv\Scripts\python.exe -X utf8 scripts/demo/gate_catches_planner.py
 ```
 
-### 2a. TrpB active-site landscape (Johnston et al. 2024)
+It prints, from the live `Orchestrator` object:
 
-The primary benchmark. The library is **combinatorially complete** - all 20^4 = 160,000
-combinations at active-site residues 183/184/227/228 of the engineered parent Tm9D8\* were
-measured - so the global optimum is known to be in the pool and nothing is missing.
+* `strategy_engine` and `strategy_engine_is_mock` — set per round in
+  `controller/orchestrator.py::_generate_strategy`, and reset at the top of every round so
+  one successful call cannot label a whole campaign live.
+* the **provider's own token counters** (`token_usage`), accumulated from the API's `usage`
+  block in `_call_llama_api`. Not an estimate.
+* the strategy the model actually returned: hypothesis, `max_mutation_depth`, and each
+  target cluster with its positions and rationale.
 
-Mean +/- SD across 48 seeds. "top-1%" counts variants found at or above the 99th percentile
-of the eligible set, including those present in the shared starting sample.
+Where the call is made: `controller/orchestrator.py::_call_llama_api` POSTs to
+`https://api.meta.ai/v1/chat/completions` with model `muse-spark-1.3` (overridable via
+`META_API_URL` / `META_MODEL_ID`), `response_format: {"type": "json_object"}`,
+temperature 0.2. The response is parsed into `SearchStrategy`
+([`controller/prompts.py`](controller/prompts.py)), a pydantic model — a malformed plan is a
+validation error, not a silently degraded round.
 
-| method | best fitness | SD | top-1% found | SD |
+Three further ways to check the claim rather than take it:
+
+1. **The arm cannot fall back to a mock.** `require_live_llm=True` makes a failed live call
+   fail the arm. Artifact: in the CR9114 run below, `panoptes_muse` reports
+   `FAILED, 0 of 12 seeds completed — the arm did not run, which is not a null result`,
+   and the log carries the provider's error body. An arm that quietly substituted a mock
+   would have posted a plausible number instead.
+2. **Token counts are measured.** The TrpB run below records
+   `panoptes_muse: 568,189 tokens over 96 model call(s), 5,919/call` in `report.txt` and
+   `summary.csv`. Before commit `9583708` the client discarded the provider's usage block
+   and every report said "token usage: unknown"; that commit also fixed an arm that
+   reported "live Muse" while making **zero** calls.
+3. **The model's plan is enforced, not decorative.** `restrict_strategy_to_assayable`
+   clips the returned plan to the positions the ordered library actually varies, and the
+   demo withholds that scope on the first call so you can see what the planner proposes
+   unconstrained.
+
+Requires `LLAMA_API_KEY` (or `META_API_KEY`) in `.env`, and `VERITAS_USE_OS_TRUSTSTORE=1`
+on a network that terminates TLS. Costs one call, roughly 5k tokens.
+
+## The four checks
+
+Four questions have to be answered before a campaign's number means anything. Each is code
+in this repository, each was written against a defect that actually happened here, and each
+names the artifact it read.
+
+**1. Scope — can the assay read what the planner proposed?**
+`scripts/demo/gate_catches_planner.py` gate check 1, enforced in production by
+`controller/prompts.py::restrict_strategy_to_assayable`. The model sees a protein; the lab
+has a plate. A distal allosteric residue may genuinely matter and still be unmeasurable
+with the library in hand, and a proposal there cannot be ordered, measured or scored. This
+check passes on TrpB today because an earlier fix (`8099060`) derived the planner's
+positions from the library spec. It stays, because nothing guarantees the next target's
+annotation matches the library someone actually ordered.
+
+**2. Reach — can that plan reach where the answers live?**
+Gate check 2. It takes the `max_mutation_depth` the model asked for and asks, per
+landscape, what fraction of the top-tier variants sit at or below that depth — using the
+landscape's own depth and hit arrays from `veritas/calibration/landscapes.py`, not a second
+implementation. One model call, one plan, seven libraries: sound on some, **unable to
+succeed** on others. This is the check that would have refused the 757,829-proposal
+campaign above before a single measurement was spent. It is also the check the model cannot
+make for itself: where a library's good variants sit in mutation depth is a property of the
+measured landscape, not of the sequence, the structure or the annotation.
+
+**3. Budget — did the arm actually spend its budget, and if not, why?**
+`veritas/preflight.py::check_budget`, reading a run's `round_metrics.csv` and
+`selection_trace.csv`. A shortfall is **classified**, not summarised: `DEGENERATE` (the arm
+could not propose a distinct candidate — ALDE on HER2 spent 26 of 125, being the 25 shared
+starting variants plus one variant measured 100 times), `RECOVERABLE` (proposals were
+ineligible and the round ran short), or `UNCLASSIFIED`, which still fails, because the first
+two require opposite responses. A degenerate arm is not a null result.
+
+**4. Endpoint — can the metric tell two methods apart at all?**
+`veritas/preflight.py::check_endpoint_viability`, with the degeneracy rule imported from
+`veritas/calibration/endpoint.py`. On HER2 the diversity-adjusted d≥2 ceiling equals the
+raw top-1% ceiling at 113 against a raw count of 113 — 0.00% of the hit set removed against
+a 5% floor — so the pre-registered primary endpoint silently becomes the secondary one. No
+budget change fixes that; it is a property of the library. **HER2 results are therefore
+not quotable from this project**, and we say so rather than reporting them.
+
+Checks 3 and 4 are two of the six in the pre-flight gate. The other four are `corpus`
+(every table a landscape reads is hash-pinned), `encoding` (a constant one-hot column makes
+botorch's min-max normaliser divide by zero, which is what made ALDE return index 0
+forever), `threshold` (the qualification bar must be a quantile that resolves from the same
+array as the top-1% threshold), and `row_order` (shuffle the input table, re-run one seed,
+assert identical results — our prepared tables are sorted by fitness descending, so
+CR9114's row 0 *is* the global optimum and a wholly broken arm would have posted a perfect
+best-fitness). Nothing in the gate is a bare boolean: `bool(result)` raises `TypeError`, so
+`if check(...):` cannot quietly read NOT-APPLICABLE as "fine". Full documentation:
+[`docs/preflight.md`](docs/preflight.md).
+
+```powershell
+.venv\Scripts\python.exe -X utf8 -m veritas.preflight --library her2 --arms alde,ridge
+.venv\Scripts\python.exe -X utf8 -m veritas.preflight --library trpb --arms panoptes_default --run-dir <run>
+```
+
+## Measured results
+
+Protocol, shared by every arm: one evaluator owns the complete measured fitness table and
+selectors never see it; per seed the same 25 starting variants for every method, then 4
+rounds of 25 newly selected variants, 125 unique measurements per method per seed including
+the start; a method commits its batch before outcomes are revealed. The seed is the unit of
+independence and every comparison below is a **paired** test over seeds with
+seeds-better/worse/tied reported. A difference of means with no paired test is not a verdict
+here — that rule cost this project two wrong verdicts
+([`docs/HANDOFF.md`](docs/HANDOFF.md) rule 2.11).
+
+### The live agent on TrpB — 12 paired seeds
+
+`run_20261101_043406_8662bdf0`, commit `9583708`, clean tree, TrpB Tm9D8\* four-site active
+site (Johnston et al. 2024), 159,999 eligible variants, top-1% threshold 0.349399 (1,600
+qualifying variants).
+
+| arm | peak fitness | sd | top-1% found | sd |
 |---|---|---|---|---|
-| random | 0.4443 | 0.146 | 1.1 | 0.9 |
-| one-hot ridge | 0.6959 | 0.232 | 31.3 | 15.7 |
-| random forest | 0.6989 | 0.236 | 31.6 | 19.0 |
-| ALDE (Nat Commun 2025, authors' implementation) | 0.7134 | 0.182 | 32.8 | 15.3 |
-| **VeritasBio** | **0.7457** | **0.035** | **45.2** | **4.8** |
+| random | 0.4455 | 0.1591 | 0.92 | 0.79 |
+| one-hot ridge | 0.6968 | **0.3012** | 29.17 | 17.02 |
+| engine, non-LLM planner (`panoptes_default`) | 0.7288 | 0.0242 | 50.33 | 6.71 |
+| **engine, live Meta planner (`panoptes_muse`)** | 0.7421 | **0.0316** | 49.42 | 6.04 |
 
-Paired t-tests, n=48, critical |t| = 2.01:
+Paired tests, n=12 (the delta is identical whether or not the shared starting sample is
+counted, since every arm starts from it):
 
-| comparison | metric | mean diff | t | verdict |
+| comparison | metric | delta | t | better/worse/tied | verdict |
+|---|---|---|---|---|---|
+| live agent vs ridge | top-1% | **+20.25** | **+3.77** | 11/1/0 | agent better |
+| live agent vs random | top-1% | +48.50 | +27.55 | 12/0/0 | agent better |
+| live agent vs ridge | peak fitness | +0.045 | +0.50 | 6/6/0 | **not separable** |
+| live agent vs non-LLM planner | top-1% | −0.92 | −0.44 | 6/5/1 | **not separable** |
+| live agent vs non-LLM planner | peak fitness | +0.013 | +1.20 | 7/3/2 | **not separable** |
+
+State the fourth row honestly: **the Meta model plans as competently as our tuned
+heuristic planner, and on this landscape it does not beat it.** What it does is plan from
+the target's annotations and its own residuals rather than from a per-target rule we wrote.
+
+The variance is the result that matters for a real campaign. Ridge's per-seed peak fitness
+ranged **0.0646 to 1.0000** (sd 0.3012) — it found the global optimum of the eligible set
+on one seed and essentially nothing on two others. The live agent ranged **0.7036 to
+0.7903** (sd 0.0316), roughly a tenth of the spread. The engine's advantage here is
+**reliability, not peak performance**, which is what matters when you run a campaign once
+with real synthesis budget rather than twelve times with different seeds.
+
+Cost, from the provider's own usage block: **568,189 tokens over 96 model calls,
+5,919/call**, for 12 full campaigns. No dollar figure is hardcoded; multiply by your rate.
+
+### CR9114-H1 antibody — 12 paired seeds, engine without the live planner
+
+`run_20261101_051322_4bb22522`, same protocol and commit. CR9114 VH 16-site library against
+H1 antigen (Phillips et al. 2021), 65,093 eligible variants, 651 qualifying.
+
+| arm | peak fitness | sd | top-1% found | sd |
 |---|---|---|---|---|
-| vs ALDE | top-1% | +12.4 | 5.07 | **significant** |
-| vs ridge | top-1% | +13.9 | 5.93 | **significant** |
-| vs ALDE | best fitness | +0.032 | 1.22 | not separable |
-| vs ridge | best fitness | +0.050 | 1.48 | not separable |
+| random | 9.6373 | 0.0211 | 1.33 | 0.65 |
+| one-hot ridge | 9.6264 | 0.0419 | 1.83 | 1.80 |
+| **engine (`panoptes_default`)** | **9.6945** | 0.0525 | **6.50** | 2.35 |
 
-**What this does and does not support.** The engine finds about 40% more top-1% variants
-than any comparator, with 5-7x lower variance, and reaches a fitness of 0.70 in 88% of
-campaigns by measurement 50 against 4-6% for every competitor. It does **not** find better
-single variants than the comparators - that difference is not statistically separable - and
-it reaches 0.90 in **0 of 48** campaigns where ridge, random forest and ALDE each reach it in
-15-19%. The cause is a candidate-generation limit documented in
-[`docs/PIPELINE_FOR_BIO_REVIEW.md`](docs/PIPELINE_FOR_BIO_REVIEW.md) section 7A.
+| comparison | metric | delta | t | better/worse/tied | verdict |
+|---|---|---|---|---|---|
+| engine vs ridge | top-1% | **+4.67** | **+7.39** | 12/0/0 | engine better |
+| engine vs ridge | peak fitness | **+0.068** | **+4.49** | 11/0/1 | engine better |
+| ridge vs random | top-1% | +0.50 | +1.00 | 5/5/2 | **not separable** |
+| ridge vs random | peak fitness | −0.011 | −0.90 | 4/5/3 | **not separable** |
 
-### 2b. avGFP (Sarkisyan et al. 2016) - not a predictive-skill measurement
+One seed reached **9.8345** — the global optimum of the landscape
+(`S31N:T57S:T71S:K74I:S75F:T76S:S77N`, mutation depth 7, which the old depth-4 ceiling made
+unreachable by construction). Note the third and fourth rows: on this landscape ridge, the
+standard baseline, is **no better than guessing**.
 
-This repository also carries the avGFP DMS landscape, but the avGFP harness
-(`scripts/run_real_data_benchmark.py`) evaluates the Gaussian Process on its **own training
-inputs** - it sets `all_eval_feats = np.array(train_x)` and correlates the result against
-the training targets. The resulting rho of +0.9996 and r of +1.0000 therefore describe fit,
-not predictive skill, and will sit near 1.0 for almost any model. The same run discovers
-**0 top-1% variants**.
+Two disclosures on this run. Its state is `PARTIAL`, because the live-planner arm was
+requested and failed on all 12 seeds (`target_accession` was `None` for this library — a
+configuration defect, fixed afterwards in `c97b4fb`); no figure above comes from that arm.
+And the live planner would be refused here anyway — see *Content policy* below.
 
-Earlier revisions of this README reported those correlations as "high ranking fidelity" and
-"exact calibration". They support neither claim and are retained here only to document the
-correction. Treat the TrpB protocol above as the benchmark.
+### Across six landscapes, 48 paired seeds each — the engine loses
 
-### 2c. Scope
+The generality sweep, commit `406ef58`, clean tree, budgets matched per arm, 10,000-sample
+whole-seed bootstrap. Δ is `panoptes_default − ridge` on top-1% hits excluding the initial
+sample. Reproduce with `scripts/analysis/generality_sweep.ps1`.
 
-One target and one four-site library. Nothing here is claimed to generalise beyond it. The
-repository also holds avGFP, GB1 and trastuzumab datasets, but the controlled protocol has
-not been run on them. Up to 871 of the 159,999 TrpB values (0.54%) may be KNN-imputed rather
-than measured; `scripts/check_trpb_imputation.py` establishes that the five highest-fitness
-variants are not among them.
+| landscape | Δ vs ridge | t | better/worse/tied | verdict |
+|---|---|---|---|---|
+| CreiLOV | **−50.29** | **−32.01** | 0/48/0 | loss on every seed |
+| GB1 | **−12.90** | **−5.63** | 6/41/1 | decisive loss |
+| eqFP611-red | 0 hits vs ridge's 15.35 | — | — | loss, total |
+| eqFP611-blue | +0.73 | +0.77 | 25/18/5 | **not separable** |
+| CR9114-H1 | **+3.17** | **+6.10** | 41/5/2 | win — but development data |
+| HER2 | — | — | — | **endpoint gate FAILED, not quotable** |
 
-```bash
-# Fast active learning simulation on 160k TrpB library
-python scripts/run_trpb_benchmark.py --rounds 5 --pool-size 3000
+**One win on development data, one tie, three losses.** That is the honest summary of
+generality for the selection engine, and it is in this README because a
+[pre-registration](docs/preregistration-cross-protein.md) written **before** the sweep ran
+predicted across-the-board regression against ridge. It was right. That is why these
+numbers are reportable rather than re-narrated: the prediction is in the repository, dated,
+and it was not softened afterwards. Two earlier verdicts of ours did not survive the paired
+test and are withdrawn in place: eqFP611-blue was published as a win and is a coin flip,
+and GB1 was described as "parity at every budget" and is a decisive loss.
 
-# Controlled comparison against random, ridge, random forest and the published ALDE
-# implementation, under one shared hidden-results protocol. This is the benchmark the
-# figures in section 2 come from; run_trpb_benchmark.py --compare scores simulated
-# baselines instead and is kept only for the single-method active-learning loop.
-python benchmark_panoptes_isolated.py --seeds 48 --rounds 4 --batch-size 25
+## Limitations
 
-# Attribute the advantage: disable one selector component at a time
-python benchmark_panoptes_isolated.py --seeds 48 --ablate-components dpp
+Read these before quoting anything above.
 
-# Compare two runs with paired t-tests on identical seeds
-python scripts/compare_ablation_runs.py --list
-```
+* **TrpB, GB1 and HER2 are development data** ([`docs/HANDOFF.md`](docs/HANDOFF.md) rule
+  2.4). The intervention was designed against failures observed on them, so an improvement
+  there is **mechanism evidence, not generalization evidence**. CR9114 is development data
+  for the same reason: the generator fix was designed against its measured failure.
+* **Zero independent protein validation, and zero wet-lab validation.** Every number here
+  is retrospective replay against a published measured landscape. Nothing was synthesised.
+* **The live-agent evidence is one landscape and 12 seeds**, not the 48 the cross-protein
+  protocol uses. Live planning was not run across the sweep.
+* **TrpB's labels are `HISTORICAL_UNKNOWN_PROVENANCE`.** Johnston et al. imputed 871 of the
+  159,999 values with a KNN imputer and the prepared CSV carries no per-row flag, so no
+  individual label in a TrpB run can be claimed as measured. Do not assume a shared
+  contaminated universe makes the comparison between methods unbiased — imputed values sit
+  where sequencing coverage was poorest, which is not uniform over the landscape, so the
+  bias is differential, not common-mode. Nothing in these runs bounds it.
+* **`panoptes_default` changed meaning on 2026-10-31.** k-DPP diversity and the two-stage
+  GP now default **off**, because both were measured to hurt top-1% yield. Always carry the
+  flag state with the number; every run's `manifest.json` records components enabled *and*
+  disabled.
+* **Steps 4 and 5 of the production loop are not exercised by the benchmark.** Gatekeeper
+  authorisation and Modal ESM-2 execution are skipped, because `Orchestrator.run_stream()`
+  offers no interface for substituting an experimental assay for ESM scoring. The benchmark
+  measures planning and selection.
+* **The compliance and wet-lab paths are architecture, not demonstrated capability.** The
+  Opentrons OT-2 protocol generator, Twist/IDT order CSVs, Benchling LIMS adapter and the
+  21 CFR Part 11 Merkle hash chain exist in `workers/` and `ledger/` and are tested, but
+  none of them was exercised in any result on this page. Treat them as structure.
+* **`scripts/run_real_data_benchmark.py` (avGFP) is not a predictive-skill measurement.**
+  It sets `all_eval_feats = np.array(train_x)` and correlates the model against its own
+  training targets, so its rho of +0.9996 describes fit, not skill, and the same run finds
+  0 top-1% variants. Earlier revisions of this README reported it as "high ranking
+  fidelity". It is not. Use `benchmark_panoptes_isolated.py`.
+* **The ALDE baseline is incompatible, not unavailable, on seven of nine landscapes.** It
+  reports `available: true` and then silently returns index 0 forever. Availability is not
+  compatibility; `docs/alde-compatibility.md` has the mechanism.
+* **Only the cited run artifacts are in this repository.** `benchmark_comparison_results/`
+  is gitignored (`.gitignore:246`), because the benchmark writes hundreds of run
+  directories. The runs behind every figure on this page are copied verbatim into
+  [`evidence/`](evidence/README.md) — manifest, summary, per-round metrics, report and log
+  for each — so a reader can recompute any paired statistic here without an API key or a
+  re-run. That directory also names three traps in the data, including the fact that one
+  run's failed live arm leaves round-0 rows which a naive aggregation will misread as a
+  result.
 
-The full 159,999-variant run takes ~10s. `--pool-size N` subsamples the candidate pool for a faster
-demo, at the cost of a weaker result (the optimum may not be in the subsample).
+## Content policy, and why we did not work around it
 
-**Data provenance.** `scripts/download_trpb_benchmark.py` downloads the published landscape, keeps
-every fitness value verbatim, and re-encodes each full-length sequence as mutation notation against
-the Tm9D8\* parent. It refuses to emit a benchmark if the saturated positions it recovers from the
-data disagree with the published active site. `tests/test_trpb_benchmark.py` asserts combinatorial
-completeness (19, 19², 19³, 19⁴ by mutation order) and the published score range, so silent drift in
-the upstream file fails the suite rather than producing a plausible-looking result.
-
-### 2c. Third Benchmark: GB1 Binding Domain Epistasis (Olson et al. 2014)
-Measures IgG-Fc binding affinity across 149,361 empirical variants testing complex 4-site epistatic landscapes (`V39`, `D40`, `G41`, `V54`). Evaluates multi-site synergy and heteroscedastic noise resilience under experimental measurement variance.
-```bash
-python scripts/run_gb1_benchmark.py --rounds 5 --batch-size 25
-```
-
-### 2d. Fourth Benchmark: Trastuzumab (Herceptin) Biologics (Mason et al. 2021)
-Targeted at therapeutic biologics antibody design using 36,391 empirical CDR-H3 variants against human HER2 (*Nature Biomedical Engineering*). Evaluates **therapeutic developability liability scoring** (deamidation, isomerization, unpaired cysteines, and hydrophobic patches) alongside binding affinity.
-```bash
-python scripts/run_trastuzumab_benchmark.py --rounds 5 --batch-size 25
-```
-
----
-
-## 3. System Architecture & The 6-Step Loop
-
-```
-  [ UniProt RAG ]
-        │  1. Ingest WT sequence, chromophore triads, functional regions
-        ▼
-  [ Meta Llama 3.1 ]  (Strict JSON mode only)
-        │  2. Propose multi-site residue clusters & forbidden positions
-        ▼
-  [ Quant Engine ]    (5-factor Physicochemical Featurizer + Matérn 5/2 GP)
-        │  3. Model epistatic landscape; select micro-batch via Expected Improvement (EI)
-        ▼
-  [ Gatekeeper ]      (Biophysical validator + Two-state cold/warm cost model)
-        │  4. Evaluate ROI (EI/$); request atomic spend authorization from SQLite ledger
-        ▼
-  [ SQLite Ledger ]   (INTEGER micro-USD, immutability triggers, ACID locks)
-        │  5. Atomically deduct budget; authorize or fail-closed reject
-        ▼
-  [ Cloud Muscle ]    (Modal NVIDIA A10G + ESM-2 650M with scaledown_window=120)
-        │  6. Execute batched PyTorch tensor scoring on approved sequences
-        ▼
-  [ Evidence Update ]
-        └──> Append immutable scores to Ledger; update GP prior; repeat loop
-```
-
-### Non-Negotiable Engineering Invariants
-- **Fail-Closed Security**: Rejects on parse error, unknown models, missing budgets, or non-canonical mutations.
-- **Ledger Invariant**: Never bypasses the ledger. Every paid execution must receive `authorize_spend(...) -> True`.
-- **Strict Separation of Concerns**:
-  - The LLM **never** does arithmetic, executes code, or selects tools.
-  - The Quant Engine **never** accesses external APIs.
-  - The Modal Worker **never** decides spend or batch sizes.
-
----
-
-## 4. Key Innovations
-
-### 1. Two-State Cold/Warm Container Cost Model
-A standard serverless cold container takes 20s to boot ($t_{\text{boot}} = 20.0\text{s}$ at \$1.10/hr = \$0.00612), while warm containers eliminate boot overhead ($t_{\text{boot}} = 0.0\text{s}$). By utilizing Modal's `scaledown_window=120`, VeritasBio schedules batches within the warm keep-alive window, achieving a **~21x reduction in cost per micro-batch**.
-
-### 2. Physicochemical Property Featurization
-Instead of treating amino acid substitutions as arbitrary one-hot tokens, mutations are featurized across 5 standardized biophysical scales:
-- Kyte-Doolittle Hydrophobicity
-- Molecular Mass (Daltons)
-- Net Charge at pH 7.4
-- Polarity (Grantham scale)
-- Isoelectric Point (pI)
-
-### 3. Expected Improvement per Dollar ($EI/\$$)
-Candidates are selected not merely by predicted fitness, but by Expected Improvement ($EI$) balanced against the cost of inference ($EI / \$$), mathematically directing budget to the highest information-density search regions.
-
-### 4. FDA 21 CFR Part 11 Cryptographic Merkle Hash Chain & PostgreSQL Multi-Tenancy
-Every state mutation (`BUDGET_CREATED`, `SPEND_AUTHORIZED`, `JOB_COMPLETED`, `JOB_FAILED`, `EVIDENCE_BATCH_RECORDED`, `LIMS_SYNC`) is cryptographically sealed into a SHA-256 Merkle hash chain authenticated with HMAC-SHA256 signatures. Immutable database triggers prevent any modification or deletion, and `verify_audit_integrity()` detects raw disk tampering or signature forgery. Production deployments are supported via multi-tenant PostgreSQL schemas with native Row-Level Security (RLS).
-
-### 5. Physical Wet-Lab Translation & Benchling LIMS Synchronization
-Directly bridges in silico active learning to physical robotics:
-- **Benchling LIMS Integration**: Dual Live/Mock REST adapter for cDNA construct registration, virtual 96/384-well plate layouts with container barcodes, and bulk CSV manifest export.
-- **Opentrons OT-2 Automation**: Auto-generates executable Python pipetting scripts with **anti-edge evaporation barriers** (reserving 36 perimeter wells for sterile water shielding).
-- **Twist / IDT Gene Fragment Orders**: Generates price-calculated bulk synthesis order CSVs with automated codon optimization and Gibson assembly overhangs.
-
----
-
-## 5. User & Dashboard Guide: How to Run VeritasBio
-
-VeritasBio can be run in two modes: an **Interactive Web Dashboard** (Gradio) for real-time visualization and parameter tuning, and a **Production CLI Pipeline** for automated benchmark campaigns.
-
-### A. Running the Interactive Web UI
-
-Launch the local server:
-```bash
-python main.py
-```
-Open your browser to **`http://127.0.0.1:7860`**.
-
-#### Dashboard Controls & Parameters Explained
-
-| Control | Description & Recommended Setting |
-| :--- | :--- |
-| **Target Accession** | UniProt accession ID. Default: `P42212` (avGFP) or `TRPB_TM9D8` (TrpB). The RAG worker automatically retrieves sequence, catalytic sites, and 3D PDB structure. |
-| **Total Budget ($ USD)** | Hard financial ceiling enforced by the SQLite ledger. Even if 12 rounds are requested, the engine **hard-stops** the moment budget is exhausted. Recommended: `$1.00` to `$5.00`. |
-| **Max Iterations / Rounds** | Maximum active-learning iterations. The engine automatically terminates earlier if regret converges or fitness plateaus. Recommended: `8` to `12`. |
-| **Batch Size** | Base batch size per round. With **Dynamic Budget-Aware Sizing**, the engine automatically scales batch throughput up to 150–250 variants if budget permits, preventing idle funds. |
-| **Target Model** | **`mock_esm`**: Free, high-fidelity local simulation (zero cloud cost).<br>**`esm2_150m`**: Meta FAIR ESM-2 150M on Modal A10G (Tier-1 fast screening, ~$0.000006/variant).<br>**`esm2_650m`**: Meta FAIR ESM-2 650M on Modal A10G (Tier-2 high precision, ~$0.000018/variant). |
-| **Strategic Planner** | **`Live Meta Llama 3.1`**: Queries Meta Model API in strict JSON mode to formulate biophysical hypotheses.<br>**`Mock Strategic Planner`**: Uses rule-based domain annotations offline. |
-| **Adaptive Regret Stopping** | When enabled, monitors Expected Improvement ($\text{EI}$). If $\max \text{EI} < 0.005$ for 2 rounds, the engine halts to preserve unspent budget. |
-| **Fitness Plateau Exit** | When enabled, halts execution if top fitness fails to improve by $>0.001$ over 3 consecutive rounds after round 3. |
-| **Hierarchical Pocket-Hopping** | When enabled, decomposes multi-residue active sites into sub-pockets. When Pocket 1 saturates, locks the discovered lead as an anchor and sweeps the secondary pocket. |
-| **3D Spatial $\Delta\Delta G$ Pre-Filter**| Pre-screens candidates before GPU spend to eliminate core volume clashes, buried uncompensated charges, and proline backbone kinks. |
-
-#### Dashboard Outputs & Visualizations
-- **Live Event Stream**: Real-time ticker showing each of the 6 steps (RAG $\to$ Llama $\to$ Quant $\to$ Gatekeeper $\to$ Modal $\to$ Ledger).
-- **Interactive 3D Viewer (3Dmol.js)**: Visualizes the macromolecular PDB backbone with catalytic active-site residues highlighted in red and exploration pockets in cyan.
-- **Fitness Landscape Plot**: Live convergence curve showing top fitness gains and Expected Improvement decay.
-- **Top Discovered Variants Table**: Discovered mutations, model scores, and synthesizability scores.
-- **Layer 7 Physical Wet-Lab Exports**: Instant download buttons for Twist/IDT order CSVs, Opentrons OT-2 pipetting scripts, and FDA 21 CFR Part 11 SHA-256 certificates.
-
----
-
-### B. Running Benchmarks with Datasets (One-Line CLI Commands)
-
-#### 1. Dual Production Benchmark (TrpB + avGFP Side-by-Side)
-Runs the complete production pipeline across both targets, saves evidence to SQLite ledgers, evaluates against empirical datasets, and generates comparison tables and publication plots:
-```bash
-python scripts/run_side_by_side_benchmarks.py
-```
-
-#### 2. Target-Specific Active Learning Campaign ($1.00 Budget)
-Runs an autonomous campaign on TrpB or avGFP and automatically outputs Twist/IDT synthesis CSVs and Opentrons OT-2 protocols:
-```bash
-# Run TrpB active site (160k variants)
-python scripts/run_full_dollar_experiment.py --target TRPB_TM9D8 --budget 1.00 --rounds 12
-
-# Run avGFP full barrel (51k variants)
-python scripts/run_full_dollar_experiment.py --target P42212 --budget 1.00 --rounds 12
-```
-
-#### 3. Closed-Loop Simulation on TrpB Empirical Landscape (Johnston 2024)
-Evaluates real experimental fitness from 159,999 measured variants with held-out Spearman correlation and enrichment vs. random screening:
-```bash
-# Prepare dataset first
-python scripts/download_trpb_benchmark.py
-
-# Run benchmark (takes ~15s on full 159,999 library)
-python scripts/run_trpb_benchmark.py --rounds 5 --batch-size 25
-
-# Optional: Fast demo mode subsampling 3,000 candidates
-python scripts/run_trpb_benchmark.py --rounds 5 --pool-size 3000
-```
-
-#### 4. Evaluating Any Custom Dataset or Run
-To evaluate any completed ledger against ground-truth ProteinGym or custom DMS CSVs:
-```bash
-python scripts/evaluate.py --db ledger/dollar_live_trpb_tm9d8.db --benchmark scripts/data/TRPB_THEMA_Johnston_2024.csv
-```
-
-#### 5. Generating Publication Benchmark Plots
-Renders side-by-side or target-specific publication figures:
-```bash
-# Side-by-side comparison figure
-python scripts/plot_benchmark.py --side-by-side --out scripts/benchmark_results.png
-
-# Target-specific figures
-python scripts/plot_benchmark.py --target trpb --out scripts/benchmark_trpb.png
-python scripts/plot_benchmark.py --target avgfp --out scripts/benchmark_avgfp.png
-```
-
-#### 6. High-Performance Full-Stack & Frontier Innovations
-
-VeritasBio / PanoptesBio combines a high-performance **FastAPI backend** with a **modern React 18 + Vite frontend** providing 4 frontier capabilities:
-
-1. **Closed-Loop Llama 3.1 Residual Reflection**: Meta Llama 3.1 analyzes prediction residuals ($y_{\text{obs}} - \hat{y}_{\text{pred}}$) from preceding rounds to diagnose epistatic blind spots and update biophysical priors dynamically.
-2. **HETATM Ligand/Cofactor Coordination & Catalytic Core Clash Pruning**: Explicit $4.2\text{ Å}$ catalytic proximity enforcement for cofactors (PLP in PDB 8EH0, 0JO, HEM), preventing uncompensated charge desolvation or proline backbone kinking in the catalytic shell.
-3. **Asynchronous Microplate Reader Ingestion**: Drag-and-drop CSV dropzone supporting Tecan Spark, BioTek Synergy, and VeritasBio robotic exports. Automatically verifies perimeter hydration barriers (`A01-A12`, `H01-H12`), normalizes against WT control (Well `B02`), and records tamper-evident evidence into the SQLite ledger.
-4. **Dual-Structure 3D Comparison & Wet-Lab Translation Studio**:
-   - Synchronized side-by-side WebGL molecular viewer (Wild-Type vs Mutated Lead) with a $4.5\text{ Å}$ cofactor proximity coordination shell.
-   - One-click export for **Twist Bioscience cDNA orders**, **Opentrons OT-2 robot protocols**, **Benchling LIMS manifests**, and **FDA 21 CFR Part 11 cryptographic audit certificates**.
-
-```bash
-# Launch FastAPI backend bridge (REST + SSE streaming)
-python server.py
-
-# Launch React Vite frontend (in separate terminal)
-npm --prefix web run dev
-```
-
----
-
-### C. Running the Complete Test Suite
-
-VeritasBio includes 197 automated unit tests across 33 test suites covering all 7 layers:
-```bash
-python -m unittest discover -s tests -t . -v
-```
-
----
-
-## 6. Directory Structure
+The live planner is **refused on antibody targets**. A round-2 prompt carrying measured
+affinity evidence against influenza hemagglutinin returns, from the Meta API:
 
 ```
-VeritasBio/
-├── controller/
-│   ├── gatekeeper.py       # Pydantic validation, two-state cost model, ROI evaluator
-│   ├── prompts.py          # Llama 3.1 combinatorial search strategy prompts & parser
-│   └── orchestrator.py     # Unidirectional 6-step active learning generator loop
-├── workers/
-│   ├── rag_worker.py       # UniProt metadata fetcher & local disk caching
-│   ├── spatial_filter.py   # 3D Euclidean contact mapping & steric clash biomechanical filter
-│   ├── math_worker.py      # Heteroscedastic GP, 5-factor featurizer, GFlowNet, k-DPP diversity
-│   ├── wetlab_worker.py    # Opentrons OT-2 scripts, Twist/IDT CSVs, anti-edge evaporation layouts
-│   ├── lims_worker.py      # Benchling LIMS REST client, virtual plate barcoding, manifest export
-│   ├── esm_worker.py       # Modal serverless NVIDIA A10G ESM-2 scoring function
-│   ├── mock_workers.py     # Continuous epistatic avGFP fitness landscape (Sarkisyan 2016)
-│   └── data/               # 3D crystal structures (1EMA, 8EH0, 1N8Z) & UniProt offline caches
-├── ledger/
-│   ├── schema.sql          # SQLite DDL with micro-USD precision & FDA 21 CFR Part 11 Merkle triggers
-│   ├── postgres_schema.sql # Multi-tenant PostgreSQL DDL with Row-Level Security (RLS)
-│   └── database.py         # Fail-closed SQLite CRUD, atomic spend gate, hash chain verification
-├── ui/
-│   ├── dashboard.py        # Asynchronous streaming Gradio dashboard
-│   ├── structure_viewer.py # Interactive 3Dmol.js WebGL molecular viewer
-│   └── landscape_plot.py   # Interactive 2D/3D latent fitness landscape explorer (Plotly)
-├── scripts/
-│   ├── evaluate.py         # Spearman correlation, hit rate, and cloud savings engine
-│   ├── plot_benchmark.py   # Publication-quality benchmark visualization generator
-│   ├── download_real_benchmark.py  # Fetches the ProteinGym avGFP DMS assay
-│   ├── download_trpb_benchmark.py  # Fetches + re-encodes the TrpB active-site landscape
-│   ├── run_real_data_benchmark.py  # Active learning loop on avGFP
-│   ├── run_trpb_benchmark.py       # Active learning loop on TrpB (held-out + random baseline)
-│   ├── run_gb1_benchmark.py        # Active learning loop on GB1 binding domain (Olson 2014)
-│   ├── run_trastuzumab_benchmark.py# Active learning on Trastuzumab biologics (Mason 2021)
-│   ├── ingest_plate_data.py        # Physical wet-lab microplate reader CSV ingestion CLI
-│   └── data/                       # Curated benchmark datasets (GFP, TrpB, GB1, Trastuzumab)
-├── server.py               # FastAPI backend bridge (REST, SSE streaming, Part 11 auth)
-├── web/                    # React 18 + Vite frontend (PanoptesBio Cloud Economics Studio)
-│   ├── src/components/     # CampaignStudio, DeNovoStudio, LedgerAuditTrail, WetlabExportStudio
-│   └── public/             # Branding and static WebGL assets
-├── presentation.html       # Interactive partner deck with live economics simulator
-├── main.py                 # Application entry point (CLI and Web Dashboard)
-├── requirements.txt        # Production dependencies (PyTorch, Modal, Gradio, Plotly, etc.)
-└── tests/                  # 197 unit tests across 33 test suites
+Meta Model API 400 for model 'muse-spark-1.3': {"error":{"code":"content_policy_violation",
+"message":"The response was filtered due to the prompt triggering our content management
+policy.","param":"prompt","type":"invalid_request_error"}}
 ```
 
----
+Recorded verbatim in [`evidence/run_20261101_052018_8755fea6/benchmark.log`](evidence/run_20261101_052018_8755fea6/benchmark.log).
+The round-1 prompt, which carries no affinity evidence, succeeds; the refusal arrives when
+the evidence block does. We consider this correct dual-use behaviour and the project does
+not route around it: `scripts/demo/gate_catches_planner.py` offers enzyme and
+fluorescent-protein targets only (`OFFERED = ("trpb", "gb1", "creilov", "eqfp611_blue",
+"eqfp611_red")`), and because `require_live_llm=True` the benchmark's live arm **fails
+loudly** on an antibody rather than substituting a mock planner and reporting a number.
 
-## 7. License & Credits
+This is a real constraint on LLM-planned biological design and practitioners should know
+about it: the targets where a learned planner would be most valuable commercially are
+exactly the targets where the provider will — correctly — decline to plan.
 
-Built for the **Meta Global AI Developer Hackathon**.
-- **Architecture & Engine**: VeritasBio Team
-- **Foundation Models**: Meta Llama 3.1, Meta Fair ESM-2
-- **Infrastructure**: Modal Labs (NVIDIA A10G Serverless)
-- **Benchmark Data**: Sarkisyan et al. (2016) *Nature* (ProteinGym GFP DMS)
+## How to run
+
+```powershell
+# environment
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+copy .env.example .env     # then add LLAMA_API_KEY or META_API_KEY
+
+# 1. the live model call and the two agent-plan checks (one call, ~5k tokens)
+.venv\Scripts\python.exe -X utf8 scripts/demo/gate_catches_planner.py
+.venv\Scripts\python.exe -X utf8 scripts/demo/gate_catches_planner.py --library gb1
+
+# 2. the pre-flight gate, no run required for four of its six checks
+.venv\Scripts\python.exe -X utf8 -m veritas.preflight --library her2 --arms alde,ridge
+
+# 3. the live agent on TrpB - reproduces run_20261101_043406_8662bdf0
+.venv\Scripts\python.exe benchmark_panoptes_isolated.py --library trpb `
+  --methods random,ridge,panoptes_default,panoptes_muse `
+  --seeds 12 --base-seed 0 --rounds 4 --initial-size 25 --batch-size 25 `
+  --enable-live-muse --max-model-calls 12 --provenance-mode acknowledge-unflagged
+
+# 4. the engine on CR9114, no model calls - reproduces run_20261101_051322_4bb22522
+.venv\Scripts\python.exe benchmark_panoptes_isolated.py --library cr9114_h1 `
+  --methods random,ridge,panoptes_default `
+  --seeds 12 --base-seed 0 --rounds 4 --initial-size 25 --batch-size 25 `
+  --provenance-mode acknowledge-unflagged
+
+# 5. the six-landscape sweep (long)
+pwsh scripts/analysis/generality_sweep.ps1
+
+# tests
+.venv\Scripts\python.exe -m pytest -q
+```
+
+Each run writes a fresh folder under `benchmark_comparison_results/` containing
+`manifest.json` (authoritative, machine-readable, carries a configuration fingerprint and
+**no** outcomes), `report.txt`, `summary.csv`, `round_metrics.csv`, `selection_trace.csv`,
+`candidate_trace.csv` and the log. `--help` lists every flag.
+[`docs/HANDOFF.md`](docs/HANDOFF.md) records the suite at 674 passing, 2 skipped as of
+2026-10-31.
+
+## Repository map
+
+| path | what |
+|---|---|
+| `benchmark_panoptes_isolated.py` | the benchmark harness and the arm definitions, including `panoptes_muse` (live Meta planning + residual reflection). Imports production modules read-only; writes only into a fresh run folder. Start at the module docstring. |
+| `controller/orchestrator.py` | the 6-step agent loop. `_call_llama_api` is the Meta Model API client; `_generate_strategy` is round planning; `_generate_reflection` is residual analysis between rounds. |
+| `controller/prompts.py` | prompt construction and the `SearchStrategy` / `ReflectionDiagnosis` pydantic schemas, plus `restrict_strategy_to_assayable` (check 1). |
+| `controller/gatekeeper.py` | biophysical validation and the fail-closed spend authorisation (architecture; not exercised by the benchmark). |
+| `workers/math_worker.py` | the selection engine: GP surrogate, candidate generation, GFlowNet sampler, Pareto and k-DPP stages. `select_next_micro_batch` is the entry point. |
+| `veritas/preflight.py` | the six-check pre-flight gate (checks 3 and 4 above). |
+| `veritas/calibration/` | landscapes, genotype canonicalisation, thresholds, endpoint degeneracy. `genotypes.py` is the single canonical genotype implementation — mutation strings omit wild-type positions, which once silently inverted a conclusion here. |
+| `veritas/datasets/` | the library/dataset schema and validating ingestion. Imports nothing from `workers` or `controller`, so a new library is describable without touching the optimiser. |
+| `veritas/diagnostics/` | coverage, candidate traces, depth returns, and the token-gated retrospective path that is the only code allowed to read true fitness. |
+| `scripts/demo/gate_catches_planner.py` | the live-model demo and gate checks 1 and 2. |
+| `scripts/data/` | the nine prepared landscape CSVs, pinned by `cross_protein_corpus.lock.json`. |
+| `scripts/analysis/` | the sweep and analysis scripts. Read its README first. |
+| `docs/` | see below. |
+| `ledger/`, `ui/`, `web/`, `server.py`, `main.py` | the product surface: SQLite/PostgreSQL ledger with the Part 11 hash chain, Gradio dashboard, React frontend, FastAPI bridge. Architecture; not exercised by any result here. |
+
+Documents a judge should read, in order: [`docs/HANDOFF.md`](docs/HANDOFF.md) (current
+state, what is quotable, what is void, and the §2 rules that are load-bearing because each
+one already produced a wrong result here) ·
+[`docs/HANDOFF-2026-10-31-reachability.md`](docs/HANDOFF-2026-10-31-reachability.md) (the
+generator defect, the fix, and the measurement) ·
+[`docs/day1-reachability.md`](docs/day1-reachability.md) (depth tables and the void-run
+record) · [`docs/preflight.md`](docs/preflight.md) (the gate) ·
+[`docs/preregistration-cross-protein.md`](docs/preregistration-cross-protein.md) (the
+frozen protocol, which predicted the losses above) ·
+[`docs/alde-compatibility.md`](docs/alde-compatibility.md) ·
+[`docs/dataset-inventory.md`](docs/dataset-inventory.md) ·
+[`docs/corpus-audit.md`](docs/corpus-audit.md). Several root-level documents
+(`ARCHITECTURAL_STATE_AND_VALUE_OVERVIEW.md`, `INNOVATION_ROADMAP.md`, `PRODUCT.md`,
+`FRONTIER_GAP_RESOLUTION_AND_EXECUTION_PLAN.md`) predate the measurements on this page;
+where they disagree with this README or with `docs/HANDOFF.md`, those two are correct.
+
+## Provenance
+
+* **First commit** `cd313c4`, 2026-10-26 12:17 ET — the day the hackathon opened. All work
+  on this page was built during the event. `git log --reverse --date=iso` is the record,
+  and every run's `manifest.json` records the commit it ran at and whether the tree was
+  dirty.
+* **Landscape data is published third-party data**, not ours: TrpB (Johnston et al. 2024),
+  GB1 (Wu et al. 2016), HER2/trastuzumab (Mason et al. 2021), CR9114 and CR6261 (Phillips
+  et al. 2021), eqFP611 blue and red (Poelwijk et al. 2019), CreiLOV (Chen et al. 2023),
+  avGFP (Sarkisyan et al. 2016).
+  `scripts/data/cross_protein_corpus.lock.json` pins the CombinGym mirror at commit
+  `c5dccd514a9acfe1089a5f1555faea98afd78019`; that pin is a scientific commitment and does
+  not move. CR9114 was re-prepared from the raw eLife table rather than CombinGym's clean
+  workbook, which drops 16,384 genotypes with depth-correlated attrition
+  ([`docs/cr9114-reprep.md`](docs/cr9114-reprep.md)).
+* **Baselines are the published implementations or standard ones**: scikit-learn
+  `Ridge(alpha=1.0)` and `RandomForestRegressor` on one-hot features, and the authors' ALDE
+  implementation (jsunn-y/ALDE), availability-probed and never silently replaced by a
+  homemade method.
+* **Outcomes never reach selection.** Anything that reads true fitness is retrospective
+  only and gated behind an explicit access token in
+  `veritas/diagnostics/retrospective.py`; a configuration fingerprint must identify a run
+  without consulting outcomes, and there is a test asserting a 32-arm sweep yields 32
+  distinct fingerprints with no outcome leakage.
+
+Built for the Meta Global AI Developer Hackathon. Foundation models: Meta `muse-spark-1.3`
+via the Meta Model API, and Meta FAIR ESM-2 (architecture path). Infrastructure: Modal Labs.

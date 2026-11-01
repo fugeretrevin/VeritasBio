@@ -1,3 +1,14 @@
+﻿> **SUPERSEDED — ARCHIVED 2026-11-01. DO NOT QUOTE THIS FILE.**
+>
+> This is a planning or positioning document written before the measurements were taken.
+> It is kept for history, not for reference, and parts of it are now known to be wrong:
+> it describes gaps that have since been closed, and it carries claims that
+> [`README.md`](../../README.md) and [`docs/HANDOFF.md`](../HANDOFF.md) explicitly
+> withdraw. Where any of it disagrees with those two files, those two are correct.
+>
+> In particular, nothing here should be read as a statement of what the system was
+> measured to do. The measured results, with their limitations, are in `README.md`; the
+> run artifacts behind them are in [`evidence/`](../../evidence/README.md).
 Analyzed diffusion_worker.py:L1-180
 Analyzed diffusion_worker.py:L181-450
 Analyzed diffusion_worker.py:L451-597
@@ -8,12 +19,12 @@ Here is a complete overview of the **PanoptesBio / VeritasBio** architecture as 
 
 ## 1. Full Inventory of What We Have Built
 
-### A. Step 0–6 Active Learning & Biophysical Core
+### A. Step 0â€“6 Active Learning & Biophysical Core
 | Layer | Module & Key Symbols | Current Capabilities |
 | :--- | :--- | :--- |
-| **Step 0: Spatial & Allosteric Pre-Filter** | [`workers/spatial_filter.py`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/spatial_filter.py) ([`SpatialContactMap`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/spatial_filter.py#L43-L250), [`compute_anm_hinge_residues`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/spatial_filter.py#L253-L320), [`compute_interface_binding_ddg`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/spatial_filter.py#L561-L664)) | Parses multi-chain `ATOM` & `HETATM` records, protects cofactor catalytic shells ($4.2\text{ \AA}$), computes Kirchhoff Laplacian normal-mode allosteric hinges (`SPEC-001`), and scores quaternary antibody–target interface $\Delta\Delta G_{\text{bind}}$ (`SPEC-002`). |
+| **Step 0: Spatial & Allosteric Pre-Filter** | [`workers/spatial_filter.py`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/spatial_filter.py) ([`SpatialContactMap`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/spatial_filter.py#L43-L250), [`compute_anm_hinge_residues`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/spatial_filter.py#L253-L320), [`compute_interface_binding_ddg`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/spatial_filter.py#L561-L664)) | Parses multi-chain `ATOM` & `HETATM` records, protects cofactor catalytic shells ($4.2\text{ \AA}$), computes Kirchhoff Laplacian normal-mode allosteric hinges (`SPEC-001`), and scores quaternary antibodyâ€“target interface $\Delta\Delta G_{\text{bind}}$ (`SPEC-002`). |
 | **Step 0b: 2-Stage Elastic Structure Relaxation** | [`workers/relaxation_worker.py`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/relaxation_worker.py) ([`relax_variant_structure`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/relaxation_worker.py#L140-L380)) | Fast CPU L-BFGS local minimizer (`<50ms`) with Stage 1 rigid-$C_\alpha$ sidechain rotamer cone relaxation ($k=500$) and Stage 2 soft mainchain accommodation ($k=5.0$, capped at $C_\alpha\text{ RMSD} \le 1.20\text{ \AA}$) to rescue false-negative packing mutations (`SPEC-001`). |
-| **Step 1–2: RAG + Closed-Loop Llama 3.1 Planner** | [`workers/rag_worker.py`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/rag_worker.py), [`controller/prompts.py`](file:///c:/Users/stoof/source/repos/VeritasBio/controller/prompts.py) ([`build_closed_loop_reflection_block`](file:///c:/Users/stoof/source/repos/VeritasBio/controller/prompts.py#L96-L185)) | Fetches UniProt/PDB domain constraints, injects prior round GP prediction residuals ($y_{\text{obs}} - \hat{\mu}_{\text{GP}}$) and ANM hinge indices, and outputs strict JSON residue search boundaries. |
+| **Step 1â€“2: RAG + Closed-Loop Llama 3.1 Planner** | [`workers/rag_worker.py`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/rag_worker.py), [`controller/prompts.py`](file:///c:/Users/stoof/source/repos/VeritasBio/controller/prompts.py) ([`build_closed_loop_reflection_block`](file:///c:/Users/stoof/source/repos/VeritasBio/controller/prompts.py#L96-L185)) | Fetches UniProt/PDB domain constraints, injects prior round GP prediction residuals ($y_{\text{obs}} - \hat{\mu}_{\text{GP}}$) and ANM hinge indices, and outputs strict JSON residue search boundaries. |
 | **Step 3: GFlowNet + DKL GP + Pareto Quant Engine** | [`workers/math_worker.py`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/math_worker.py) ([`sample_gflownet_candidates`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/math_worker.py#L465-L620), [`ESMReadoutAdapter`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/math_worker.py#L1408-L1529), [`select_next_micro_batch`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/math_worker.py#L1057-L1200), [`compute_pareto_frontier`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/math_worker.py#L1205-L1350)) | Samples multi-mutant trajectories via GFlowNet, projects 1280-dim embeddings through a supervised Ridge + SVD adapter (`SPEC-002`), conditions the Heteroscedastic GP on Kriging-believer in-flight assays (`SPEC-002`), and ranks candidates across a 4-objective NSGA-II Pareto frontier (Fitness, Developability, Synthesizability, Stability). |
 | **Step 4: Fail-Closed Gatekeeper & Ledger** | [`controller/gatekeeper.py`](file:///c:/Users/stoof/source/repos/VeritasBio/controller/gatekeeper.py) ([`Gatekeeper`](file:///c:/Users/stoof/source/repos/VeritasBio/controller/gatekeeper.py#L150-L390), [`estimate_wetlab_synthesis_cost`](file:///c:/Users/stoof/source/repos/VeritasBio/controller/gatekeeper.py#L238-L275)), [`ledger/database.py`](file:///c:/Users/stoof/source/repos/VeritasBio/ledger/database.py) | Integer micro-USD accounting, two-state cold/warm GPU cost model, wet-lab synthesis + CRO cost model (`SPEC-002`), `SpeculativeEvidence` in-flight staging (`SPEC-001`), and FDA 21 CFR Part 11 HMAC-SHA256 Merkle hash chain. |
 | **Step 5: Cloud GPU Scoring & De Novo Binder Engine** | [`workers/esm_worker.py`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/esm_worker.py), [`workers/diffusion_worker.py`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/diffusion_worker.py) ([`generate_budgeted_de_novo_binders`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/diffusion_worker.py#L417-L597)) | Modal A10G ESM-2 650M masked marginal scoring + parametric 3-helix bundle backbone generator (`GeometricBackboneSampler`) and `ProteinMPNNInverseFolder`. |
@@ -25,7 +36,7 @@ Here is a complete overview of the **PanoptesBio / VeritasBio** architecture as 
 
 Standard generative protein binder campaigns typically spend **$\$15,000\text{--}\$40,000+$** because they generate $1,000\text{--}10,000$ unscreened backbone/sequence hallucinations and synthesize hundreds of individual clonal genes at $\$18\text{--}\$45$ each, only to see $95\%+$ fail in wet-lab binding assays due to:
 1. **Unpaired cysteines, deamidation (`NG`/`NS`), or isomerization (`DG`/`DS`)** causing aggregation on the plate.
-2. **Steric clashes or buried unsatisfied polar atoms** at the target–binder interface.
+2. **Steric clashes or buried unsatisfied polar atoms** at the targetâ€“binder interface.
 3. **Lack of closed-loop affinity maturation** (doing one massive one-shot synthesis batch instead of small, high-information micro-batches).
 
 Our architecture solves this with a **3-tier cost-compression funnel**:
@@ -34,7 +45,7 @@ Our architecture solves this with a **3-tier cost-compression funnel**:
    - Instead of sending thousands of raw diffusion trajectories to GPU folding or wet-lab synthesis, we dock compact 65-residue 3-helix bundle mini-proteins ([`GeometricBackboneSampler`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/diffusion_worker.py#L129-L318)) or existing humanized antibody frameworks (`2YBR.pdb`) against the target epitope hotspot centroid, inverse-fold sequences free of liability motifs ([`ProteinMPNNInverseFolder`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/diffusion_worker.py#L323-L411)), relax interfacial sidechains ([`relax_variant_structure`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/relaxation_worker.py#L140-L380)), and rank by quaternary interface $\Delta\Delta G_{\text{bind}}$ ([`compute_interface_binding_ddg`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/spatial_filter.py#L561-L664)).
 2. **Micro-Batch GPU Verification (`< $0.01` per Round)**:
    - Only the top Pareto-optimal candidates pass the [`Gatekeeper`](file:///c:/Users/stoof/source/repos/VeritasBio/controller/gatekeeper.py#L150-L390) spend check to run on Modal A10G GPUs (`$0.000306/sec`).
-3. **Active-Learning Micro-Plates (`12–24` Variants Instead of `1,000+`)**:
+3. **Active-Learning Micro-Plates (`12â€“24` Variants Instead of `1,000+`)**:
    - By pairing the [`ESMReadoutAdapter`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/math_worker.py#L1408-L1529) with Kriging-believer batch selection ([`select_next_micro_batch`](file:///c:/Users/stoof/source/repos/VeritasBio/workers/math_worker.py#L1057-L1200)), we only need to synthesize **8 to 16 high-confidence variants per DBTL round** rather than screening thousands of random designs.
 
 ---

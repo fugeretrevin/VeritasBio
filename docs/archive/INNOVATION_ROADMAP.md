@@ -1,4 +1,15 @@
-# VeritasBio — Innovation Roadmap & Gap Resolution Plan
+﻿> **SUPERSEDED — ARCHIVED 2026-11-01. DO NOT QUOTE THIS FILE.**
+>
+> This is a planning or positioning document written before the measurements were taken.
+> It is kept for history, not for reference, and parts of it are now known to be wrong:
+> it describes gaps that have since been closed, and it carries claims that
+> [`README.md`](../../README.md) and [`docs/HANDOFF.md`](../HANDOFF.md) explicitly
+> withdraw. Where any of it disagrees with those two files, those two are correct.
+>
+> In particular, nothing here should be read as a statement of what the system was
+> measured to do. The measured results, with their limitations, are in `README.md`; the
+> run artifacts behind them are in [`evidence/`](../../evidence/README.md).
+# VeritasBio â€” Innovation Roadmap & Gap Resolution Plan
 
 **Status:** Active Execution  
 **Target:** Meta Global AI Developer Hackathon & B2B Cloud Economics Engine  
@@ -23,7 +34,7 @@ This roadmap outlines the **5 foundational gaps** identified in early architectu
 
 | # | Gap Area | The Risk / Toy Behavior | The Breakthrough Solution | Lead Module |
 |---|---|---|---|---|
-| **G1** | **Cloud Economics** | Cold-start boot time (15–30s) dominates a 50-variant run (1s compute), wasting 90%+ of spend on idle overhead. | Container keep-alive (`scaledown_window`) + dynamic cold vs. warm pricing model in Gatekeeper. | `controller/gatekeeper.py`, `workers/esm_worker.py` |
+| **G1** | **Cloud Economics** | Cold-start boot time (15â€“30s) dominates a 50-variant run (1s compute), wasting 90%+ of spend on idle overhead. | Container keep-alive (`scaledown_window`) + dynamic cold vs. warm pricing model in Gatekeeper. | `controller/gatekeeper.py`, `workers/esm_worker.py` |
 | **G2** | **Biological Relevance** | Single-point mutations can be brute-forced in 1 pass ($238 \times 19 = 4,522$ variants for ~$0.50), eliminating the need for active learning. | Focus on **higher-order combinatorial epistasis** (double/triple mutants, $10^7$ to $10^{10}$ combinations) where brute force is impossible. | `controller/prompts.py`, `workers/math_worker.py` |
 | **G3** | **Quant Engine Math** | Standard Gaussian Processes fail on discrete string sequences or ultra-sparse one-hot vectors ($238 \times 20$ dims). | Dense **physicochemical delta featurization** ($\Delta\text{Charge}$, $\Delta\text{Volume}$, $\Delta\text{Hydrophobicity}$) for rapid, non-linear GP convergence. | `workers/math_worker.py` |
 | **G4** | **Gatekeeper Intelligence** | Gatekeeper is just an `if cost <= budget` bouncer. | **ROI-Driven Acquisition ($EI/\$)** + **Multi-Fidelity Tiering** (cheap local screen -> high-value Modal ESM verification). | `controller/gatekeeper.py`, `ledger/database.py` |
@@ -59,7 +70,7 @@ This roadmap outlines the **5 foundational gaps** identified in early architectu
   - Parse feature annotations into structured JSON with offline fallback cache (`workers/data/P42212.json`).
 - [x] **TASK-2.2: Epistatic Focus Strategy Prompts** (`controller/prompts.py`)
   - Few-shot structured JSON prompts for Llama 3.1.
-  - Instruct LLM to identify 2–3 synergistic mutation clusters (e.g., fluorophore environment `[64, 65, 66, 67, 68]` or dimer interface `[206, 221, 223]`).
+  - Instruct LLM to identify 2â€“3 synergistic mutation clusters (e.g., fluorophore environment `[64, 65, 66, 67, 68]` or dimer interface `[206, 221, 223]`).
   - Strict output enforcement: no text chatter, valid JSON schema only, position-bound checks against sequence length.
 
 ---
@@ -124,7 +135,7 @@ This roadmap outlines the **5 foundational gaps** identified in early architectu
 ## 4. Current Progress & Immediate Next Step
 
 ```
-[x] Scaffold & directory structure (ARCHITECTURE.md §5)
+[x] Scaffold & directory structure (ARCHITECTURE.md Â§5)
 [x] Database DDL with immutability triggers (ledger/schema.sql)
 [x] Fail-closed SQLite CRUD & authorize_spend() (ledger/database.py)
 [x] 46/46 smoke tests passing (exact micro-USD, atomic locks, triggers)
@@ -159,4 +170,5 @@ Moving from a cloud FinOps tool to an autonomous operating system for physical s
 
 ### Pillar 4: Programmable Capital Allocation for Science
 - **Algorithmic Milestone-Gated Grants**: Escrow research funding in smart-contract ledgers where capital is unlocked in micro-cent increments only as VeritasBio mathematically and cryptographically (SHA-256) proves affinity and stability milestones, resolving the scientific reproducibility crisis.
+
 
