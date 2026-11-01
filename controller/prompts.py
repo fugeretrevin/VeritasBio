@@ -105,9 +105,18 @@ class SearchStrategy(BaseModel):
     # set. Measured in docs/day1-reachability.md.
     #
     # 64 is a bound on obviously-wrong LLM output, not a library limit: this is a schema
-    # for model-generated plans, so it stays bounded. The real per-library limit is
-    # applied downstream by clip_strategy_to_assayable_scope, which clamps with
-    # min(max_mutation_depth, measurable_sites) and so can only narrow this.
+    # for model-generated plans, so it stays bounded.
+    #
+    # An earlier version of this comment said the real per-library limit is "applied
+    # downstream by clip_strategy_to_assayable_scope". There is no such function anywhere
+    # in the repository. The real one is `restrict_strategy_to_assayable` below (it does
+    # clamp with min(max_mutation_depth, measurable) and so can only narrow), but it is
+    # called ONLY from controller/orchestrator.py - the live-Muse path. The benchmark's
+    # `panoptes_default` arm goes _AnnotationDrivenPlanner.generate_strategy ->
+    # select_next_micro_batch with no clipping, so on the arm under test this bound is NOT
+    # narrowed downstream by anything. It happens not to matter, because the planner emits
+    # len(targetable) <= 64 regardless - but the justification above was wrong about the
+    # path that is actually measured, and must not be repeated in a write-up.
     max_mutation_depth: int = Field(default=2, ge=1, le=64, description="Max simultaneous mutations (e.g. 2 for double mutants)")
     mechanistic_hypotheses: List[BiophysicalHypothesis] = Field(
         default_factory=list,

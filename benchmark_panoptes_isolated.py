@@ -2516,9 +2516,37 @@ def parse_ablate_components(spec: Optional[str]) -> Tuple[str, ...]:
 
 
 def component_states(disabled: Sequence[str]) -> Dict[str, bool]:
-    """Maps every ablatable component to whether it was ENABLED in this run."""
+    """Maps every ablatable component to whether it was EFFECTIVELY enabled in this run.
+
+    Reads the engine's module-level defaults as well as the CLI's --ablate-components,
+    because a component can be off for either reason and a manifest must not claim a
+    component ran when it did not.
+
+    DPP_DIVERSITY_ENABLED and TWO_STAGE_GP_ENABLED both default False as of 2026-10-31,
+    since both were measured to hurt top-1% yield. While this function read only the CLI
+    flag it reported `dpp` and `dkl` as ENABLED in every run that did not explicitly
+    ablate them - the engine gates on `if "dpp" in ablated or not DPP_DIVERSITY_ENABLED`,
+    so they were off - and the configuration fingerprint, whose documented purpose is
+    telling two configurations apart, was blind to the change. A dpp-on and a dpp-off run
+    of one library at one budget hashed identically.
+
+    That is not hypothetical: it is why the HER2 null control's 2.833 -> 1.188 movement
+    could not be attributed from the artifacts, since the two runs' manifests both claimed
+    dpp and dkl were enabled.
+    """
+    from workers import math_worker as _mw
+
+    # Default True, so a component the engine stops gating is reported enabled rather
+    # than silently disabled by a missing attribute.
+    globally_off = {
+        "dpp": not getattr(_mw, "DPP_DIVERSITY_ENABLED", True),
+        "dkl": not getattr(_mw, "TWO_STAGE_GP_ENABLED", True),
+    }
     disabled_set = set(disabled)
-    return {name: name not in disabled_set for name in ABLATABLE_COMPONENTS}
+    return {
+        name: name not in disabled_set and not globally_off.get(name, False)
+        for name in ABLATABLE_COMPONENTS
+    }
 
 
 def resolve_ablate_components(args: argparse.Namespace) -> Tuple[str, ...]:
@@ -4593,8 +4621,13 @@ def build_manifest(
         "acquisition_policy": policy,
         "components": {
             "ablatable": list(ABLATABLE_COMPONENTS),
+            # Both derived from `states`, so they always partition ABLATABLE_COMPONENTS.
+            # `disabled` was `list(disabled)` - the CLI list alone - which contradicted
+            # `states` for any component switched off by a module default instead of a
+            # flag. `requested_spec` below still records what the CLI actually asked for,
+            # so the distinction between "off by flag" and "off by default" is preserved.
             "enabled": [name for name in ABLATABLE_COMPONENTS if states[name]],
-            "disabled": list(disabled),
+            "disabled": [name for name in ABLATABLE_COMPONENTS if not states[name]],
             "states": states,
             "requested_spec": getattr(args, "ablate_components", ""),
             "prior_ablation_arm": str(getattr(args, "ablation", "none")),
@@ -5531,11 +5564,19 @@ def build_selector_factories(
             status[method] = {"status": "available", "detail": "uniform random, no model"}
         elif method == "ridge":
             factories[method] = lambda seed: RidgeSelector(seed)
+            # `library.one_hot_width`, NOT n_sites * 20. This string was left behind when
+            # _one_hot_matrix switched to the declared per-site alphabets, so it reported
+            # the saturated width for every library: CR9114's summary.csv said ridge ran on
+            # "320 one-hot features" while the manifest said 32, and eqFP611's said 260
+            # against 26. An analyst reading summary.csv would conclude the encoding fix
+            # had never been applied - and because the 288 surplus CR9114 columns are
+            # identically zero at every row, ridge's score is unchanged either way, so no
+            # outcome contradicts the wrong string. Only the width itself does.
             status[method] = {
                 "status": "available",
                 "detail": (
                     f"sklearn Ridge(alpha=1.0) on "
-                    f"{library.n_sites * len(AA_ALPHABET)} one-hot features"
+                    f"{library.one_hot_width} one-hot features"
                 ),
             }
         elif method == "random_forest":

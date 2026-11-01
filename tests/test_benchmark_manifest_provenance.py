@@ -186,6 +186,51 @@ class TestAblateComponentsParsing(unittest.TestCase):
         self.assertTrue(states["gflownet"])
         self.assertEqual(set(states), set(bench.ABLATABLE_COMPONENTS))
 
+    def test_a_component_disabled_by_a_module_default_is_reported_disabled(self) -> None:
+        """The defect this guards: dpp/dkl are gated by module globals, not only the CLI.
+
+        `DPP_DIVERSITY_ENABLED` and `TWO_STAGE_GP_ENABLED` default False, and the engine
+        gates on `if "dpp" in ablated or not DPP_DIVERSITY_ENABLED`. While
+        `component_states` read only `--ablate-components`, the manifest claimed dpp and
+        dkl ENABLED in every run that did not name them - which is how the HER2 null
+        control's movement became unattributable from its own artifacts.
+        """
+        from workers import math_worker as mw
+
+        for attr, component in (("DPP_DIVERSITY_ENABLED", "dpp"),
+                                ("TWO_STAGE_GP_ENABLED", "dkl")):
+            with self.subTest(component=component):
+                with mock.patch.object(mw, attr, False):
+                    self.assertFalse(
+                        bench.component_states(())[component],
+                        f"{component} is off in the engine but the manifest calls it on")
+                with mock.patch.object(mw, attr, True):
+                    self.assertTrue(bench.component_states(())[component])
+
+    def test_a_component_with_no_module_gate_is_unaffected(self) -> None:
+        """Guards the inverse: don't silently disable a component by a missing attribute."""
+        from workers import math_worker as mw
+
+        with mock.patch.object(mw, "DPP_DIVERSITY_ENABLED", False):
+            states = bench.component_states(())
+        for name in bench.ABLATABLE_COMPONENTS:
+            if name not in ("dpp", "dkl"):
+                self.assertTrue(states[name], f"{name} has no module gate; must stay on")
+
+    def test_enabled_and_disabled_partition_the_vocabulary(self) -> None:
+        """`disabled` was the CLI list alone, so it contradicted `states`."""
+        from workers import math_worker as mw
+
+        with mock.patch.object(mw, "DPP_DIVERSITY_ENABLED", False):
+            states = bench.component_states(("pareto",))
+        enabled = {n for n in bench.ABLATABLE_COMPONENTS if states[n]}
+        disabled = {n for n in bench.ABLATABLE_COMPONENTS if not states[n]}
+        self.assertEqual(enabled & disabled, set())
+        self.assertEqual(enabled | disabled, set(bench.ABLATABLE_COMPONENTS))
+        # Off for two different reasons, and both must land in `disabled`.
+        self.assertIn("pareto", disabled)   # by CLI flag
+        self.assertIn("dpp", disabled)      # by module default
+
 
 # ==============================================================================================
 # 1. A requested-but-unavailable baseline is fatal
@@ -468,9 +513,19 @@ class TestManifestIsAuthoritative(unittest.TestCase):
         self.assertNotIn("failed", reason)
 
     def test_components_enabled_and_disabled_are_both_listed(self) -> None:
+        """Asserted as a property, not as a literal list.
+
+        This previously pinned `disabled == ["dpp", "prior"]`, i.e. exactly the CLI list -
+        which is the defect: a component switched off by a module default (`dkl`, via
+        TWO_STAGE_GP_ENABLED=False) was reported ENABLED. Asserting the literal made the
+        wrong behaviour an invariant, the same way `one_hot_width == n_sites * 20` once
+        required every library to be saturated. What this test is actually about is that
+        the two lists partition the vocabulary and that a CLI-named component lands in
+        `disabled`; it is not about which other components happen to be gated today.
+        """
         manifest = _build_manifest(components_disabled=("dpp", "prior"))
         components = manifest["configuration"]["components"]
-        self.assertEqual(components["disabled"], ["dpp", "prior"])
+        self.assertLessEqual({"dpp", "prior"}, set(components["disabled"]))
         self.assertEqual(
             set(components["enabled"]) | set(components["disabled"]),
             set(bench.ABLATABLE_COMPONENTS),
@@ -556,15 +611,46 @@ class TestManifestIdentifiesConfiguration(unittest.TestCase):
     """
 
     def test_two_arms_differing_only_in_ablation_have_distinguishable_manifests(self) -> None:
+        # `pareto`, not `dpp`. dpp and dkl are off by module default as of 2026-10-31, so
+        # ablating either changes nothing and the two arms are legitimately identical -
+        # see test_ablating_an_already_disabled_component_is_a_no_op below. Using dpp here
+        # tested the manifest's ability to distinguish two arms that are in fact the same
+        # arm, which is not a property it should have.
         identical_outcomes = [_completed_outcome(best=0.5)]
         full = _build_manifest(components_disabled=(), outcomes=identical_outcomes)
-        ablated = _build_manifest(components_disabled=("dpp",), outcomes=identical_outcomes)
+        ablated = _build_manifest(components_disabled=("pareto",), outcomes=identical_outcomes)
 
         self.assertNotEqual(full["configuration_fingerprint"], ablated["configuration_fingerprint"])
         self.assertNotEqual(
             full["configuration"]["components"]["disabled"],
             ablated["configuration"]["components"]["disabled"],
         )
+
+    def test_ablating_an_already_disabled_component_is_a_no_op(self) -> None:
+        """Recorded so nobody measures a no-op and concludes the component does not matter.
+
+        `--ablate-components dpp` and `--ablate-components dkl` currently change nothing:
+        both are off by module default, so the arm is identical to the unablated one. An
+        experimenter re-running either ablation today would find a null effect and could
+        read it as "k-DPP makes no difference", when in fact k-DPP was already gone. The
+        earlier +2.54 TrpB / +6.25 GB1 measurements were taken when these defaulted True.
+
+        If a future change re-enables either default, this test fails and should be
+        updated - at which point ablating it becomes meaningful again.
+        """
+        from workers import math_worker as mw
+
+        for attr, component in (("DPP_DIVERSITY_ENABLED", "dpp"),
+                                ("TWO_STAGE_GP_ENABLED", "dkl")):
+            with self.subTest(component=component):
+                self.assertFalse(
+                    getattr(mw, attr),
+                    f"{attr} is now True, so ablating {component} is no longer a no-op; "
+                    "update this test and re-check any arm that relies on it")
+                self.assertEqual(
+                    _build_manifest(components_disabled=())["configuration"]["components"]["states"],
+                    _build_manifest(components_disabled=(component,))["configuration"]["components"]["states"],
+                )
 
     def test_fingerprint_ignores_outcomes_entirely(self) -> None:
         """Same configuration, different results: the configuration identity must not move."""
