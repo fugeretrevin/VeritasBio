@@ -257,3 +257,115 @@ It will **not** change the default. Correcting or dropping the row re-bases
 every number in the repository, TrpB and GB1 included, and that decision
 belongs to whoever owns the freeze. The recommendation and the amendment text
 it would require are to be written and left unexecuted.
+
+---
+
+## Amendment 1 — CR9114's comparator, dated 2026-11-01 10:43 local
+
+**Written before any CR9114 outcome existed on disk.** At the time of writing the
+campaign was executing CreiLOV's ablated arm; the campaign log shows CR9114 had
+not started, and neither had TrpB or GB1. The original §6 above is left
+unaltered, as HANDOFF §5.4 requires: the amendment is additive and dated, and no
+CR9114 result had been produced, let alone inspected.
+
+### What changed
+
+§6 frames CR9114 as "the counter-example" on the grounds that the engine **wins**
+there — +3.17 top-1% hits against ridge at t = +6.10. That framing was against
+ridge alone, and it no longer survives.
+
+A 7-arm baseline panel measured at 48 paired seeds on CR9114-H1, budgets
+gate-verified matched, places the engine **fifth of seven** and ridge **sixth**:
+
+| arm | top-1% hits | engine − arm | t | B/W/T |
+| --- | --- | --- | --- | --- |
+| `greedy_measured` | 11.60 | **−6.60** | −6.25 | 10/36/2 |
+| `random_forest` | 11.40 | −6.40 | −4.84 | — |
+| `knn_hamming` | 10.98 | −5.98 | −7.18 | — |
+| `gbm_onehot` | 9.00 | −4.00 | −3.90 | — |
+| `panoptes_default` | 5.00 | — | — | — |
+| `gp_onehot` | 3.17 | — | — | — |
+| `ridge` | 1.83 | — | — | — |
+| `random` | 0.88 | — | — | — |
+
+`greedy_measured` has **zero learned parameters** — lexicographic Hamming
+distance to the fitness-ordered measured variants — and beats the engine by 6.60
+hits on 36 of 48 seeds. The local-exploitation objection was tested rather than
+argued: `greedy_measured`'s and `random_forest`'s margins do dissolve at d ≥ 3,
+but `knn_hamming` beats the engine at raw, d ≥ 2 **and** d ≥ 3, so the ordering
+survives all three endpoints.
+
+### Consequences for this campaign, binding on its report
+
+1. **"The engine wins on CR9114" is withdrawn as an unqualified statement.**
+   Beating ridge there is a low bar: ridge is sixth of seven and is not
+   separable from `random` on a seed-majority basis (t = +2.46, Wilcoxon
+   p = 0.044, but 21/19/8 seeds, sign test p = 0.875). No CR9114 result in this
+   report may say "wins" without naming its comparator. This is rule 2.11 again,
+   one level up: a *comparator* chosen without a panel is as misleading as a mean
+   without a test.
+
+2. **The CR9114 contrast of record is `wt_anchor` versus `default`, measured
+   directly and not routed through ridge.** That was already the campaign's
+   primary contrast (§2), so the design does not change — only the reading does.
+   The question CR9114 answers is: does removing the fabricated row help, hurt,
+   or do nothing on a landscape with a severe (14.14 SD) scale violation where
+   the engine nonetheless out-performs the registered reference?
+
+3. **§6's three outcomes (a), (b) and (c) stand as written, and their
+   falsification thresholds are unchanged** — they were all stated in terms of
+   Δ(ablated − default), never in terms of ridge. Only outcome (a)'s closing
+   sentence needs restating: "the engine won there *despite* the defect" becomes
+   "the engine out-performed the registered reference there *despite* the
+   defect", which is a weaker and correct claim.
+
+4. **The two deficiencies are independent.** The panel's authors conclude the
+   WT-anchor defect and the weak-comparator problem are separate, and that
+   CR9114 remains a genuine counter-example to "the WT row explains the losses".
+   This report states explicitly whether its CR9114 result supports or breaks
+   that.
+
+### A prediction this amendment adds
+
+The panel proposes that ridge is strong where a landscape is near-additive over
+a wide range and weak where the assay **floors**, so most of the library carries
+no gradient. CreiLOV (15 sites, labels 2.793–4.196, no floor) and CR9114 (16
+sites, −log₁₀(K_D) floored at 7.000) sit at opposite ends with nearly identical
+site counts, so library size is not the predictor — **assay censoring is**.
+
+Independently confirmed here from the prepared tables: CR9114's minimum is
+exactly 7.000 and GB1's is exactly 0.000, both floored; CreiLOV's range
+2.793–4.196 is uncensored at both ends.
+
+That mechanism makes **no** prediction about `wt_anchor`, because it concerns
+ridge's strength rather than the engine's training set. It is recorded so that a
+CR9114 reading is not later attributed to it post hoc.
+
+### TrpB, noted so an expected value is not mistaken for a defect
+
+The same panel measures TrpB's `panoptes_default` at **51.417** on the held-out
+block, against the **45.21** recorded in HANDOFF §1. HANDOFF already warns that
+`panoptes_default` changed meaning on 2026-10-31 when `DPP_DIVERSITY_ENABLED`
+and `TWO_STAGE_GP_ENABLED` both became False. So a TrpB default arm reading near
+51.4 rather than 45.2 is **expected and is not a defect in this run**. On TrpB
+the engine's margin also survives the 7-arm panel (+12.88 against the best arm,
+`gp_onehot`, t = +3.57, 31/16/1) — which raises, not lowers, the stakes on the
+TrpB negative control: the one landscape where the engine's advantage is real
+against a full panel is also one of the two where this defect is invisible.
+
+### Operational, applied to this campaign
+
+The **results root is shared** across worktrees even though each worktree has its
+own source tree, so the harness's tree hash is safe but artifacts are not. This
+campaign therefore: refuses to start while any `benchmark_panoptes` process is
+live (verified before each launch — at 10:43 the only live processes were this
+campaign's own CreiLOV ablated arm); stamps every file it writes with a
+`wtanchor_` prefix and a timestamp, so it cannot truncate another agent's
+output; reads each run directory **by name** from its own log rather than taking
+"the newest directory"; and checks before quoting any number that the run
+reached `SUCCESS` and spent the full budget on all 48 seeds.
+
+A task-stop is **not** a process kill. An artifact with no `manifest.json` is a
+partial launch and not data — `run_20261101_144437_27fc1a1f` is one such orphan
+left in the shared results root today and is excluded here by construction,
+since run directories are resolved by name from this campaign's own log.
