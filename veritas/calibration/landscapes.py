@@ -497,7 +497,15 @@ def _load_cached(key: str, strict_rows: bool) -> "Landscape":
         )
 
     fitness = np.asarray(values, dtype=np.float64)
-    computed = float(np.percentile(fitness, 99.0))
+    # The percentile must follow the landscape's DECLARED tier, not a hard-coded 99.0.
+    # This was `np.percentile(fitness, 99.0)` for every landscape, while the `tier_size`
+    # property used `tier_fraction` - so any landscape declaring a tier other than 1%
+    # had a `threshold` and a `tier_size` describing different tiers. It bit exactly two:
+    # CR6261-H1 and CR6261-H9 both declare `tier_fraction=0.02` under §4.5's tier ladder
+    # and were handed a 1% bar, giving 19 hits where their own tier implies 38 and 37.
+    # Neither has ever been scored - 0 of 170 run manifests mention them - so no measured
+    # threshold was overridden and nothing downstream of a manifest moves.
+    computed = float(np.percentile(fitness, 100.0 * (1.0 - spec.tier_fraction)))
     manifest = _manifest_threshold(spec)
     threshold, source = (manifest if manifest is not None
                          else (computed, _no_manifest_reason(spec)))

@@ -69,18 +69,36 @@ distribution, and every round's surrogate is fitted through it. (An earlier draf
 | `wt_anchor,prior` | 43.083 | +34.00 | 12.44 |
 | `wt_anchor,prior,physchem_features` | **50.167** | **+41.08** | **19.48** |
 
-That closes −50.08 to **−9.00**, and best fitness goes to **4.1880 ± 0.0001 against
-ridge's 4.1851 ± 0.0043** — above it.
+**Confirmed at 48 paired seeds** on two independent branches with two different drivers:
+**+31.771 raw** (t=+35.88, 48/0/0) and **+16.04 at d≥2** (t=+24.29, 48/0/0), accounting for
+63.2% of CreiLOV's raw deficit and 86.1% of its diversity-adjusted one. The engine still
+loses CreiLOV in every mode.
 
-The line that makes this the beat: **TrpB (0.35 label SDs) and GB1 (0.20) are the only two
-landscapes whose assays are genuinely centred near zero** — which is to say, the only two
-where this defect is invisible, and they are exactly the two every quotable engine figure
-in this repository came from.
+> **WITHDRAWN 2026-11-01: "TrpB and GB1 are the only two landscapes where this defect is
+> invisible."** That was my sentence and the explanation behind it is falsified. The
+> label-scale theory predicted that distance from zero controls the damage. It does not:
+> **CR9114 violates the scale by 2.47 label-ranges — worse than CreiLOV's 1.99 — and
+> measures a tight null** (+0.042, t=+0.09, against an MDE of 0.924). A second reframe, on
+> how wrong the zero is about the point it pins, was tested and **also falsified**: CR9114
+> ranks 2nd of nine on that metric and is null, while GB1 ranks 7th and carries the only
+> separable gain from *repairing* the anchor. Do not narrate a scale story on camera.
+>
+> What survived is narrower and still worth saying: **the row is the dominant cause of the
+> CreiLOV loss specifically**, and the two landscapes every quotable engine figure came
+> from are the two where it happens not to bite. That is a statement about our luck in
+> which landscapes we reported, not a theory of the defect.
 
-Why it is not yet in the shot list: 12 seeds, not 48, and the fix is deliberately an
-ablatable component rather than a default, because changing the default moves TrpB and
-GB1 and would re-base every submitted number. Run `--ablate-components wt_anchor` on
-CreiLOV at 48 paired seeds first. If it holds, it replaces the depth beat at 0:55.
+**The repair beats the deletion, and ablation could not have shown it.** Anchoring at the
+*measured* parent label rather than removing the row is worth **+6.50 raw on GB1**
+(t=+3.70, 33/15/0) where removal is worth **nothing** (+0.542, p=0.687). So part of this is
+information in the true label, not just removal of a false one.
+
+Why it is still not in the shot list: a `measured`-anchor figure means the arm receives the
+parent's true label **outside its measurement budget**, and on TrpB that label is *itself a
+top-1% hit*. Until it is charged (125 → 1 + 124) the number cannot be quoted as a clean
+win. Three of the nine landscapes also have **censored** parent labels at an assay floor,
+where the repair would anchor at a known-wrong value. The honest on-camera version is the
+ablation result above, which is confirmed, paired, and reproduced twice.
 
 ---
 

@@ -95,11 +95,28 @@ def test_her2_universe_hit_set_and_degenerate_ceiling():
 
 
 def test_cr6261_universes_and_ceilings():
+    """UPDATED 2026-11-01, and the old literals were pinning a defect.
+
+    This asserted 19 hits on each CR6261 landscape, with d>=2 ceilings of 10 and 13.
+    Those numbers required `_load_cached`'s hard-coded `np.percentile(fitness, 99.0)` —
+    a 1% bar — while **both landscapes declare `tier_fraction=0.02`** under §4.5's tier
+    ladder. The declared tier implies 38 and 37 members, and `tier_size` said so all
+    along, so `n_hits` and `tier_size` disagreed on these two landscapes and nowhere else.
+
+    The change was measured before it was made. The blast radius is exactly these two:
+    the other seven read their threshold from a run manifest, which rule 2.3 makes the
+    authority, and neither CR6261 landscape has ever been scored — 0 of 170 run manifests
+    mention them — so no measured threshold was overridden. The figures that move are
+    documentation only, and `docs/HANDOFF.md` records the move.
+
+    Kept as literals rather than relaxed, because the point of this test is to notice if
+    they move again.
+    """
     h1, h9 = load_landscape("cr6261_h1"), load_landscape("cr6261_h9")
-    assert (h1.n_universe, h1.n_hits) == (1_886, 19)
-    assert (h9.n_universe, h9.n_hits) == (1_841, 19)
-    assert h1.ceilings((2, 3, 4)) == {2: 10, 3: 6, 4: 4}
-    assert h9.ceilings((2, 3, 4)) == {2: 13, 3: 4, 4: 2}
+    assert (h1.n_universe, h1.n_hits) == (1_886, 38)
+    assert (h9.n_universe, h9.n_hits) == (1_841, 37)
+    assert h1.ceilings((2, 3, 4)) == {2: 18, 3: 9, 4: 6}
+    assert h9.ceilings((2, 3, 4)) == {2: 21, 3: 8, 4: 2}
 
 
 def test_eqfp611_channels_share_a_universe_size_and_hit_tier():
@@ -243,6 +260,36 @@ def test_the_fallback_reason_does_not_claim_no_manifest_exists(tmp_path, monkeyp
     assert "none scored creilov" in reason
     assert "NOT a measured threshold" in reason
     assert "no run manifest exists" not in reason
+
+
+def test_the_computed_percentile_follows_the_declared_tier():
+    """A landscape's bootstrap threshold must describe the tier it declares.
+
+    `_load_cached` used a hard-coded `np.percentile(fitness, 99.0)` for every landscape
+    while the `tier_size` property used `tier_fraction`, so any landscape declaring a
+    tier other than 1% had a threshold and a tier size describing different tiers. It bit
+    exactly two: CR6261-H1 and CR6261-H9 declare `tier_fraction=0.02` under the protocol's
+    tier ladder and were handed a 1% bar - 19 hits where their own tier implies 38 and 37.
+
+    Asserted as agreement between the two quantities rather than as the literals 38/37,
+    so the test states the invariant and does not have to be edited if a tier changes.
+    """
+    for key in sorted(REGISTRY):
+        ls = load_landscape(key)
+        if ls.threshold_source.startswith("manifest"):
+            continue  # rule 2.3: the manifest is the authority, not the percentile
+        assert ls.n_hits == ls.tier_size, (
+            f"{key}: declares a {REGISTRY[key].tier_fraction:.0%} tier implying "
+            f"{ls.tier_size} members, but its computed threshold yields {ls.n_hits}")
+
+
+def test_cr6261_gets_its_registered_two_percent_tier():
+    """The two landscapes the hard-coded 99.0 actually broke.
+
+    Pinned as literals because these are the figures the fix moved, and a silent
+    regression to 19 would restore a tier the protocol does not declare.
+    """
+    assert (load_landscape("cr6261_h1").n_hits, load_landscape("cr6261_h9").n_hits) == (38, 37)
 
 
 def test_reading_the_current_schema_moved_no_hit_set():

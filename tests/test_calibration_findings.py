@@ -132,8 +132,12 @@ def test_her2_primary_endpoint_is_degenerate_and_why():
         ("gb1", 1_494, 146, 24),
         ("eqfp611_blue", 82, 39, 14),
         ("eqfp611_red", 82, 28, 10),
-        ("cr6261_h1", 19, 10, 6),
-        ("cr6261_h9", 19, 13, 4),
+        # UPDATED 2026-11-01: both CR6261 landscapes declare `tier_fraction=0.02` under
+        # the protocol's tier ladder, and the loader was handing them a hard-coded 1%
+        # bar. 19/10/6 and 19/13/4 were the 1% figures. See
+        # `test_cr6261_gets_its_registered_two_percent_tier`.
+        ("cr6261_h1", 38, 18, 9),
+        ("cr6261_h9", 37, 21, 8),
     ],
 )
 def test_the_adjustment_binds_everywhere_except_her2(key, raw, d2, d3):
@@ -154,15 +158,30 @@ def test_the_cr6261_intersection_size():
     assert cmp.shared_share_right == pytest.approx(0.9837, abs=5e-4)
 
 
-def test_the_cr6261_hit_sets_do_not_overlap_at_all():
-    """Two antigens, one library: 17 of H1's 19 hits and all 19 of H9's lie in the
-    shared set, and not one genotype is a hit on both."""
+def test_the_cr6261_hit_sets_barely_overlap():
+    """Two antigens, one library — and this FINDING CHANGED on 2026-11-01.
+
+    It previously read "not one genotype is a hit on both", asserting
+    `h1_hits & h9_hits == set()` with 19-hit tiers. Those 19-hit tiers came from the
+    loader's hard-coded 1% bar, while **both landscapes declare `tier_fraction=0.02`**.
+    At the tier they actually declare the sets are 38 and 37, and they intersect in
+    **exactly one** genotype: `P-R-T-K-Q-D-F-T-G-V-L`.
+
+    So the zero-overlap claim was an artifact of the wrong bar, not a property of the
+    antigens. The substance mostly survives and is worth stating precisely rather than
+    rounding in either direction: of 36 and 37 hits lying inside the 1,811 shared
+    genotypes, **one** is a hit against both H1 and H9. Cross-antigen breadth is rare
+    here; it is not absent.
+
+    Asserted as "at most one" plus the exact count, so a change in either direction
+    fails rather than being absorbed.
+    """
     h1, h9 = load_landscape("cr6261_h1"), load_landscape("cr6261_h9")
     shared = set(h1.combos) & set(h9.combos)
     h1_hits = {c for c in h1.hit_combos if c in shared}
     h9_hits = {c for c in h9.hit_combos if c in shared}
-    assert (len(h1_hits), len(h9_hits)) == (17, 19)
-    assert h1_hits & h9_hits == set()
+    assert (len(h1_hits), len(h9_hits)) == (36, 37)
+    assert len(h1_hits & h9_hits) == 1
 
 
 # --- the report itself ---------------------------------------------------------------
