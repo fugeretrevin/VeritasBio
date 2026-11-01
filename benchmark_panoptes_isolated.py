@@ -2974,7 +2974,25 @@ class PanoptesSelector(Selector):
 
                 self._orchestrator = Orchestrator(
                     OrchestratorConfig(
-                        target_accession=self.library.accession,
+                        # Six of the nine libraries declare no accession: they are
+                        # combinatorial landscapes with no UniProt-shaped metadata, and
+                        # `1ff96af` made the field optional on LibrarySpec for that
+                        # reason. OrchestratorConfig still requires a string, so passing
+                        # None raised ValidationError and the live arm FAILED on all 12
+                        # seeds of CR9114 while working on TrpB, which happens to have one.
+                        #
+                        # Nothing in this path reads it. `target_accession` is consumed by
+                        # Orchestrator.run_stream() to fetch metadata, and this benchmark
+                        # passes `self.metadata` into _generate_strategy directly, so the
+                        # field only has to satisfy the schema. Prefer the real accession,
+                        # then whatever the metadata carries, then a label that names the
+                        # library honestly - never a plausible-looking UniProt id, which
+                        # would read as provenance this landscape does not have.
+                        target_accession=(
+                            self.library.accession
+                            or getattr(self.metadata, "accession", None)
+                            or f"library:{self.library.key}"
+                        ),
                         use_mock_llm=False,
                         enable_live_llm=True,
                         require_live_llm=True,

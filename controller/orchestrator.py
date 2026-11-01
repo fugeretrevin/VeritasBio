@@ -463,7 +463,19 @@ class Orchestrator:
         for attempt in range(max_retries):
             try:
                 resp = self.http_session.post(url, json=payload, headers=headers, timeout=60.0)
-                resp.raise_for_status()
+                # The provider's error BODY says why a 4xx happened; raise_for_status
+                # reports only the status line. A 400 on round 2 of a CR9114 campaign cost
+                # an hour of guessing at prompt sizes that turned out to be fine, because
+                # the reason was never logged. Body first, then raise.
+                if resp.status_code >= 400:
+                    detail = (resp.text or "")[:800]
+                    logger.error(
+                        "Meta Model API %s for model %r: %s",
+                        resp.status_code, model, detail or "<empty body>",
+                    )
+                    raise RuntimeError(
+                        f"Meta Model API {resp.status_code} for model {model!r}: {detail}"
+                    )
                 data = resp.json()
                 # Accumulate the provider's own token counts. These were discarded, which
                 # is why every benchmark reported "token usage: unknown" and why the
