@@ -2880,18 +2880,104 @@ class PanoptesSelector(Selector):
         self.live_calls = 0
         self.reflection_calls = 0
         self.last_batch_predictions: Dict[str, float] = {}
+        #: Per-field provider counters, for the manifest. `self.token_usage` (the base
+        #: class's single int) carries the total that the round metrics report.
+        self.token_usage_detail: Dict[str, int] = {}
 
     # -- production handles -------------------------------------------------------------------
+    def _provider_calls(self) -> int:
+        """How many API calls the orchestrator has recorded, cumulatively."""
+        orch = self._orchestrator
+        counters = getattr(orch, "token_usage", None) if orch is not None else None
+        value = counters.get("calls") if isinstance(counters, dict) else None
+        return int(value) if isinstance(value, (int, float)) else 0
+
+    def _went_live(self, planner: Any, before_attempts: int, before_calls: int) -> bool:
+        """Did the planner just make a real API call?
+
+        Three independent signals, because the original one does not fire. The recorder
+        watches for an INFO record on `controller.orchestrator`, but main() sets that
+        logger to WARNING, so the record never reaches the handler: a successful live
+        call was counted as zero, and the arm reported "live Muse" with model_calls=0
+        in every round. A detector suppressed by the very process it observes is worse
+        than none, because its silence reads as a negative result.
+
+        The orchestrator's own fields are authoritative - `strategy_engine_is_mock` is
+        reset per round specifically so provenance describes THIS round - so they are
+        preferred, with the log recorder kept as a third signal rather than removed.
+        """
+        if self._provider_calls() > before_calls:
+            return True
+        if getattr(planner, "strategy_engine_is_mock", None) is False:
+            return True
+        return self.recorder.live_attempts > before_attempts
+
+    def _sync_token_usage(self) -> None:
+        """Carry the orchestrator's own token counters onto this selector.
+
+        `controller.orchestrator._call_llama_api` accumulates the provider's `usage`
+        block on every call, cumulatively, and the orchestrator instance is cached for
+        the life of the campaign. Nothing read it back, so every run of this benchmark
+        reported "token usage: unknown" and a live arm's spend could not be sized before
+        committing it - which matters when the API credit budget is fixed and a 48-seed
+        campaign issues roughly one planner call per round per seed.
+
+        Reads only; never estimates. If the provider returns no usage block at all,
+        `self.token_usage` stays None and the report continues to say "unknown", because
+        an invented token count is worse than an absent one.
+        """
+        orch = self._orchestrator
+        counters = getattr(orch, "token_usage", None) if orch is not None else None
+        if not isinstance(counters, dict):
+            return
+        numeric = {k: int(v) for k, v in counters.items() if isinstance(v, (int, float))}
+        if not numeric:
+            return
+        self.token_usage_detail = numeric
+        total = numeric.get("total_tokens")
+        if total is None:
+            # Some providers return only the two halves. Sum those rather than
+            # reporting unknown; report unknown when neither is present.
+            halves = [numeric[f] for f in ("prompt_tokens", "completion_tokens")
+                      if f in numeric]
+            if not halves:
+                return
+            total = sum(halves)
+        self.token_usage = int(total)
+
     def _planner(self):
         if self.use_live_muse:
             if self._orchestrator is None:
                 from controller.orchestrator import Orchestrator, OrchestratorConfig
+                from controller.tls_trust import (
+                    enable_os_trust_store, os_trust_store_requested,
+                )
+
+                # Opting into a live run must mean a live run or an error, never a
+                # quiet substitution. Without `require_live_llm`, a failed API call
+                # falls back to MockLLMWorker and logs a warning the benchmark does not
+                # surface: both of this arm's first live runs reported "live Muse" and
+                # Run state SUCCESS while making ZERO calls (model_calls=0 every round),
+                # because TLS interception failed every request. An arm that claims a
+                # model it never called is worse than an arm that fails.
+                enable_os_trust_store()
+                if not os_trust_store_requested():
+                    # The usual cause of a failed call on Windows: a proxy or security
+                    # suite re-signs TLS with a local root CA that certifi does not
+                    # carry. Named here because the raised error below is otherwise an
+                    # opaque SSLError, and the fix is one environment variable.
+                    self.notes.append(
+                        "VERITAS_USE_OS_TRUSTSTORE is not set; if the live call fails "
+                        "with CERTIFICATE_VERIFY_FAILED, set it to 1 (see "
+                        "controller/tls_trust.py)"
+                    )
 
                 self._orchestrator = Orchestrator(
                     OrchestratorConfig(
                         target_accession=self.library.accession,
                         use_mock_llm=False,
                         enable_live_llm=True,
+                        require_live_llm=True,
                         enable_reflection=True,
                         random_seed=self.seed,
                     ),
@@ -2921,15 +3007,17 @@ class PanoptesSelector(Selector):
                 )
             logging.getLogger("controller.orchestrator").addHandler(self.recorder)
             before = self.recorder.live_attempts
+            before_calls = self._provider_calls()
             try:
                 strategy = planner._generate_strategy(
                     self.metadata, round_number=round_index + 1, top_evidence=top_evidence, current_hop=0,
                 )
             finally:
                 logging.getLogger("controller.orchestrator").removeHandler(self.recorder)
-            if self.recorder.live_attempts > before:
+            if self._went_live(planner, before, before_calls):
                 self.live_calls += 1
                 self.model_calls += 1
+                self._sync_token_usage()
             return strategy
         return planner.generate_strategy(
             self.metadata, round_number=round_index + 1, top_evidence=top_evidence, current_hop=0,
@@ -2965,6 +3053,7 @@ class PanoptesSelector(Selector):
         orchestrator = self._planner()
         logging.getLogger("controller.orchestrator").addHandler(self.recorder)
         before = self.recorder.live_attempts
+        before_calls = self._provider_calls()
         try:
             reflection = orchestrator._generate_reflection(
                 metadata=self.metadata,
@@ -2978,9 +3067,10 @@ class PanoptesSelector(Selector):
         # Production stores the diagnosis on the orchestrator; the next strategy merges it in.
         orchestrator.last_reflection = reflection
         self.reflection_calls += 1
-        if self.recorder.live_attempts > before:
+        if self._went_live(orchestrator, before, before_calls):
             self.live_calls += 1
             self.model_calls += 1
+            self._sync_token_usage()
 
     # -- selection ----------------------------------------------------------------------------
     def _conditional_probe_batch(
@@ -4553,6 +4643,14 @@ def _per_arm_results(
             "mean_unique_measurements": (
                 statistics.fmean(m.n_measurements for m in finals) if finals else None),
             "total_model_calls": sum(o.model_calls for o in runs),
+            # Provider-reported tokens, summed over seeds. None when no seed reported a
+            # figure, so an absent count never renders as a zero - the distinction
+            # between "the provider sent no usage block" and "this arm spent nothing"
+            # is the whole point of recording it.
+            "total_token_usage": (
+                sum(int(o.token_usage) for o in runs if o.token_usage is not None)
+                if any(o.token_usage is not None for o in runs) else None
+            ),
         }
     return per_arm
 
@@ -5135,7 +5233,17 @@ def summarise(outcomes: Sequence[RunOutcome], method_status: Dict[str, Dict[str,
             "success_rate_found_top1": f"{sum(1 for m in finals if m.found_top1) / len(finals):.3f}" if finals else "",
             "mean_runtime_seconds": _mean(runtimes),
             "total_model_calls": sum(r.model_calls for r in runs),
-            "token_usage": "unknown",
+            # Summed over the arm's seeds, from the provider's own usage block. Was
+            # hardcoded "unknown", which was true only because nothing read the counter
+            # the orchestrator had been keeping all along. Stays "unknown" when no seed
+            # reported a figure, so an absent count is never shown as a zero.
+            "token_usage": (
+                str(sum(int(o.token_usage) for o in runs if o.token_usage is not None))
+                if any(o.token_usage is not None for o in runs) else "unknown"
+            ),
+            # Deliberately not computed: the per-token rate changes independently of
+            # this code, so a hardcoded rate would silently go stale. The token count
+            # above is the input a reader multiplies by the rate in force.
             "estimated_cost_usd": "unknown",
         })
     return rows
@@ -5343,10 +5451,33 @@ def write_report(
     add("")
     add("Cost")
     add("-" * 78)
-    add("  No dollar figures are reported. Local baselines make no paid calls; the production")
-    add("  adapters make no cloud calls in this benchmark; and the Meta API client in")
-    add("  controller/orchestrator.py discards the provider's usage block, so token counts are")
-    add("  genuinely unknown rather than estimated.")
+    add("  No dollar figures are reported. Local baselines make no paid calls and the")
+    add("  production adapters make no cloud calls in this benchmark.")
+    # results.per_arm is a dict keyed by method, NOT a list of rows. Reading it as a
+    # list silently yielded no matches, so this section reported "no live arm ran" even
+    # when one had - the same shape of bug as the token counter it is reporting on.
+    per_arm = (manifest.get("results") or {}).get("per_arm") or {}
+    live_rows = [
+        (method, entry.get("total_token_usage"), entry.get("total_model_calls"))
+        for method, entry in per_arm.items()
+        if isinstance(entry, dict) and entry.get("total_token_usage") is not None
+    ]
+    if live_rows:
+        add("  Token counts are the provider's own usage block, summed over calls and")
+        add("  seeds - measured, not estimated:")
+        for method, total, calls in live_rows:
+            per_call = f", {total / calls:,.0f}/call" if calls else ""
+            add(f"    {method}: {total:,} tokens over {calls} model call(s){per_call}")
+        add("  Multiply by your per-token rate for a dollar figure. The rate is not")
+        add("  hardcoded here because it changes independently of this code.")
+    else:
+        add("  No arm reported a token count. A live arm records the provider's usage")
+        add("  block per call; its absence means the provider returned none, never that")
+        add("  the figure was not collected.")
+        calls = {m: e.get("total_model_calls") for m, e in per_arm.items()
+                 if isinstance(e, dict) and e.get("total_model_calls")}
+        if calls:
+            add(f"  Model calls made: {calls}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -6003,7 +6134,9 @@ def _execute_run(
         "proposed distal allosteric residues the four-site library cannot measure and whole "
         "rounds were discarded as not_in_eligible_universe. Check the accepted/requested "
         "columns in round_metrics.csv: a short batch still means proposals were rejected.",
-        "Token usage is unknown: controller/orchestrator.py discards the provider's usage block.",
+        "Token usage for live arms is the provider's own usage block, accumulated by "
+        "controller/orchestrator.py and read back per round; 'unknown' means the provider "
+        "returned no usage block, never that the figure was not collected.",
         "Top-1% membership is defined over the eligible set in this run; a different eligibility "
         "filter changes the threshold.",
     ]
@@ -6345,6 +6478,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     _load_repo_dotenv()
+
+    # Immediately after .env, and before anything builds an HTTPS session. On a network
+    # that terminates TLS, certifi does not carry the local root CA, every Meta API call
+    # fails, and the planner falls back to the mock - which is how two runs reported
+    # "live Muse" and Run state SUCCESS with model_calls=0 in every round. Opt-in via
+    # VERITAS_USE_OS_TRUSTSTORE; a no-op when unset. See controller/tls_trust.py.
+    try:
+        from controller.tls_trust import enable_os_trust_store
+
+        enable_os_trust_store()
+    except Exception:  # never let trust-store setup stop a local-only run
+        pass
 
     logging.basicConfig(  # configured before resolve_library so its log line is visible
         level=logging.DEBUG if args.verbose else logging.INFO,
