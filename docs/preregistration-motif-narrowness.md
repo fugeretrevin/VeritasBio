@@ -400,6 +400,75 @@ exists to prevent — the amendment records the number instead.
 
 ---
 
+## 3F. AMENDMENT 2026-11-01 — the diffuse band is confounded with library sparsity
+
+§3E established that HER2's band is stable to the universe choice. It is **not** stable to
+the question of *why* its null is what it is, and that turns out to matter more.
+
+HER2's null mean is 0.507. A library with HER2's **same geometry** — ten sites, the same
+multiset of alphabet sizes — but **uniform per-site marginals**, as a combinatorially
+complete library has by construction, gives a null mean of **0.331**. Measured by direct
+simulation, 20,000 draws at the registered tail of 5, decomposed into its two possible
+causes:
+
+| null | mean | z against the observed tail conc. of 0.380 | band |
+| --- | --- | --- | --- |
+| **uniform marginals** (a complete library) | 0.3310 | **+1.34** | **ambiguous** |
+| empirical marginals, sites independent | 0.5061 | −2.63 | diffuse |
+| actual, whole genotypes resampled | 0.5070 | −2.53 | diffuse |
+
+- **skew inflation** (empirical − uniform) = **+0.1751**
+- **inter-site correlation inflation** (actual − empirical) = **+0.0009**
+
+**So essentially all of HER2's diffuseness is per-site marginal skew, and virtually none
+is structure in the tail.** HER2 is a 6×10⁻⁸-saturated, non-uniform sample of a ten-site
+space; its tail's concentration (0.380) is close to what a *uniform* draw would give,
+while the library it is scored against is heavily skewed. Its negative z therefore reads,
+substantially, as *"the tail follows the library's own marginals less closely than a
+random library member does"* — which is **not** the claim "the tail is multi-modal" that
+§2's bands are about. On a complete library of the same shape, HER2 would be
+**ambiguous** and carry no prediction.
+
+### Consequence for §4, stated plainly
+
+The falsification condition requires the sign to flip on a **diffuse** landscape. The only
+diffuse landscape in the corpus is diffuse for a reason that has nothing to do with the
+mechanism under test. So the condition is not merely *unavailable* (§3A) — as written it
+may be close to **unsatisfiable**:
+
+- A combinatorially complete library has uniform marginals by construction, so z ≤ 1.0
+  there requires the top ~5–19 variants to be *exactly* as concentrated as a random draw.
+- An independent screen of **155 combinatorially complete landscapes** (the GraphFLA
+  collation, [arXiv:2510.24826](https://arxiv.org/abs/2510.24826), NeurIPS 2025) found
+  **one** diffuse case — and it is a DNA operator library (TetR/tetO2, Westmann 2024),
+  only 27% sampled, i.e. the same sparsity that produces HER2's result.
+- Notably, **ruggedness is not this metric.** The most peak-rich landscape in the
+  literature (Papkou 2023 folA, 514 reported peaks) scores **z ≈ 13.6** — strongly
+  narrow. PhoQ, the most degenerate 4-site protein interface known, still scores ≈ 6.4.
+  "Many peaks" and "diffuse tail" are different properties, and the registration's bands
+  measure the second.
+
+**Therefore:** add **library saturation and per-site marginal skew** to §4 item 3's list
+of covariates that must be recorded and checked, alongside width and dataset size. A
+diffuse band that tracks sparsity rather than tail structure would make a sign flip
+uninterpretable even if one were observed.
+
+And the practical ordering changes. Acquiring a diffuse landscape looked like the unblock;
+on this evidence the candidate pool is close to empty, so **defining a non-degenerate
+HER2 endpoint (§3A item 1) is the cheaper and cleaner route** — made cheaper still by the
+off-by-one in §3C's own budget (113 against the registered `min(125, tier−1)` = 112).
+
+Two notes on the measurement itself, so it can be repeated. `dataset-inventory.md` lists
+HER2's alphabet sizes as `20,20,19,19,18,13,12,10,9,5`; that is the **sorted multiset, not
+per-position** — the observed per-position sizes are `9,20,19,18,13,12,5,19,10,20`, whose
+sorted form is identical. The uniform null is unaffected, because under uniform sampling
+each position contributes independently and the statistic averages over positions, so only
+the multiset matters. Reproduce with
+`scratchpad/her2_marginal_skew.py` (read-only, pure stdlib plus the registered
+instrument's own `concentration`).
+
+---
+
 ## 4. What falsifies this
 
 The prediction is wrong if **any** of the following holds:
@@ -412,6 +481,11 @@ The prediction is wrong if **any** of the following holds:
 3. The effect correlates with library width or dataset size rather than with z. Both are
    recorded so this can be checked, and width is already known to confound here —
    `docs/PIPELINE_FOR_BIO_REVIEW.md` withdrew a width claim once.
+   **Added 2026-11-01 (§3F):** also record **library saturation** and **per-site marginal
+   skew**. HER2's diffuse band is almost entirely an artifact of skew — +0.1751 of its
+   null inflation is marginal skew against +0.0009 from inter-site correlation — so an
+   effect tracking sparsity rather than tail structure is a live confound, not a
+   hypothetical one.
 
 **TrpB does not count as evidence.** The prediction was derived from it, so it is
 excluded from the confirmation count and reported separately. Of the nine landscapes,
