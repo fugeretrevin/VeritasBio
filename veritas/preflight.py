@@ -1048,6 +1048,30 @@ QUALIFICATION_MANIFEST_PATHS: Tuple[Tuple[str, ...], ...] = (
     ("invocation", "resolved_args", "qualify_threshold"),
 )
 
+#: Sibling keys that, taken together, carry the qualification bar in the shape real
+#: manifests actually write it. Each tuple is candidates for one field, best first.
+#:
+#: This exists because the check was FAILING on runs that record the bar correctly. The
+#: reader resolved `configuration.components.qualify_threshold`, found a scalar, and
+#: wrapped it as `{quantile: None, source: None}` - discarding `qualify_quantile` and
+#: `qualify_threshold_source`, which sit directly beside it. Verified against
+#: `run_20261101_024544_e82e6214`, one of the three runs the cross-protein sweep's
+#: published figures come from: `qualify_threshold = 4.165688884891826`,
+#: `qualify_threshold_absolute` the same, `qualify_quantile = 99.96`,
+#: `qualify_threshold_source = "quantile"`. The data was never missing; the reader looked
+#: at one key of four.
+#:
+#: Note what this does NOT do: it does not supply a default, infer a quantile, or treat a
+#: bare absolute as acceptable. A manifest that records only a scalar still produces
+#: `quantile: None` and still fails, which is the defect the check was written for -
+#: `--qualify-threshold` defaulting to 0.70 and a run recording that number and nothing
+#: else. Only a manifest that genuinely recorded the quantile and its source now passes.
+QUALIFICATION_SIBLING_KEYS: Dict[str, Tuple[str, ...]] = {
+    "absolute": ("qualify_threshold_absolute", "qualify_threshold"),
+    "quantile": ("qualify_quantile",),
+    "source": ("qualify_threshold_source",),
+}
+
 #: Where `top1.threshold` is recorded, best shape first.
 TOP1_MANIFEST_PATHS: Tuple[Tuple[str, ...], ...] = (
     ("top1", "threshold"),
@@ -1085,8 +1109,46 @@ def qualification_from_manifest(
         where = ".".join(path)
         if isinstance(found, Mapping):
             return dict(found), where, checked
+        # A scalar here may still be one of four sibling keys that together record the
+        # bar properly. Try that before falling back to "an absolute and nothing else",
+        # which is what used to fail the check on correctly-recorded runs.
+        parent = _dig(manifest, path[:-1]) if len(path) > 1 else manifest
+        if isinstance(parent, Mapping):
+            assembled = _assemble_qualification(parent)
+            if assembled is not None:
+                siblings = ".".join(path[:-1]) or "<root>"
+                return assembled, f"{siblings} (sibling keys)", checked
         return {"absolute": float(found), "quantile": None, "source": None}, where, checked
     return {}, "", checked
+
+
+def _assemble_qualification(parent: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """The qualification block built from `QUALIFICATION_SIBLING_KEYS`, or None.
+
+    Returns None unless BOTH an absolute and a quantile are present, so this can only
+    ever rescue a manifest that really did record the bar as a quantile. A manifest
+    carrying a bare absolute falls through to the old shape and still fails the check -
+    assembling a block out of less than that would convert the defect into a pass, which
+    is the opposite of the point.
+    """
+    picked: Dict[str, Any] = {}
+    for field, candidates in QUALIFICATION_SIBLING_KEYS.items():
+        for key in candidates:
+            value = parent.get(key)
+            # `""` is how this manifest records "not requested"; it is not a value.
+            if value is not None and value != "":
+                picked[field] = value
+                break
+    if "absolute" not in picked or "quantile" not in picked:
+        return None
+    try:
+        absolute = float(picked["absolute"])
+        quantile = float(picked["quantile"])
+    except (TypeError, ValueError):
+        return None
+    source = picked.get("source")
+    return {"absolute": absolute, "quantile": quantile,
+            "source": str(source) if source is not None else None}
 
 
 def top1_threshold_from_manifest(manifest: Mapping[str, Any]) -> Tuple[Optional[float], str]:

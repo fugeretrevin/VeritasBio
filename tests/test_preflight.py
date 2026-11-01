@@ -467,6 +467,97 @@ def test_an_absolute_constant_bar_fails_because_it_does_not_transfer():
     assert "quantile" in result.detail["violations"][0]
 
 
+def _components_manifest(values, quantile, *, absolute=None, source="quantile",
+                         with_siblings=True):
+    """A manifest in the shape real runs actually write.
+
+    Verified against `run_20261101_024544_e82e6214`, one of the three runs the
+    cross-protein sweep's published figures come from: the bar lives under
+    `configuration.components` as four sibling keys, not as a nested block.
+    """
+    from veritas.calibration.qualification import absolute_for_quantile
+
+    resolved = absolute_for_quantile(values, quantile) if absolute is None else absolute
+    components = {"qualify_threshold": resolved}
+    if with_siblings:
+        components.update({
+            "qualify_threshold_absolute": resolved,
+            "qualify_threshold_source": source,
+            "qualify_quantile": quantile,
+            # Real manifests write "" for "not requested". It is not a value.
+            "qualify_quantile_requested": "",
+            "qualify_threshold_requested": "",
+        })
+    return {"configuration": {"components": components},
+            "top1": {"threshold": float(np.percentile(values, 99.0))}}
+
+
+def test_the_bar_is_read_from_sibling_keys_not_just_the_scalar():
+    """The reader took one key of four and failed runs that recorded the bar correctly.
+
+    `configuration.components.qualify_threshold` is a scalar, and the reader wrapped it
+    as `{quantile: None, source: None}` - discarding `qualify_quantile` and
+    `qualify_threshold_source` sitting directly beside it. The check then failed on
+    every such run, including the three the published sweep figures come from, and the
+    failure was invisible because `generality_sweep.ps1` invokes the gate without
+    `--run-dir`, which makes this check NOT-APPLICABLE.
+    """
+    manifest = _components_manifest(TRPB_LIKE, 99.0)
+    result = pf.check_threshold_transfer(library="trpb", values=TRPB_LIKE,
+                                         manifest=manifest)
+    assert result.status == pf.PASS, result.render()
+    assert result.measured["quantile"] == pytest.approx(99.0)
+    assert result.measured["source"] == "quantile"
+
+
+def test_reading_siblings_did_not_make_the_check_vacuous():
+    """The decisive test. A quantile that does NOT resolve to the recorded absolute on
+    this landscape's own values must still FAIL after assembly.
+
+    Without this, the sibling reader would be indistinguishable from deleting the check:
+    it would accept any manifest that merely *mentions* a quantile. The check's whole
+    purpose is that the bar transfers, so a recorded-but-wrong quantile is exactly the
+    case that must not pass.
+    """
+    manifest = _components_manifest(TRPB_LIKE, 99.0)
+    # Keep the quantile, corrupt the absolute it is supposed to resolve to.
+    manifest["configuration"]["components"]["qualify_threshold"] = 0.70
+    manifest["configuration"]["components"]["qualify_threshold_absolute"] = 0.70
+    result = pf.check_threshold_transfer(library="trpb", values=TRPB_LIKE,
+                                         manifest=manifest)
+    assert result.status == pf.FAIL, result.render()
+
+
+def test_a_bare_absolute_under_components_still_fails():
+    """The original defect must still be caught.
+
+    `--qualify-threshold` defaults to 0.70 and a run records that number and nothing
+    else. Assembling a block from less than an absolute AND a quantile would convert
+    that defect into a pass.
+    """
+    manifest = _components_manifest(TRPB_LIKE, 99.0, with_siblings=False)
+    result = pf.check_threshold_transfer(library="trpb", values=TRPB_LIKE,
+                                         manifest=manifest)
+    assert result.status == pf.FAIL, result.render()
+    assert result.measured["quantile"] is None
+
+
+def test_an_empty_requested_field_is_not_mistaken_for_a_value():
+    """Real manifests write `""` for "not requested". `float("")` raises, and a reader
+    that treated it as present would crash on a manifest that is merely verbose."""
+    block, _where, _checked = pf.qualification_from_manifest(
+        _components_manifest(TRPB_LIKE, 99.0))
+    assert block["quantile"] == pytest.approx(99.0)
+
+
+def test_the_paths_checked_are_always_reported():
+    """A failure must never say only 'not found' (the environment-paths rule applied to
+    manifest keys)."""
+    _block, _where, checked = pf.qualification_from_manifest({})
+    assert "configuration.components.qualify_threshold" in checked
+    assert len(checked) == len(pf.QUALIFICATION_MANIFEST_PATHS)
+
+
 def test_a_bar_below_the_global_minimum_gates_nothing_and_fails():
     manifest = {
         "qualification": {"quantile": 0.0, "absolute": 0.70, "source": "legacy constant"},
