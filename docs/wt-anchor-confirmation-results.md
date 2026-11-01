@@ -160,6 +160,41 @@ engine on 4 CreiLOV seeds (Δ = 0.000, tied 4/4). Ablating nothing changes nothi
 Rules 2.1 and 2.2 do not bind this analysis: nothing here parses a mutation string. All
 figures come from the harness's own `round_metrics.csv` and `manifest.json`.
 
+### Suite state, and a latent rule-2.3 defect found on the way
+
+**737 passed, 2 skipped, 6 failed.** All 6 failures reproduce **identically at `main`'s
+`b5f090b` from this same worktree**, so none is introduced by this branch — verified by
+detaching and re-running. Five are `tests/test_path_resolution.py::TestMainCheckout*`,
+which assert main-checkout behaviour and cannot pass from a worktree (rule 2.8's
+documented situation).
+
+The sixth is worth recording as a defect rather than dismissed as an artifact.
+`tests/test_calibration_landscapes.py::test_trpb_eligible_universe_and_hit_set` fails
+**only** on `threshold_source.startswith("manifest")`; rule 2.2's two anchor figures
+pass (TrpB universe **159,999**, hit set **1,600**). The cause is that
+`veritas/calibration/landscapes.py::_manifest_threshold` reads a **legacy manifest
+schema** — top-level `dataset.active_site_positions` and `top1.threshold` — while
+today's manifests are `manifest_schema_version`-tagged and nest those under
+`configuration.dataset.library.positions` and `results.top1.threshold_value`. Verified
+on both: a `run_20261030_*` manifest has the legacy keys, a run from today has neither.
+
+When the lookup matches nothing it does not raise. It falls back to
+`(computed, "computed (no run manifest exists)")`, i.e. it **recomputes the 99th
+percentile** — which rule 2.3 forbids in terms ("Read `top1.threshold` from each run's
+own `manifest.json`. Do not recompute it."). The test passes in the main checkout only
+because 160 historical legacy-schema run directories still live there; it fails in any
+tree holding only post-migration runs, and it will fail **unconditionally** once those
+legacy directories are pruned. The fallback message names the right diagnosis for the
+wrong reason: manifests exist, they are simply no longer readable by this function.
+
+This is HANDOFF §2.12's general form again — a record that reads one of two places is
+worse than no record, because it will be trusted — and §2.10's, since the check passes
+against the fixtures it was built beside. **Not fixed here**; it is outside this
+campaign's scope and belongs with the other gate repairs in §7. It does **not** touch
+any figure in this document: the readout takes each threshold from
+`results.top1.threshold_value` in that run's own manifest and asserts the two arms
+agree, which it does on all six landscapes.
+
 ---
 
 ## 5. An arithmetic error in the published characterisation
