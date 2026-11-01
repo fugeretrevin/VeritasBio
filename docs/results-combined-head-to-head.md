@@ -231,8 +231,9 @@ that `gp_onehot` outranks `ridge` on GB1 raw.
 ## 6. Gate verdicts, including the failure
 
 Pre-run gate (rule 2.7), **both landscapes**: 4 passed, **0 FAILED**, 4 not applicable.
-Post-run gate **with `--run-dir`**, both landscapes: **13 passed, 1 FAILED, 10 not
-applicable**.
+Post-run gate **with `--run-dir`**, both landscapes, on this branch's gate code: **13 passed,
+1 FAILED, 10 not applicable** — and re-run on `main` at `789b005` after its gate fix,
+**14 passed, 0 FAILED, 10 not applicable, exit 0** on both. See the `threshold` entry below.
 
 - **PASS `budget.<arm>` for all nine arms on both landscapes**: every arm spent all 125
   distinct measurements on every one of 48 seeds. This is the check the paired tests depend
@@ -241,15 +242,27 @@ applicable**.
 - **PASS** `corpus.lock`, `corpus.derived_table`, `corpus.prepared`, `endpoint.trpb`
   (d≥2 ceiling 166 of 1,600, 89.6% of the hit set removed), `endpoint.gb1` (146 of 1,494,
   90.2%).
-- **FAIL `threshold.trpb` and `threshold.gb1`.** `qualification.quantile` and
-  `qualification.source` are not recorded where the reader looks. This is the known, unfixed
-  reader/schema mismatch: `veritas/preflight.py::QUALIFICATION_MANIFEST_PATHS` resolves at
-  `configuration.components.qualify_threshold`, which is a **scalar**, while the manifest
-  records `qualify_quantile` and `qualify_threshold_source` as **siblings**. It is not missing
-  data. The bar it concerns is consumed only by the `qualify_then_optimize` /
-  `conditional_probe` arms, neither of which ran here, and the failure is symmetric across
-  arms, so it **cannot bias any paired contrast above**. It is nonetheless an **un-passed
-  check that every figure in this document carries**, and it is not called a pass.
+- **`threshold.trpb` and `threshold.gb1` FAILED on the gate as it stood on this branch, and
+  that failure has since been FIXED on `main` and the fix is verified against these exact
+  artifacts.** The reader defect was
+  `veritas/preflight.py::QUALIFICATION_MANIFEST_PATHS` resolving at
+  `configuration.components.qualify_threshold`, which is a **scalar**, and discarding
+  `qualify_quantile` and `qualify_threshold_source` sitting beside it as siblings. It was
+  never missing data. `main`'s `30c1e94` fixes it.
+
+  **Re-run, after the fix, against these two unchanged run folders** — main at `789b005`,
+  same `--run-dir`, same `--arms`, same budget, nothing re-measured:
+
+  | landscape | gate at `789b005` on this run | `threshold.<lib>` |
+  | --- | --- | --- |
+  | TrpB `run_20261101_163432_c6faa21c` | **14 passed, 0 FAILED, 10 not applicable** (exit 0) | **PASS** — quantile 99.96 → 0.6998334526751873, from the array that defines `top1.threshold` |
+  | GB1 `run_20261101_164651_45ecc6b2` | **14 passed, 0 FAILED, 10 not applicable** (exit 0) | **PASS** — quantile 99.96 → 5.362064688799873 |
+
+  So **these runs recorded the bar correctly all along and carry no un-passed check.** The
+  earlier FAIL was an instrument defect in the reader, not a property of the runs. (Note the
+  99.96th-percentile *qualification* bar, 0.6998 on TrpB, is a different quantity from the
+  top-1% *scoring* bar, 0.3494, which §3's tables are computed against and which this
+  document's read-out takes from each run's own manifest under rule 2.3.)
 - NOT-APPLICABLE: `encoding.<arm>` × 9 (no arm normalises an encoded design space by column
   range) and `row_order.<lib>` (needs an invariance runner). A NOT-APPLICABLE is not a pass.
 
@@ -275,3 +288,46 @@ applicable**.
 - Any attribution of GB1's one-hot effect to the surrogate alone (pool confound, §4).
 - `48 campaigns on one library are not 48 independent replicates` of any biological claim;
   they are 48 paired replicates of an algorithmic contrast.
+
+---
+
+## 9. Claims that must be narrowed or restated
+
+Nothing below is enacted by this document. Each is a claim and the narrowest honest
+restatement of it. Two findings drive the list: **`ridge` is not GB1's strongest raw
+baseline — `gp_onehot` is, at 46.02 against ridge's 33.29**, so every GB1 contrast in the
+repository is against the third-strongest raw arm; and **the one-hot surrogate's gain is
+raw-only**, so no claim about it may be stated unscoped.
+
+### `docs/HANDOFF.md` — the GB1 figures
+
+| § | claim | required change |
+| --- | --- | --- |
+| §1 sweep table | `GB1 \| −12.90 \| −5.63 \| 6 / 41 / 1 \| decisive loss` | **Restate with the comparator named.** That is Δ vs **`ridge`**, which is GB1's **third**-strongest raw baseline. Against the strongest, `gp_onehot` (46.02), `panoptes_default` is **−25.62, t=−11.39, 2/45/1**. Both belong in the table; the header "Δ vs ridge" is honest but the verdict column reads as a verdict against the baselines. |
+| §1 | "**GB1 was called 'parity at every budget'. It is a decisive loss**, ridge 33.29 against the engine's 20.40, better on 6 of 48 seeds." | **Keep and extend.** Correct as far as it goes. Add that against the strongest raw baseline the loss is **twice as large** (−25.62), and that at **d≥2 the engine is NOT separable from the strongest baseline** (+0.04, t=+0.09, 18/19/11) and **wins at d≥3** (+0.67, t=+3.44). "Decisive loss" is true of the raw endpoint only. |
+| §1 | "**GB1 (negative control) held, weakly.** … only one GB1 48-seed run exists on disk, so the 'before' is a number quoted in a document, not a re-analysable artifact. No per-seed data, no t, no interval." | **Supersede.** A second 48-seed GB1 run now exists with per-seed data, nine arms, t and bootstrap intervals: `run_20261101_164651_45ecc6b2`. `panoptes_default` reproduces at **20.40** and `−12.896, t=−5.63, 6/41/1` to three decimals, so the documented "before" is now corroborated by an artifact rather than quoted. |
+| §1 one-hot table | `GB1 \| 20.40 \| 24.71 \| +4.31 \| 0.0031 \| 34/12/2` | **Keep the row, add the endpoint.** Reproduces exactly (+4.312, t=+3.05, 34/12/2). Add: at **d≥2** the effect is **+0.75 (t=+2.31, 27/10/11)** and at **d≥3 +0.08 (t=+0.44, not separable)**; and 24.71 is still **−8.58 against ridge** and **−21.31 against `gp_onehot`**. The arm does not reach parity with any model baseline except `knn_hamming`. |
+| §1 one-hot table | `TrpB \| 49.65 \| 57.35 \| +7.71 \| 2.6e−08 \| 41/3/4` | **Narrow — this is the consequential one.** Those are seeds **0–47**. On seeds 48–95 the arm measures **56.42** and the effect **+5.00 (t=+5.33, 40/6/2)**. More importantly the effect is **raw-only: +0.10 at d≥2, t=+0.29, 22/19/7, NOT SEPARABLE**, with redundancy rising 3.63× → 3.96×. Any claim that the one-hot surrogate improves the engine must be **scoped to the raw endpoint**. |
+| §1 | "**The CreiLOV and GB1 losses are therefore unexplained.**" | **Keep, and narrow the GB1 half.** One-hot closes **33.4%** of GB1's ridge gap (−12.896 → −8.583) and no more, so the loss is not a feature-space defect either. With the veto and the `y = 0.0` WT row already eliminated, the GB1 residual is attributable only to **acquisition and selection**. Still unexplained — but the candidate set is now smaller by one. |
+| §1 quotable table | the TrpB block | **Add the one-hot row with both endpoints**, never the raw one alone: vs the strongest of seven, **+17.88 raw (t=+5.08, 37/11/0)** and **+7.85 at d≥2 (t=+15.41, 48/0/0)**. |
+| §1 | `threshold.<lib>` FAILS the pre-flight gate on the published runs… "Not fixed." | **Mark fixed.** `main`'s `30c1e94` fixes the reader. Re-run against these two unchanged run folders the gate is **14 passed, 0 FAILED, 10 not applicable, exit 0** on both landscapes. The published runs should be re-gated rather than carrying the failure. |
+| §2.3 | the rule itself | **Reinforce, no change.** The qualification bar (99.96th percentile → 0.6998 on TrpB) and the top-1% scoring bar (0.3494) are different quantities read from different manifest keys, and conflating them silently rescores a 1,600-variant tier against a few dozen variants. |
+
+### `README.md`
+
+| where | claim | required change |
+| --- | --- | --- |
+| "Across six landscapes" table, `GB1 \| −12.90 \| −5.63 \| 6/41/1 \| decisive loss` (~line 338) | Δ vs ridge presented as the GB1 result | **Same change as the HANDOFF row.** Name the comparator, add **−25.62 vs `gp_onehot`**, and add that the loss is raw-only (parity at d≥2, a win at d≥3). |
+| "…and GB1 was described as 'parity at every budget' and is a decisive loss." (~line 383) | — | **Add the endpoint qualifier.** Decisive on the raw count; not separable at d≥2. |
+| "taking the engine from 49.65 to **57.35**; on GB1 **+4.31** (p=0.0031)" (~line 410) | the one-hot surrogate as an engine improvement | **Narrow.** Report the second seed block (56.42, +5.00) and state that the TrpB gain is **entirely redundant hits** — +0.10 at d≥2, not separable. As written this sentence invites exactly the reading that the arm improves the engine, and on the diversity endpoint it does not. |
+| Baselines paragraph (~line 426) | which baselines the sweep used | **Extend.** Record that GB1 has now been measured against the full seven-arm panel, and that `gp_onehot` — not `ridge` — is its strongest raw baseline. |
+
+### What does NOT need changing
+
+- Every premise figure reproduced exactly (§2), so **no measurement in the repository is
+  withdrawn by this campaign.** What changes is which comparator the GB1 contrasts are
+  against, and the endpoint scoping of the one-hot claim.
+- `ridge` remains the registered reference baseline. Nothing here promotes `gp_onehot`;
+  promoting a second model to reference status is an amendment to a frozen hypothesis under
+  `HANDOFF` §5.4 and needs a dated amendment record, not a results document.
+- `DEFAULT_METHODS` is unchanged.

@@ -256,11 +256,15 @@ On TrpB, held-out seeds 48–95, 25 initial + 4×25 = 125 measurements:
 > against the actual strongest baseline Δ is −21.31, **outside** the interval. The sign held,
 > the magnitude did not, because the comparator was mis-predicted.
 >
-> **`threshold.trpb` and `threshold.gb1` FAIL the post-run gate** on both runs — the known
-> unfixed `QUALIFICATION_MANIFEST_PATHS` reader/schema mismatch (scalar read as a mapping).
-> Symmetric across arms and consumed only by arms that did not run, so it cannot bias a
-> paired contrast; it is nonetheless un-passed and is stated wherever these figures are.
-> Otherwise 13 passed / 10 not applicable, pre-run 4 passed / 0 failed, both landscapes.
+> **The gate: `threshold.trpb` and `threshold.gb1` failed on this branch's gate code and the
+> defect is FIXED on `main` (`30c1e94`).** Re-run against these two **unchanged** run folders
+> with main at `789b005` — same `--run-dir`, same `--arms`, nothing re-measured — the gate is
+> **14 passed, 0 FAILED, 10 not applicable, exit 0 on both landscapes**. So these runs
+> recorded the bar correctly all along and **carry no un-passed check**; the earlier FAIL was
+> the reader resolving `configuration.components.qualify_threshold` as a mapping when it is a
+> scalar and discarding the siblings beside it. The published 2026-11-01 runs that carry this
+> failure should be re-gated rather than continue to carry it. Pre-run gate 4 passed /
+> 0 failed on both.
 >
 > Every premise figure reproduced **exactly**: TrpB 51.42 and +12.875/t=+3.57/31-16-1,
 > d≥2 +7.750/t=+13.40, `gp_onehot` redundancy 7.06× vs ridge's 4.54×; GB1 20.40,
