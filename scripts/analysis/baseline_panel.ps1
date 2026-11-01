@@ -172,7 +172,14 @@ $plan = @(
 if ($Only) { $plan = $plan | Where-Object { $Only -contains $_.Key } }
 if (-not $plan) { throw "no landscapes selected; -Only must name keys from the plan" }
 
-$sweepLog = Join-Path $logDir ("panel_{0}.log" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
+# Every file this script writes carries the same start stamp. Without it the per-landscape
+# gate and stdout files have fixed names, and a second invocation - or an abandoned first
+# one whose handles have not closed - collides with them: the panel aborted on
+# "Access to the path panel_gate_trpb.txt is denied" after an interrupted attempt left the
+# file open, which looks like a permissions problem and is not one. Several sessions share
+# this results root, so a fixed name is a shared mutable name.
+$stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+$sweepLog = Join-Path $logDir ("panel_{0}.log" -f $stamp)
 "baseline panel started $(Get-Date -Format 'o')  seeds=$Seeds  methods=$methods" | Out-File $sweepLog -Encoding utf8
 "source tree $repo" | Add-Content $sweepLog
 Write-Host "panel log: $sweepLog"
@@ -237,7 +244,7 @@ foreach ($p in $plan) {
                   '--corpus-dir',$corpusDir) + $ack
     $gateRes = Invoke-Captured -Exe $py -Arguments $gateArgs -Tag "gate_$($p.Key)"
     $gate = $gateRes.ExitCode
-    $gateRes.Lines | Out-File (Join-Path $logDir "panel_gate_$($p.Key).txt") -Encoding utf8
+    $gateRes.Lines | Out-File (Join-Path $logDir "panel_gate_$($p.Key)_$stamp.txt") -Encoding utf8
     ($gateRes.Lines | Select-Object -Last 8) | ForEach-Object { Write-Host "   $_"; Add-Content $sweepLog "   $_" }
     if ($gate -ne 0) {
         $msg = "!! PREFLIGHT FAILED for $($p.Key) (exit $gate) - DO NOT QUOTE THIS LANDSCAPE"
@@ -263,7 +270,7 @@ foreach ($p in $plan) {
     # Record the run directory this landscape actually produced, so progress is never read
     # from "the newest directory" (rule 3) - during contention the newest was another
     # sweep's, and TrpB was reported as CreiLOV for an hour.
-    $runOut | Out-File (Join-Path $logDir "panel_$($p.Key)_stdout.txt") -Encoding utf8
+    $runOut | Out-File (Join-Path $logDir "panel_$($p.Key)_stdout_$stamp.txt") -Encoding utf8
     $runOut | Select-String -Pattern 'Run state|Artifacts|DEGENERATE RUN|^\s*(random|ridge|random_forest|gbm_onehot|knn_hamming|gp_onehot|greedy_measured|panoptes)|^\d+ round' |
         ForEach-Object { Write-Host "   $_"; Add-Content $sweepLog "   $_" }
     $hit = $runOut | Select-String -Pattern 'run_\d{8}_\d{6}_[0-9a-f]+' | Select-Object -First 1
@@ -287,7 +294,7 @@ foreach ($p in $plan) {
                       '--run-dir',(Join-Path $logDir $dir),
                       '--arms',$methods) + $ack
         $postRes = Invoke-Captured -Exe $py -Arguments $postArgs -Tag "gate_post_$($p.Key)"
-        $postRes.Lines | Out-File (Join-Path $logDir "panel_gate_postrun_$($p.Key).txt") -Encoding utf8
+        $postRes.Lines | Out-File (Join-Path $logDir "panel_gate_postrun_$($p.Key)_$stamp.txt") -Encoding utf8
         $head = "   POST-RUN GATE (with --run-dir) exit=$($postRes.ExitCode)"
         Write-Host $head -ForegroundColor Cyan
         Add-Content $sweepLog $head
@@ -296,7 +303,7 @@ foreach ($p in $plan) {
         if ($postRes.ExitCode -ne 0) {
             $msg = ("!! POST-RUN GATE FAILED for $($p.Key) (exit $($postRes.ExitCode)). An " +
                     "un-passed check must NOT be reported as a pass; see " +
-                    "panel_gate_postrun_$($p.Key).txt")
+                    "panel_gate_postrun_$($p.Key)_$stamp.txt")
             Write-Host $msg -ForegroundColor Yellow
             Add-Content $sweepLog $msg
             $postFailed += $p.Key
