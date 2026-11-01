@@ -156,6 +156,30 @@ corrected qualification bar accepts the identical variant set, so none of the
   for the measured phenotype → shallow enrichment above 1×; parent not functional →
   near zero. This needs no labels, unlike shell enrichment itself.
 
+> **A new selectable arm, and it is NOT a new default.** The GP surrogate's feature
+> space is now ablatable: `--ablate-components biophysical_features` removes
+> `featurize_variant_on_positions` from the GP's fit and predict inputs, which fall back
+> to one-hot over the library's declared per-site alphabets — the same encoder
+> `_one_hot_matrix` hands the baselines. To run it *beside* the default rather than in
+> place of it, name the registered method **`panoptes_onehot_surrogate`** in `--methods`:
+> both arms then share one starting sample per seed and pair within seed.
+>
+> **With the component absent nothing changes.** The engine default stays
+> `engine_biophysical`, `workers.math_worker.effective_surrogate_features` is the single
+> gate, and on the default path the GP is handed the *same array object* the biophysical
+> path always built (no one-hot column is even constructed). So every figure in this file
+> keeps its meaning. `panoptes_onehot_surrogate` is a **different arm on every landscape
+> including TrpB** and must never be reported as a correction to a TrpB figure.
+>
+> The motivation is offline and retrospective: over a *fixed* design matrix one-hot beats
+> the biophysical encoding on surrogate Spearman rho on 8 of 9 landscapes, because the
+> encoding's 6-dimensional global block is a deterministic linear function of the rest yet
+> carries ~50% of feature variance, and `build_gp_model`'s Matern is **isotropic**. That is
+> a statement about a fixed matrix, not about a campaign — see
+> [`prereg-onehot-featurisation-arm.md`](prereg-onehot-featurisation-arm.md) for why the
+> two can disagree, and `configuration.model.surrogate_features.per_arm` for which arm a
+> run folder actually measured (rule 2.12).
+
 ### What is void — do not quote these
 
 - **Every** `frontier` / `panoptes_qualify_then_optimize` number on every landscape
