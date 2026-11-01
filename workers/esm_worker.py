@@ -15,36 +15,41 @@ Constraints & Invariants (ARCHITECTURE.md §3.5, §7.2; INNOVATION_ROADMAP Phase
     4. Resilient Fallback: If Modal credentials are not configured, falls back to the
        high-fidelity biological mock worker so tests and local runs never hard-crash.
 
-KNOWN DEFECT -- the deployed app is STALE (verified 2026-11-01, not yet fixed)
------------------------------------------------------------------------------
+STALENESS -- how the deployed app silently diverges, and the test that catches it
+---------------------------------------------------------------------------------
 `modal.Function.from_name("veritasbio-esm", ...)` resolves whatever code was deployed
-to Modal, NOT the source in this file. The permanent app was deployed at commit
-`51e176d`, which PREDATES `30223d4 fix(workers): ... fix wt-marginals ...`. The
-deployed function therefore still runs the pre-fix scoring loop, which read the
-numerator from a *variant* forward pass while the denominator came from the WT pass --
-precisely the hybrid the comment in `_score_variants_core` warns is "neither
-wt-marginals nor mutant-marginals and yields scores that are not comparable to
-published values."
+to Modal, NOT the source in this file. There is no version check and no warning: a
+deploy that predates a scoring fix keeps answering, with the old protocol, forever.
 
-Measured on GB1 (56aa, sites V39/D40/G41), esm2_650m, A10G:
-
-    variant            deployed    local source
-    V39A                -0.4057        -4.6416
-    D40G                -0.8780        -4.4465
-    G41L                -0.6565        -4.6369
-    V39A:D40G:G41L      -0.4669       -13.7250
-    sum(singles)        -1.9402       -13.7250
+That happened. The app sat deployed at `51e176d`, which PREDATES
+`30223d4 fix(workers): ... fix wt-marginals ...`, so the deployed function still ran
+the pre-fix loop -- numerator from a *variant* forward pass, denominator from the WT
+pass, precisely the hybrid `_score_variants_core` warns is "neither wt-marginals nor
+mutant-marginals and yields scores that are not comparable to published values."
+Nothing in the response distinguished it. It was caught by ARITHMETIC, not by a flag:
 
 The local protocol reads every site's term from ONE shared WT forward pass, so a
-multi-mutant score is necessarily the sum of its singles -- and it is, exactly. The
-deployed function is not additive, which is the cheap signature of the old code path,
-and its magnitudes differ ~5x.
+multi-mutant score is NECESSARILY the sum of its singles. Measured on GB1 (56aa,
+sites V39/D40/G41), esm2_650m, A10G:
 
-=> Scores obtained through the deployed lookup MUST NOT be quoted as wt-marginals.
-   Fix by redeploying this module: `modal deploy workers/esm_worker.py` (the CLI needs
-   the OS trust store on an intercepted network, so prefer an in-process
-   `modal.runner.deploy_app` after `enable_os_trust_store()`). Until then, the
-   ephemeral `app.run()` path below is the only one that runs THIS source.
+    variant            stale deploy    this source    after redeploy
+    V39A                    -0.4057        -4.6416          -4.6416
+    D40G                    -0.8780        -4.4465          -4.4465
+    G41L                    -0.6565        -4.6369          -4.6369
+    V39A:D40G:G41L          -0.4669       -13.7250         -13.7250
+    sum(singles)            -1.9402       -13.7250         -13.7250
+
+The stale deploy was not additive and its magnitudes differed ~5x. Redeployed
+2026-11-01; the residual `triple - sum(singles)` is now exactly 0.000000 through the
+deployed lookup, so it runs this source.
+
+=> Non-additivity is the cheap, protocol-independent staleness check. Re-run it after
+   any change to the scoring loop, and redeploy with
+   `modal deploy workers/esm_worker.py` (on an intercepted network set
+   VERITAS_USE_OS_TRUSTSTORE=1 first, or deploy in-process via
+   `modal.runner.deploy_app` after `enable_os_trust_store()`). The ephemeral
+   `app.run()` path below always runs THIS source and is the fallback when the
+   deployed lookup cannot be trusted.
 """
 
 from __future__ import annotations
@@ -359,9 +364,9 @@ def score_variants_with_provenance(
         logger.info("Submitting %d variants to Modal A10G (%s)...", len(variant_sequences), hf_id)
         try:
             try:
-                # NOTE: this resolves the DEPLOYED code, which is currently stale and
-                # scores by the superseded hybrid protocol. See "KNOWN DEFECT" in the
-                # module docstring before quoting anything this returns.
+                # NOTE: this resolves the DEPLOYED code, not the source above. They
+                # agreed when last checked (2026-11-01, additivity residual 0.000000);
+                # see "STALENESS" in the module docstring for the check that proves it.
                 fn_getter = getattr(modal.Function, "from_name", getattr(modal.Function, "lookup", None))
                 if fn_getter is None:
                     raise AttributeError("Neither from_name nor lookup found on modal.Function")
