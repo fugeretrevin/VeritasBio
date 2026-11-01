@@ -455,8 +455,23 @@ uninterpretable even if one were observed.
 
 And the practical ordering changes. Acquiring a diffuse landscape looked like the unblock;
 on this evidence the candidate pool is close to empty, so **defining a non-degenerate
-HER2 endpoint (§3A item 1) is the cheaper and cleaner route** — made cheaper still by the
-off-by-one in §3C's own budget (113 against the registered `min(125, tier−1)` = 112).
+HER2 endpoint (§3A item 1) is the cheaper and cleaner route** — but it requires a genuinely
+new endpoint, not a budget change.
+
+> **Checked 2026-11-01, because the cheaper reading was tempting and wrong.** The sweep
+> ran HER2 at `25 + 4×22` = 113 against §3C's registered `min(125, tier−1)` = 112, so
+> there IS an off-by-one and it should be fixed. It does not open the gate. Running
+> `veritas.preflight --library her2 --budget 112 --initial-size 24` still **FAILS**: the
+> d≥2 ceiling is 113 against a raw count of 113, so **0.00%** of the hit set is removed
+> against the 5% informativeness floor. §3C already separated these two checks and stated
+> that informativeness is a library property no budget affects; its own table recorded
+> HER2 as DEGENERATE with no max budget. The saturation half passes at 112; the
+> informativeness half cannot be rescued by any budget.
+>
+> Consequence: §3A item 1 means a **new endpoint** — best-fitness, tail-discovery, or a
+> deepened tier — each of which needs its own amendment registered *before* its arm runs.
+> Substituting best-fitness post hoc for the primary is the move §3A already named as
+> the thing this document exists to prevent.
 
 Two notes on the measurement itself, so it can be repeated. `dataset-inventory.md` lists
 HER2's alphabet sizes as `20,20,19,19,18,13,12,10,9,5`; that is the **sorted multiset, not

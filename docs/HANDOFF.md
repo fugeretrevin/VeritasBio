@@ -71,19 +71,31 @@ decimals. The measurements were sound. Two **verdicts** were wrong:
   fix set can reach it. That is either a side effect or the dpp/dkl default change, and
   it **cannot be attributed from the artifacts** because both manifests wrongly claim dpp
   and dkl were enabled (fixed in `e083333`; see §2.11).
-- **HER2's gate failed on an off-by-one against our own rule.** `endpoint.her2` rejects a
-  113-measurement budget against a 113-variant tier. The registered rule
-  (`preregistration-motif-narrowness.md` §3C) is `budget = min(125, tier − 1)` = **112**.
-  `generality_sweep.sh` uses `--initial-size 25 --batch-size 22` = 113. So HER2 is not
-  "permanently untestable at this endpoint" as §3A says — it was one measurement over.
-  `--initial-size 24 --batch-size 22` gives 112.
+- **HER2's gate fails on INFORMATIVENESS, which no budget fixes.** There is also a real
+  off-by-one — `generality_sweep.sh` asks for `25 + 4×22` = 113 against §3C's registered
+  `budget = min(125, tier − 1)` = **112** — and it should be corrected. But correcting it
+  does **not** open the gate. Verified by running the gate at 112: it still FAILS, because
+  the d≥2 ceiling is 113 against a raw count of 113, i.e. **0.00% of the hit set removed
+  against a 5% floor**. §3C separates the two checks and says so explicitly:
+  informativeness is "a property of the library; no budget change affects it."
 
-**Unexpectedly, HER2 may supply the falsification test §3A called unavailable.** Between
-the two runs k-DPP went on → off, and HER2's yield **fell** by 1.65. Removing diversity
-*hurt* on the only diffuse landscape (z = −2.58), which is the predicted sign flip. Not
-claimable: confounded across a commit range, on a landscape whose gate failed. It needs
-one controlled arm — identical code, `--ablate-components dpp` against baseline, at
-budget 112. That is the highest-value experiment currently available.
+  An earlier version of this section claimed HER2 "was one measurement over the line" and
+  that 112 would pass. That was wrong — it conflated the saturation check with the
+  informativeness check. **§3A's "permanently untestable at this endpoint" stands.**
+
+**A lead on HER2 that does NOT survive scrutiny.** Between the two runs k-DPP went
+on → off and HER2's yield fell by 1.65 (t=−8.29), which is the direction §4's sign flip
+predicts on a diffuse landscape. It is **not** usable, for three independent reasons, any
+one of which is sufficient:
+
+1. Confounded across a commit range, not a single-component change.
+2. HER2's endpoint cannot discriminate two methods at all (above), so no arm run there is
+   a registered test — and no budget choice changes that.
+3. §3F: HER2's diffuse band is itself almost entirely **marginal skew**, not tail
+   structure. Even a clean sign flip there would be confounded with library sparsity.
+
+So do **not** spend a run on a controlled HER2 DPP arm expecting to close the
+registration. It would be mechanism evidence on an un-gated landscape at best.
 
 > **Careful:** `--ablate-components dpp` and `dkl` are currently **no-ops**, since both
 > default off. An arm so labelled is identical to the default arm. To measure either, set
