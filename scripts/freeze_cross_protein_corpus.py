@@ -36,6 +36,13 @@ Usage
 
 Default corpus directory is `downloads/combingym/` (gitignored). Pass
 --corpus-dir to point elsewhere.
+
+That default is resolved against the REAL repository root, not the checkout. It is
+gitignored, so a git worktree cannot hold it, and resolving it against the worktree
+reported all 29 pinned files "absent" - which made `veritas.preflight`'s `corpus.lock`
+check FAIL on every landscape run from a worktree while `verify` against the real
+mirror reported 29/29. A missing mirror is an environment fact; it is never evidence
+that the corpus has drifted from the pin (HANDOFF rule 2.8, docs/agents/paths.md).
 """
 from __future__ import annotations
 
@@ -52,7 +59,29 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from xml.etree import ElementTree
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CORPUS_DIR = REPO_ROOT / "downloads" / "combingym"
+
+
+def _default_corpus_dir() -> Path:
+    """`downloads/combingym` at the REAL repository root, not at this checkout.
+
+    `veritas.paths` owns root resolution and must not be reimplemented here; the
+    fallback exists only so this script keeps running if it is ever copied out of the
+    repository, and it is the checkout path - i.e. the previous behaviour - never a
+    silently different location.
+    """
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    try:
+        from veritas import paths as _paths
+    except ImportError:
+        return REPO_ROOT / "downloads" / "combingym"
+    try:
+        return _paths.corpus_dir(must_exist=False)
+    except _paths.PathResolutionError:
+        return REPO_ROOT / "downloads" / "combingym"
+
+
+DEFAULT_CORPUS_DIR = _default_corpus_dir()
 DEFAULT_LOCK = REPO_ROOT / "scripts" / "data" / "cross_protein_corpus.lock.json"
 DEFAULT_STATS = REPO_ROOT / "scripts" / "data" / "cross_protein_corpus_stats.json"
 

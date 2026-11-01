@@ -108,6 +108,14 @@ RESULTS_DIRS: Tuple[str, ...] = (
 
 DATASET_RELATIVE = "scripts/data"
 
+#: The local mirror of the pinned upstream CombinGym corpus. Gitignored, like the results
+#: roots, and for the same reason it must resolve against the REAL repository root: a
+#: worktree cannot hold it, so resolving it against the checkout reports the corpus as
+#: ABSENT and the pre-flight gate's `corpus.lock` check fails for environment reasons on
+#: every landscape. That is not a hypothetical - it failed on all three landscapes of the
+#: spatial-veto ablation campaign while `verify` reported 29/29 against the real mirror.
+CORPUS_RELATIVE = "downloads/combingym"
+
 _GIT_TIMEOUT_SECONDS = 60
 
 
@@ -385,12 +393,21 @@ def explain_repo_path(
 
     label = description or f"{relative_clean!r}"
     extra = ""
-    if relative_clean.split("/")[0] in RESULTS_DIRS:
+    head = relative_clean.split("/")[0]
+    if head in RESULTS_DIRS:
         extra = (
-            f"\n{relative_clean.split('/')[0]}/ is GITIGNORED, so it exists only where a "
+            f"\n{head}/ is GITIGNORED, so it exists only where a "
             "run actually wrote it - never in a git worktree, and never in a fresh "
             "clone. An empty result here means no run has written it in THIS repository, "
             "not that the data is missing."
+        )
+    elif relative_clean == CORPUS_RELATIVE:
+        extra = (
+            f"\n{head}/ is GITIGNORED, so the corpus mirror exists only where "
+            "`freeze_cross_protein_corpus.py fetch` actually downloaded it - never in a "
+            "git worktree. Its absence HERE says nothing about whether the corpus "
+            "matches the pin; run `verify` against the real root's mirror before "
+            "concluding anything about corpus integrity."
         )
     elif search == "auto" and local != real:
         extra = (
@@ -437,6 +454,29 @@ def results_dir(
     return explain_repo_path(
         name, start=start, search="repository", must_exist=must_exist,
         allow_git=allow_git, description=f"the gitignored results root {name!r}",
+    ).path
+
+
+def corpus_dir(
+    *,
+    start: Optional[Path] = None,
+    must_exist: bool = True,
+    allow_git: bool = True,
+) -> Path:
+    """
+    The gitignored local mirror of the pinned upstream corpus (`downloads/combingym`).
+
+    Resolved against the REAL repository root only, for the same reason as
+    :func:`results_dir`: nothing gitignored can be in a worktree, so the worktree is not
+    a candidate and its absence there is never a finding about the corpus.
+
+    `must_exist=False` returns it as a write target (what `fetch` needs) without
+    swapping it for another location.
+    """
+    return explain_repo_path(
+        CORPUS_RELATIVE, start=start, search="repository", must_exist=must_exist,
+        allow_git=allow_git,
+        description=f"the gitignored corpus mirror {CORPUS_RELATIVE!r}",
     ).path
 
 

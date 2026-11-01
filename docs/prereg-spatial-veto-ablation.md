@@ -3,6 +3,12 @@
 **Written 2026-11-01, before any ablated arm had been run or read.** Committed before the
 campaign started. Branch `worktree-agent-a038e3b42e920227a`.
 
+> **The campaign has run. Results: [`spatial-veto-ablation-results.md`](spatial-veto-ablation-results.md).**
+> H-VETO is **falsified on all three landscapes**. Nothing below is amended — this file is
+> the record of what was committed in advance, and the two sub-predictions it got wrong
+> (both seed counts on eqFP611-red, mis-specified against structural ties) are reported in
+> the results document rather than corrected here.
+
 The hypothesis under test, stated so it can fail:
 
 > **H-VETO:** `workers/spatial_filter.py::filter_spatially_viable_variants`, applied to the

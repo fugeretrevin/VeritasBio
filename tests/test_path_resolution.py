@@ -64,7 +64,8 @@ class _SyntheticRepo:
         _git("config", "user.email", "test@example.invalid", cwd=self.main)
         _git("config", "user.name", "Test", cwd=self.main)
         (self.main / "AGENTS.md").write_text("marker\n", encoding="utf-8")
-        (self.main / ".gitignore").write_text("benchmark_comparison_results/\n", encoding="utf-8")
+        (self.main / ".gitignore").write_text(
+            "benchmark_comparison_results/\ndownloads/\n", encoding="utf-8")
         _git("add", ".", cwd=self.main)
         _git("commit", "-m", "first", cwd=self.main)
 
@@ -80,8 +81,11 @@ class _SyntheticRepo:
         _git("add", ".", cwd=self.main)
         _git("commit", "-m", "second", cwd=self.main)
 
-        # Gitignored, so it exists only in the main checkout - never in the worktree.
+        # Gitignored, so these exist only in the main checkout - never in the worktree.
         (self.main / "benchmark_comparison_results" / "run_0001").mkdir(parents=True)
+        corpus = self.main / "downloads" / "combingym" / "Data"
+        corpus.mkdir(parents=True)
+        (corpus / "Data_summary.xlsx").write_bytes(b"pinned")
 
 
 class TestMainCheckoutResolution(unittest.TestCase):
@@ -173,6 +177,79 @@ class TestWorktreeResolution(unittest.TestCase):
         )
         self.assertEqual(resolution.source, "repository")
         self.assertNotIn(str(self.repo.worktree), str(resolution.path))
+
+    def test_the_gitignored_corpus_mirror_resolves_into_the_real_root(self) -> None:
+        """The same incident as the run folders, on the path the pre-flight gate reads.
+
+        `freeze_cross_protein_corpus.py` derived its default corpus directory from its
+        own `__file__`, i.e. the CHECKOUT. `downloads/` is gitignored, so from a worktree
+        all 29 pinned files reported "absent" and `veritas.preflight`'s `corpus.lock`
+        check FAILED on every landscape - while `verify` against the real root's mirror
+        reported 29/29. A gate that fails for environment reasons is a gate nobody can
+        act on, and rule 2.5's commitment ("the pin must not change") was unreadable
+        from a worktree.
+        """
+        from veritas.paths import corpus_dir, explain_repo_path
+
+        resolved = corpus_dir(start=self.repo.worktree)
+        self.assertEqual(resolved, self.repo.main / "downloads" / "combingym")
+        self.assertTrue((resolved / "Data" / "Data_summary.xlsx").is_file())
+
+        resolution = explain_repo_path(
+            "downloads/combingym", start=self.repo.worktree, search="repository")
+        self.assertEqual(resolution.source, "repository")
+        self.assertNotIn(str(self.repo.worktree), str(resolution.path))
+
+    def test_the_freeze_script_default_is_the_real_root_from_a_worktree(self) -> None:
+        """The fix has to reach the script's own default, not only `veritas.paths`.
+
+        The gate calls `freeze.main(["--corpus-dir", str(corpus_dir), ...])` with
+        `corpus_dir` defaulted from `freeze.DEFAULT_CORPUS_DIR`, so a correct
+        `paths.corpus_dir` with a stale script default would still fail the check.
+        """
+        import importlib.util
+
+        from veritas import paths
+
+        script = paths.repo_path("scripts/freeze_cross_protein_corpus.py")
+        spec = importlib.util.spec_from_file_location("_freeze_default_probe", script)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        default = Path(module.DEFAULT_CORPUS_DIR)
+        self.assertEqual(default.name, "combingym")
+        self.assertEqual(default.parent.name, "downloads")
+        # From anywhere, the default must sit under the REAL root, never a worktree.
+        self.assertEqual(default.parent.parent, paths.repository_root())
+        self.assertNotIn("worktrees", str(default))
+
+    def test_a_missing_corpus_mirror_does_not_implicate_the_pin(self) -> None:
+        """Rule: an absent gitignored directory is not a finding.
+
+        The message must say the mirror is gitignored AND that its absence says nothing
+        about corpus integrity, because the previous failure was read as corpus drift.
+        """
+        from veritas.paths import PathResolutionError, corpus_dir
+
+        with TemporaryDirectory(prefix="veritas_paths_bare_") as raw:
+            bare = Path(raw).resolve()
+            (bare / "AGENTS.md").write_text("marker\n", encoding="utf-8")
+            with self.assertRaises(PathResolutionError) as caught:
+                corpus_dir(start=bare, allow_git=False)
+        message = str(caught.exception)
+        self.assertIn("gitignored", message.lower())
+        self.assertIn("corpus integrity", message.lower())
+        self.assertIn(str(bare / "downloads" / "combingym"), message)
+
+    def test_a_corpus_write_target_may_be_absent_but_is_never_relocated(self) -> None:
+        """`fetch` needs a write target; it must not be swapped for another location."""
+        from veritas.paths import corpus_dir
+
+        with TemporaryDirectory(prefix="veritas_paths_bare_") as raw:
+            bare = Path(raw).resolve()
+            (bare / "AGENTS.md").write_text("marker\n", encoding="utf-8")
+            target = corpus_dir(start=bare, must_exist=False, allow_git=False)
+        self.assertEqual(target, bare / "downloads" / "combingym")
 
     def test_a_file_missing_from_the_worktree_is_found_in_the_real_root(self) -> None:
         # Incident 2: the worktree predates the commit that added the reference file.

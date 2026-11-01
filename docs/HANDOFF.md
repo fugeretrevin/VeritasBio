@@ -40,6 +40,25 @@ top-1% hits excluding the initial sample. Reproduce with
 | CR9114-H1 | **+3.17** | **+6.10** | 41 / 5 / 2 | win — but development data |
 | HER2 | — | — | — | **gate FAILED, un-quotable** |
 
+> **The three losses are NOT caused by the spatial viability veto, and on two of them the
+> veto was helping.** Measured 2026-11-01 against the pre-registration in
+> [`prereg-spatial-veto-ablation.md`](prereg-spatial-veto-ablation.md); results in
+> [`spatial-veto-ablation-results.md`](spatial-veto-ablation-results.md). 48 paired seeds,
+> `--ablate-components spatial_filter`. Ablating it closes **+27.4%** of the eqFP611-red gap
+> (0 → 4.21 against ridge's 15.35; 28 seeds better, **0 worse**) but **−4.1%** on CreiLOV
+> (6.94 → 4.90) and **−33.1%** on GB1 (20.40 → 16.13), both with bootstrap intervals
+> excluding zero. The veto is the complete cause of eqFP611-red's **zero** — its reachable-hit
+> ceiling there is exactly 0 of 82 — and a contributing cause of about a quarter of that
+> loss. It is **not** the cause of the CreiLOV or GB1 losses. Every figure in the table below
+> reproduced bit-for-bit in that campaign, paired statistics included.
+>
+> Two caveats recorded there and not fixed: **`threshold.<lib>` FAILS the pre-flight gate on
+> the three runs this table is quoted from**, which nobody saw because
+> `generality_sweep.ps1` runs the gate without `--run-dir` and the check is then
+> NOT-APPLICABLE; and CreiLOV's veto reads `8QI9` (phototropin), where **all 11 mapped
+> positions disagree with the library's parent residue**, so its result is about pool
+> density, not biophysics.
+
 **One win on development data, one tie, three losses.** CR9114 is development data under
 rule 2.4 — the intervention was designed against its measured failure — so it is
 mechanism evidence, not generalization evidence. The day1 §7a pre-registration predicted
