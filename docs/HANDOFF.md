@@ -165,6 +165,26 @@ advance and so cannot be re-narrated now.
 > **eqFP611-blue, +1.625 at t=+7.83 on 38 of 48 seeds**, on a landscape the intervention
 > was not designed against.
 >
+> **A NEW LANDSCAPE IS NOW RESERVED, AND IT IS UNSCORED.** `sacas9_sg5` — KKH-SaCas9,
+> eight sites, **combinatorially complete** at 1,296 of 1,296 genotypes, a sixth structural
+> family. Sealed by [`prereg-reserved-sacas9.md`](prereg-reserved-sacas9.md) on 2026-11-01
+> **before any arm ran on it**, and that document is the authority: read it before touching
+> this landscape. Three things in it will surprise you. The library definition is validated
+> four ways and all four agree. The label is **one named sgRNA (sg5, PAM `TGCCGT`) read from
+> the pinned raw table, not CombinGym's clean `Mean`** — the six sgRNAs are nearly
+> rank-independent (|rho| <= 0.15), and on all three readouts the `Mean` averages the KKH
+> parent already sits at the **99.6th–100.00th percentile**, so every member of their top
+> tier is *worse than the starting enzyme*. And **the registered 125-measurement endpoint
+> does not transfer**: `check_endpoint_viability` FAILS it (budget 125 against a 13-variant
+> 1% tier, the CR6261 degeneracy), so the tier is deepened to **5% = 65 hits** by the
+> protocol's own `TIER_LADDER`/`MIN_TIER_MEMBERS` rule and the budget scaled to **50 = 10 +
+> 4 × 10**, at which the gate PASSES (d>=2 ceiling 53 of 65, 18.46% removed). The
+> pre-registered prediction is that **the engine loses or is not separable**, and a loss
+> there cannot be blamed on the fabricated `y = 0.0` WT row: it sits **0.0243 label SDs**
+> from this landscape's centre, the smallest violation in the corpus. sg6 and sg7 are the
+> pre-declared second and third reserve, and are *one protein with three phenotypes* — not
+> three families.
+>
 > **Not a default change, deliberately.** The drafted, unexecuted recommendation: use the
 > measured WT label; omit the row where no measured label exists; give it a real
 > measurement's `1e-2` variance rather than `1e-4`; ship as a **named policy version**

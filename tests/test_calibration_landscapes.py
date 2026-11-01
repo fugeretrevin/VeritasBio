@@ -29,12 +29,21 @@ def gb1():
     return load_landscape("gb1")
 
 
-def test_the_registry_holds_the_nine_study_landscapes():
-    assert set(REGISTRY) == {
-        "trpb", "gb1", "her2",
-        "eqfp611_blue", "eqfp611_red", "creilov",
-        "cr9114_h1", "cr6261_h1", "cr6261_h9",
-    }
+#: The nine landscapes of the cross-protein study, all of which have been measured.
+STUDY_LANDSCAPES = {
+    "trpb", "gb1", "her2",
+    "eqfp611_blue", "eqfp611_red", "creilov",
+    "cr9114_h1", "cr6261_h1", "cr6261_h9",
+}
+#: Added after the study, reserved and UNSCORED. `docs/prereg-reserved-sacas9.md`.
+RESERVED_LANDSCAPES = {"sacas9_sg5"}
+
+
+def test_the_registry_holds_the_nine_study_landscapes_and_the_reserve():
+    assert set(REGISTRY) == STUDY_LANDSCAPES | RESERVED_LANDSCAPES
+    # The distinction is load-bearing: a reserved landscape must not be swept up by
+    # anything that iterates "the study landscapes", or it stops being reserved.
+    assert not (STUDY_LANDSCAPES & RESERVED_LANDSCAPES)
 
 
 def test_trpb_eligible_universe_and_hit_set(trpb):
@@ -125,6 +134,65 @@ def test_eqfp611_channels_share_a_universe_size_and_hit_tier():
     assert blue.n_hits == red.n_hits == 82
     assert blue.ceilings((2, 3))[2] == 39
     assert red.ceilings((2, 3))[2] == 28
+
+
+# ======================================================================================
+# The reserved landscape. These anchors are the pre-registration's own numbers
+# (`docs/prereg-reserved-sacas9.md` §3-§5) and they pin the library definition, the
+# label and the endpoint. If one of them moves, the seal is broken and the document is
+# no longer describing the landscape anybody would score.
+# ======================================================================================
+def test_sacas9_sg5_is_combinatorially_complete_over_the_declared_design():
+    ls = load_landscape("sacas9_sg5")
+    assert ls.spec.positions == (887, 888, 889, 985, 986, 988, 989, 991)
+    assert ls.spec.parent_residues == "LNANNLLR"
+    # 1,296 genotypes less the parent, which is not a library member.
+    assert ls.n_universe == 1_295
+    assert ls.n_rows_read == 1_295
+    assert ls.n_dropped_unparseable == ls.n_dropped_duplicate == 0
+    assert ls.n_dropped_nonfinite == ls.n_dropped_unlabelled == 0
+    # Complete: the mixed 2.2.3.3.3.2.2.3 product is 1,296, every member present.
+    alphabets = [len({c[i] for c in ls.combos}) for i in range(ls.spec.n_sites)]
+    assert sorted(alphabets) == [2, 2, 2, 2, 3, 3, 3, 3]
+    product = 1
+    for width in alphabets:
+        product *= width
+    assert product == ls.n_universe + 1
+    assert int(ls.depths.min()) == 1 and int(ls.depths.max()) == 8
+
+
+def test_sacas9_sg5_has_no_measured_threshold_and_says_so():
+    """The correct state for a reserved landscape: no run has scored it (rule 2.3)."""
+    ls = load_landscape("sacas9_sg5")
+    assert not ls.threshold_source.startswith("manifest")
+    assert ls.threshold == pytest.approx(ls.computed_threshold, rel=1e-12)
+
+
+def test_sacas9_sg5_registered_tier_and_endpoint():
+    """The 1% tier cannot discriminate; the protocol's own ladder picks 5%."""
+    import math
+
+    ls = load_landscape("sacas9_sg5")
+    # The ladder: 1% is 13 members and 2% is 26, both under MIN_TIER_MEMBERS = 30.
+    assert ls.spec.tier_fraction == 0.05
+    assert ls.tier_size == 65 == math.ceil(0.05 * 1_295)
+    values = sorted(ls.fitness.tolist(), reverse=True)
+    threshold = values[ls.tier_size - 1]
+    hits = [(v, c) for v, c in zip(ls.fitness.tolist(), ls.combos) if v >= threshold]
+    assert len(hits) == 65
+    from veritas.calibration.endpoint import USABLE, diversity_ceiling
+    from veritas.preflight import check_endpoint_viability
+
+    ceiling = diversity_ceiling(hits, (2,))[2]
+    assert ceiling == 53
+    verdict = check_endpoint_viability(
+        library="sacas9_sg5", raw=65, ceiling=ceiling, distance=2, budget=50,
+        tier_size=65)
+    assert verdict.passed and verdict.detail["verdict"] == USABLE
+    # And the registered 125-measurement budget on the 1% tier does NOT survive it.
+    assert check_endpoint_viability(
+        library="sacas9_sg5", raw=13, ceiling=12, distance=2, budget=125,
+        tier_size=13).failed
 
 
 def test_computed_percentile_agrees_with_every_recorded_manifest_threshold():
