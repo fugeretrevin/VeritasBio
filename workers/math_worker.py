@@ -195,6 +195,62 @@ def featurize_variant_on_positions(
     return np.concatenate([linear_vec, global_vec, interaction_vec])
 
 
+#: The 20-letter alphabet a one-hot block falls back to at a position for which the
+#: caller declared no allele set - a saturated library, or a position the evidence
+#: added to `active_positions` that the library spec does not describe.
+ONE_HOT_FALLBACK_ALPHABET: Tuple[str, ...] = tuple("ACDEFGHIKLMNPQRSTVWY")
+
+
+def featurize_variant_one_hot(
+    variant: Variant,
+    active_positions: Sequence[int],
+    wt_sequence: str,
+    allowed_residues: Optional[Dict[int, Sequence[str]]] = None,
+) -> np.ndarray:
+    """The library's one-hot encoding of a variant, as a drop-in for the physchem block.
+
+    One block per active position, one slot per residue that position can take. The
+    alphabet is the caller's declared allele set where there is one and
+    `ONE_HOT_FALLBACK_ALPHABET` otherwise, so the width is a function of
+    (active_positions, allowed_residues) alone and is therefore constant across every
+    candidate within one selection round - which is what the surrogate requires.
+
+    WHY THIS EXISTS, and what it is a test OF
+    -----------------------------------------
+    `docs/HANDOFF-2026-10-31-reachability.md` section 4 measured, offline and on
+    identical one-hot features, that a plain GP is at PARITY with one-hot ridge on 7 of
+    9 landscapes (CreiLOV: ridge rho 0.908, GP 0.912 held out). The engine's GP, on this
+    module's physicochemical/epistatic featurisation, ranked its own in-run ballot on
+    eqFP611-red at rho = -0.0069. Same model family, same landscape, opposite result -
+    which points at the FEATURES rather than the model class, and is consistent with the
+    5-dimensional property delta being unable to separate two residues with similar
+    physicochemistry and different phenotypes.
+
+    Reached only through `--ablate-components physchem_features`. It changes no default:
+    without that component every call site keeps `featurize_variant_on_positions`.
+    """
+    variant.validate_against_wt(wt_sequence)
+    mut_dict: Dict[int, SingleMutation] = {m.position: m for m in variant.mutations}
+    declared: Dict[int, Tuple[str, ...]] = {
+        int(pos): tuple(aas) for pos, aas in (allowed_residues or {}).items()
+    }
+    chunks: List[np.ndarray] = []
+    for pos in active_positions:
+        alphabet = declared.get(pos) or ONE_HOT_FALLBACK_ALPHABET
+        block = np.zeros(len(alphabet), dtype=np.float64)
+        mutation = mut_dict.get(pos)
+        residue = mutation.mut_aa if mutation is not None else wt_sequence[pos - 1]
+        try:
+            block[alphabet.index(residue.upper())] = 1.0
+        except ValueError:
+            # A residue outside the declared alphabet is left as an all-zero block
+            # rather than raising: the generator can propose one, and a featuriser that
+            # threw here would turn a reachability defect into a crashed round.
+            pass
+        chunks.append(block)
+    return np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float64)
+
+
 # -----------------------------------------------------------------------------
 # Bayesian Optimization & Expected Improvement
 # -----------------------------------------------------------------------------
@@ -1660,6 +1716,23 @@ ABLATABLE_COMPONENTS: Set[str] = {
     # viability VETO, which is a different stage and was previously unreachable by any
     # flag - see the note at its call site in select_next_micro_batch for what it removes.
     "spatial_filter",
+    # `physchem_features` replaces the hand-built physicochemical/epistatic encoding with
+    # the library's one-hot encoding (`featurize_variant_one_hot`). It is the arm
+    # docs/HANDOFF-2026-10-31-reachability.md section 4 pre-registered as the
+    # highest-value next experiment, and it is the only switch in this set that targets
+    # the surrogate's INPUT rather than a selection stage. Measured motivation:
+    # scripts/analysis/pool_hit_reachability.py finds that on CreiLOV the post-veto
+    # ballot already contains enough hits for a perfect ranker to match ridge, so the
+    # shortfall is in ranking, and the in-run ranking correlation is near zero while
+    # one-hot ridge reaches rho 0.908 held out on the same landscape.
+    "physchem_features",
+    # `wt_anchor` omits the SYNTHETIC wild-type training row that
+    # select_next_micro_batch injects into every fit with the literal label y = 0.0,
+    # regardless of the assay's scale. See its call site for the per-landscape distance
+    # between that label and the real ones; on CreiLOV it is 15.68 label standard
+    # deviations and on TrpB and GB1 it is 0.35 and 0.20, which is why the row is
+    # invisible on the two landscapes every quotable engine figure comes from.
+    "wt_anchor",
 }
 
 
@@ -1971,20 +2044,66 @@ def select_next_micro_batch(
         # for its structural cross-term, which is its documented no-structure path.
         spatial_map = None
 
+    # The surrogate's input encoding, bound ONCE so training rows and candidate rows
+    # cannot be featurised by different functions - a mismatch that would be a silent
+    # dimension or scale error rather than a visible failure. The default binding is
+    # exactly the previous direct call, `spatial_map` included, so no un-ablated run
+    # changes. `physchem_features` swaps in the library one-hot; see
+    # `featurize_variant_one_hot` for what that arm tests.
+    if "physchem_features" in ablated:
+        def _featurize(v: Variant) -> np.ndarray:
+            return featurize_variant_one_hot(
+                v, active_positions, wt_sequence, allowed_residues=allowed_residues
+            )
+        logger.info(
+            "physchem_features ABLATED: the surrogate reads the library one-hot encoding "
+            "(%d active positions) instead of the physicochemical/epistatic encoding",
+            len(active_positions),
+        )
+    else:
+        def _featurize(v: Variant) -> np.ndarray:
+            return featurize_variant_on_positions(
+                v, active_positions, wt_sequence, spatial_map=spatial_map
+            )
+
     # Step 1: Featurize training evidence if present (with residual prior mean subtraction)
     X_train_list: List[np.ndarray] = []
     y_train_list: List[float] = []
     y_train_direct_list: List[float] = []
     train_priors_list: List[float] = []
-    sample_variances_list: List[float] = [1e-4]  # WT sequence reference variance
+    sample_variances_list: List[float] = []
 
     # Include WT sequence baseline as score 0.0 (reference)
-    wt_var = Variant(notation="WT", mutations=[])
-    wt_features = featurize_variant_on_positions(wt_var, active_positions, wt_sequence, spatial_map=spatial_map)
-    X_train_list.append(wt_features)
-    y_train_list.append(0.0)
-    y_train_direct_list.append(0.0)
-    train_priors_list.append(0.0)
+    #
+    # This row is SYNTHETIC: no assay produced it, and the label is the literal 0.0
+    # whatever the assay's scale is. Measured distance from 0.0 to the centre of each
+    # landscape's real labels, in label standard deviations:
+    #
+    #   creilov 15.68 | cr9114_h1 14.14 | cr6261_h1 11.00 | cr6261_h9 8.35
+    #   eqfp611_blue 1.19 | eqfp611_red 0.80 | her2 0.56 | trpb 0.35 | gb1 0.20
+    #
+    # On TrpB and GB1 - the two landscapes every quotable engine figure comes from -
+    # the assay really is centred near zero, so the row is close to true and harmless.
+    # On CreiLOV the real labels occupy 2.793..4.196, so this row sits 11.6 units below
+    # the minimum: 8.3x the entire label range, asserted at variance 1e-4 while a real
+    # measurement defaults to 1e-2. Every round's surrogate is fitted through it.
+    #
+    # `wt_anchor` makes it omittable so the arm can be measured instead of argued about.
+    # Nothing here changes by default: without that component the row is added exactly
+    # as before, variance included.
+    if "wt_anchor" not in ablated:
+        sample_variances_list.append(1e-4)  # WT sequence reference variance
+        wt_var = Variant(notation="WT", mutations=[])
+        wt_features = _featurize(wt_var)
+        X_train_list.append(wt_features)
+        y_train_list.append(0.0)
+        y_train_direct_list.append(0.0)
+        train_priors_list.append(0.0)
+    else:
+        logger.info(
+            "wt_anchor ABLATED: the synthetic wild-type training row (y=0.0, variance "
+            "1e-4) is omitted; the surrogate sees only measured labels"
+        )
 
     f_best = 0.0
 
@@ -1999,7 +2118,7 @@ def select_next_micro_batch(
                         notation=":".join(m.to_string() for m in muts) if muts else "WT",
                         mutations=muts,
                     )
-                    feat = featurize_variant_on_positions(var_obj, active_positions, wt_sequence, spatial_map=spatial_map)
+                    feat = _featurize(var_obj)
                     X_train_list.append(feat)
 
                     # Subtract prior mean to train on functional assay residuals
@@ -2036,7 +2155,7 @@ def select_next_micro_batch(
                         notation=":".join(m.to_string() for m in muts) if muts else "WT",
                         mutations=muts,
                     )
-                    feat = featurize_variant_on_positions(var_obj, active_positions, wt_sequence, spatial_map=spatial_map)
+                    feat = _featurize(var_obj)
                     X_train_list.append(feat)
                     prior_val = prior_mean_fn(var_obj) if prior_mean_fn else 0.0
                     y_train_list.append(float(f_score) - prior_val)
@@ -2157,7 +2276,7 @@ def select_next_micro_batch(
 
             if evidence and len(evidence) >= 5:
                 try:
-                    feat = featurize_variant_on_positions(v, active_positions, wt_sequence, spatial_map=spatial_map)
+                    feat = _featurize(v)
                     mu_res, std_res = surrogate.predict(feat.reshape(1, -1), return_std=True)
                     return float(base_prior + mu_res[0] + 0.6 * std_res[0])
                 except Exception:
@@ -2253,7 +2372,7 @@ def select_next_micro_batch(
 
     # Step 4: Featurize candidate pool and predict GP residual mean + uncertainty
     X_cand = np.array(
-        [featurize_variant_on_positions(c, active_positions, wt_sequence, spatial_map=spatial_map) for c in novel_candidates],
+        [_featurize(c) for c in novel_candidates],
         dtype=np.float64,
     )
 
