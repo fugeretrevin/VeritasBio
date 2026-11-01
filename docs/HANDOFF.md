@@ -192,6 +192,18 @@ corrected qualification bar accepts the identical variant set, so none of the
 > on GB1 the candidate pool moved too (7,833 distinct at 0.801 deep-enrichment against 8,832
 > at 0.690) and **+4.31 is confounded with pool composition.** CreiLOV's pool did not move,
 > which is what makes its null a clean one.
+>
+> **The CreiLOV figures above were measured THROUGH the fabricated `y = 0.0` wild-type
+> training row** (`wt_anchor`, which is `worktree-agent-a83565bcde59a81f3`'s component and
+> is not in this branch's vocabulary). That row is 15.68 label SDs from CreiLOV's centre and
+> is worth +29.75 hits on its own; one-hot is worth nothing there alone and **+7.08 once the
+> anti-correlated prior is ablated**. So the CreiLOV null is real and now *explained* rather
+> than overturned — and it is also why the arm works on TrpB and GB1, the only two landscapes
+> where that row is nearly true (0.35 and 0.20 SDs). There are **two independent
+> implementations** of this arm, `biophysical_features` here and `physchem_features` on
+> `bb925c9`; they agree on the CreiLOV answer and differ in scope (this one moves the GP's
+> columns only; that one also moves `AssayAdaptedHead`, the linear readout where the
+> biophysical features win on GB1). §4b of the results doc compares them line by line.
 
 ### What is void — do not quote these
 

@@ -143,13 +143,23 @@ three fired, CreiLOV did not. F5 (Δ ≤ −5, p<0.01 anywhere): no.
 | GB1 | −1.0, [−6, +3] | **+4.31** | **no, and the sign was wrong** |
 | TrpB | 0.0, [−5, +5] | **+7.71** | **no** |
 
-The CreiLOV prediction, including "the gap to ridge stays near −49 and is not closed", was
-right for the reason given. The GB1 and TrpB predictions were wrong, and the F3/F4
-thresholds were set loosely enough relative to those point predictions that being wrong did
-not trip them. **The honest reading is not "the pre-registration held"**; it is that the
-§1.2 argument — a fixed-matrix rho advantage need not survive the engine's self-selected
-training distribution — is **correct on CreiLOV and wrong on the two saturated libraries**,
-and that F3 and F4 were mis-calibrated as tests of it.
+The CreiLOV prediction, including "the gap to ridge stays near −49 and is not closed" and
+the verdict "not separable", was right for the reason given: +0.79 at p=0.33, −49.50 on
+0/48. **That prediction is confirmed, not falsified** — it predicted a null and a null is
+what happened, and `bb925c9` reaches the same null independently at 12 seeds (+0.167,
+p=0.74). The GB1 and TrpB predictions were wrong, and the F3/F4 thresholds were set loosely
+enough relative to those point predictions that being wrong did not trip them. **The honest
+reading is not "the pre-registration held"**; it is that the §1.2 argument — a fixed-matrix
+rho advantage need not survive the engine's self-selected training distribution — is
+**correct on CreiLOV and wrong on the two saturated libraries**, and that F3 and F4 were
+mis-calibrated as tests of it. No bar has been moved.
+
+One prediction in §3 of the pre-registration was wrong for a reason worth separating out.
+It argued the CreiLOV null would come from the *training distribution the engine selects*.
+§4b shows the mechanism is more specific and larger: a **synthetic** training row the engine
+injects itself, at `y = 0.0` and 15.68 label SDs from CreiLOV's centre, plus a prior that is
+anti-correlated with fitness. "The engine chooses its own training data" was the right
+shape; "and one of the rows is fabricated" was not anticipated.
 
 ---
 
@@ -195,8 +205,15 @@ redundant share is a third as large, so there is much less for the switch to rep
 predicts the observed pattern and the rho protocol did not see it, because rho was measured
 on a uniform random sample rather than on the engine's own selections.
 
-**(c) Regime.** Where the engine is already competitive — TrpB ahead of ridge, GB1 within
-13 hits — better ranking converts into hits. Where it is 50 behind, it does not.
+**(c) Regime, and §4b gives it a mechanism.** Where the engine is already competitive —
+TrpB ahead of ridge, GB1 within 13 hits — better ranking converts into hits. Where it is 50
+behind, it does not. §4b sharpens this from an observation into a cause: TrpB and GB1 are the
+two landscapes where the engine's fabricated `y = 0.0` wild-type row is nearly true (0.35 and
+0.20 label SDs from centre) and where the calibrated prior is not anti-correlated with
+fitness. On CreiLOV that row is 15.68 SDs out and the prior's rho is −0.249, so the
+surrogate's column basis is downstream of two much larger errors. **The feature space can
+only matter where the rest of the fit is not already broken** — which is the same conclusion
+as (a), arrived at from the engine's side rather than from the size of the deficit.
 
 ### Confound, disclosed: the proposal distribution is downstream of the GP
 
@@ -225,30 +242,128 @@ GP**, so the candidate pool is downstream of it. Measured from `generation_cover
 
 ---
 
-## 5. How this composes with the candidate-pool audit
+## 4b. A second, independent implementation — do the two agree?
+
+`worktree-agent-a83565bcde59a81f3`, commit `bb925c9`, implements the same idea
+independently as the ablation component **`physchem_features`** plus
+`featurize_variant_one_hot`, with `tests/test_onehot_feature_ablation.py`. It also adds
+**`wt_anchor`** (below), which this branch does not have.
+
+**On the question, the two agree.** Both make one-hot a selectable arm, both leave the
+un-ablated path untouched and pin that with a regression test, and both measure the same
+CreiLOV answer: **one-hot alone is a null there.** Their +0.167 at 12 paired seeds (t=0.19,
+p=0.74, 4/5/3) and this branch's **+0.79 at 48 paired seeds (p=0.33, 25/16/7)** are
+consistent, and the 48-seed version is the one with power.
+
+**On scope, they differ, and the difference is a finding.**
+
+| | this branch, `biophysical_features` | `bb925c9`, `physchem_features` |
+| --- | --- | --- |
+| what moves | **only the GP's fit and predict inputs** | **all five featurisation call sites**, so `X_train` / `X_cand` are one-hot throughout |
+| `AssayAdaptedHead` | keeps the biophysical encoding | **moves to one-hot** |
+| k-DPP similarity kernel | keeps the biophysical encoding | moves to one-hot (inert today: `DPP_DIVERSITY_ENABLED` is False) |
+| encoder | `one_hot_encode_genotypes`, **the same function** `_one_hot_matrix` gives the baselines | `featurize_variant_one_hot`, a second implementation |
+| site set | `active_positions ∪ declared library sites` | `active_positions` |
+| alphabet fallback | `CANONICAL_AA_ORDER`, derived from the gatekeeper's set and asserted sorted | a literal 20-letter tuple |
+| off-alphabet residue | caller callback; default warns once, block left zero | silently zero |
+| short genotype | refused, with an equal-length assertion (rule 2.1) | n/a — fills WT from the mutation dict, also rule-2.1-safe |
+| selectable as a method | yes, `panoptes_onehot_surrogate`, so both arms pair **within seed in one run folder** | via `--ablate-components`, so the arms are separate run folders |
+| manifest | `configuration.model.surrogate_features{,.per_arm}`, read from the engine's single resolver | covered by `configuration.components.states` |
+
+Two of those have consequences worth measuring rather than arguing:
+
+1. **`AssayAdaptedHead` is a linear readout, and under a linear readout the biophysical
+   features are *better* — on GB1 by +0.103 rho.** `means = assay_adapter.predict(X_cand,
+   zero_shot_scores=gp_means)` whenever evidence ≥ 5, so the head is on the live ranking
+   path. Prediction, stated here before anyone runs it: on **GB1** the broader arm should do
+   *worse* than this branch's +4.31, because it also moves the one component the biophysical
+   encoding is known to win. Measuring both arms on GB1 at 48 paired seeds separates "the
+   GP's columns" from "the featurisation" and is the cheapest next experiment on this
+   question.
+2. **Only this branch's arm can honestly be described as "the engine on the baselines'
+   encoding",** because its GP is handed the columns `_one_hot_matrix` produces, from the
+   same function, asserted column-for-column in
+   `test_the_ablated_gp_sees_exactly_the_baselines_one_hot_encoding`. Two implementations of
+   one encoding is the drift risk HANDOFF §5.7 warns about; if the branches are reconciled,
+   the shared encoder should survive and the second implementation should not.
+
+Neither is wrong. They answer adjacent questions — "is the GP's column basis the problem?"
+versus "is the featurisation the problem?" — and the names should stay distinct if both
+survive, exactly as `spatial` and `spatial_filter` do.
+
+### The confound that dominates both, and which this branch cannot ablate
+
+`bb925c9` root-caused something larger: `select_next_micro_batch` injects **one synthetic
+training row per round for the wild type with the literal label `y = 0.0`**, at variance
+1e-4 against a real measurement's 1e-2, whatever the assay's scale. CreiLOV's real labels
+occupy 2.793–4.196, so that row sits 11.6 units below the minimum — **15.68 label standard
+deviations** from centre — and every round's surrogate is fitted through it. TrpB (0.35 SDs)
+and GB1 (0.20) are the only landscapes genuinely centred near zero, which is why it
+survived: they are the two landscapes every quotable engine figure comes from.
+
+Their 12-seed CreiLOV ladder: `wt_anchor` alone **+29.75** (t=12.17, 12/0/0),
+`wt_anchor,prior,physchem` **+41.08** (t=19.48), i.e. one row recovers 59% of the 50-hit
+deficit and all three recover 82%. One-hot is worth nothing alone and **+7.08 once the
+anti-correlated prior is ablated** — the prior's rho against true fitness on CreiLOV is
+**−0.249**, negative in 48 of 48 campaigns, and `mu(x) = m(x) + mu_res(x)` adds the two on
+one scale, so an anti-correlated prior cancels and then reverses a weakly-correct surrogate.
+
+**Therefore: every CreiLOV figure in §2 of this document was measured *through* that
+fabricated row.** `wt_anchor` is not in this branch's `ABLATABLE_COMPONENTS` — it is
+`bb925c9`'s component — so the confound is disclosed here and not removed. The right place
+to confirm the ladder at 48 seeds is that branch, which has all three switches; this branch
+can only vary `prior` and `biophysical_features`.
+
+That reframes §2's CreiLOV null rather than overturning it. The null stands and is now
+**explained**: the GP's column basis cannot matter much while the fit is dragged through a
+point 15.68 label SDs away and the posterior is then added to a prior that is
+anti-correlated with fitness. It also explains why the arm *did* work on TrpB (+7.71) and
+GB1 (+4.31): those are precisely the two landscapes where the fabricated row is nearly true
+(0.35 and 0.20 SDs), so the surrogate's features are free to matter.
+
+---
+
+## 5. How this composes with the other audits
 
 On **CreiLOV** the −49.5 gap to one-hot ridge survives an arm that (i) is strictly better
 on a fixed design matrix, (ii) uses the baselines' own encoder, (iii) holds every other
-stage fixed, and (iv) leaves the candidate pool unchanged to within 1%. Together with the
-spatial-veto result — ablating the veto *costs* CreiLOV 2.04 hits (t=−2.33), so the veto was
-helping by raising pool hit density 2.8× — two of the live hypotheses are now eliminated:
+stage fixed, and (iv) leaves the candidate pool unchanged to within 1%. Three hypotheses
+are now eliminated there, each by a measurement that went the other way or nowhere:
 
-* **the surrogate's feature basis** — ruled out here, with the pool held constant;
-* **the spatial viability veto** — ruled out by the veto study, in the opposite direction
-  to the one predicted.
+* **the surrogate's feature basis** — ruled out *as a standalone cause* here, with the
+  candidate pool held constant: +0.79 at p=0.33, and the gap still −49.50 on 0 of 48 seeds.
+  Independently confirmed at 12 seeds on `bb925c9` (+0.167, p=0.74);
+* **the spatial viability veto** — ruled out, and in the *opposite* direction to the
+  prediction: ablating it **costs** CreiLOV 2.04 hits (t=−2.33) and GB1 4.27 (t=−3.22),
+  because it was raising the candidate pool's hit density 2.8× and 1.8×;
+* **candidate-pool depth** — ruled out on all nine landscapes: `max_mutation_depth` does
+  not cap the pool, because `recombine_lead_variants` carries it deeper; the pre-veto ballot
+  spans depths 1–12 on CreiLOV and reaches 99.9% of its hit set; and the depth ceiling costs
+  1 hit of 1,655 there and 0 elsewhere. The coverage figures in §4's confound table are
+  consistent with this: both arms' deep-enrichment is **0** on CreiLOV not because the pool
+  is shallow but because `arm_deep_proposed` is measured against CreiLOV's maximum depth 15,
+  which holds 10 variants and no hits at all.
 
-What remains on CreiLOV, and what this result points at:
+So the pool is not the binding stage on CreiLOV, and neither is the GP's column basis.
+**What remains is the ranking**, and `bb925c9` has now measured the two terms inside it:
 
-1. **The content of the candidate pool** — not its density, which both studies now
-   implicate as *helping*, but what the generator can reach at all. CreiLOV is
-   reachability-limited at 13.3%, the engine covers 3.1% of the universe at mean proposed
-   depth 5.57, and its deep-enrichment is **0** on both arms. A candidate-pool depth audit
-   speaks to exactly this, and this result strengthens its hypothesis by removing a
-   competing one rather than merely failing to contradict it.
-2. **The acquisition and the non-GP ranking terms** — the calibrated biophysical prior
-   `m(x)` the posterior is built on, the Pareto filter, and greedy EI+Thompson. HANDOFF
-   already records greedy beating EI+Thompson by +11.27 on TrpB and round 1 selecting zero
-   of 193 offered depth-4 candidates.
+1. **The fabricated wild-type training row** (`y = 0.0` at variance 1e-4, 15.68 label SDs
+   from CreiLOV's centre). Worth **+29.75 hits** on its own at 12 seeds — 59% of the whole
+   deficit. This is the dominant cause and must **not** be attributed to featurisation.
+2. **The anti-correlated calibrated prior** (`rho = −0.249` against true fitness, negative
+   in 48 of 48 campaigns; `mu(x) = m(x) + mu_res(x)` adds it to the GP residual on one
+   scale). Worth +4.25 alone, and it is what *gates* the featurisation: one-hot is worth
+   **+7.08 once the prior is ablated** and nothing while it is in place.
+3. The acquisition and Pareto stages, worth about +0.25 together — small, and consistent
+   with HANDOFF's finding that greedy beats EI+Thompson by +11.27 on TrpB, which is a
+   different landscape and a different regime.
+
+**The composed statement.** On CreiLOV the featurisation is not a standalone cause and the
+pool is not the binding stage; the two live causes are a synthetic training row and a prior
+that is anti-correlated with fitness, and the featurisation only becomes worth anything once
+the second is removed. On **GB1 and TrpB** — the two landscapes where that synthetic row is
+nearly true at 0.20 and 0.35 label SDs — the featurisation *is* worth something on its own,
++4.31 and +7.71, which is the same mechanism seen from the other side.
 
 On **GB1** and **TrpB** the surrogate basis is *not* ruled out — it is a real, significant
 campaign effect there, confounded with pool composition on GB1 and not on TrpB.
