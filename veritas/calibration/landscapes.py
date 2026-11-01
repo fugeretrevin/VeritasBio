@@ -31,7 +31,7 @@ import math
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -243,34 +243,127 @@ class Landscape:
         return int(math.ceil(self.spec.tier_fraction * self.n_universe))
 
 
+#: Where a run manifest records the top-1% threshold. Current schema first.
+#:
+#: Both shapes are read because this function used to know only the legacy one, and the
+#: consequence was silent and forbidden: on no match the caller RECOMPUTES the 99th
+#: percentile, which rule 2.3 prohibits outright ("Read `top1.threshold` from each run's
+#: own `manifest.json`. Do not recompute it."). Today's manifests are
+#: `manifest_schema_version` 2.x and record `results.top1.threshold_value`, so every
+#: modern run was being skipped. It went unnoticed only because 160 legacy run
+#: directories survive in the main checkout and satisfied the legacy path; it would have
+#: begun failing unconditionally the moment they were pruned, and it already fails inside
+#: a git worktree, where the gitignored results root is not visible.
+MANIFEST_THRESHOLD_PATHS: Tuple[Tuple[str, ...], ...] = (
+    ("results", "top1", "threshold_value"),
+    ("top1", "threshold"),
+)
+
+#: Where a run manifest records the library it scored against. Current schema first.
+MANIFEST_LIBRARY_PATHS: Tuple[Tuple[str, ...], ...] = (
+    ("configuration", "dataset", "library"),
+    ("dataset",),
+)
+
+#: Where the synthetic-dataset flag lives. Current schema first.
+MANIFEST_SYNTHETIC_PATHS: Tuple[Tuple[str, ...], ...] = (
+    ("configuration", "dataset", "synthetic"),
+    ("dataset", "synthetic"),
+)
+
+
+def _manifest_dig(mapping: Any, path: Sequence[str]) -> Any:
+    node: Any = mapping
+    for key in path:
+        if not isinstance(node, Mapping) or key not in node:
+            return None
+        node = node[key]
+    return node
+
+
+def _manifest_first(mapping: Any, paths: Sequence[Sequence[str]]) -> Any:
+    for path in paths:
+        found = _manifest_dig(mapping, path)
+        if found is not None:
+            return found
+    return None
+
+
+def _describes_landscape(library: Mapping[str, Any], spec: LandscapeSpec) -> bool:
+    """Whether a manifest's library block is this landscape's.
+
+    Matched on positions AND parent residues rather than on the key, because that works
+    identically in both manifest schemas and is strictly stronger - it catches a library
+    renamed under the same geometry, and a key reused for a different geometry. The key
+    is checked too when present, so a rename cannot pass silently either.
+    """
+    positions = library.get("positions", library.get("active_site_positions"))
+    if tuple(int(p) for p in (positions or ())) != spec.positions:
+        return False
+    if str(library.get("parent_residues") or "") != spec.parent_residues:
+        return False
+    key = library.get("key")
+    return key is None or str(key) == spec.key
+
+
 def _manifest_threshold(spec: LandscapeSpec) -> Optional[Tuple[float, str]]:
     """`top1.threshold` from this landscape's own runs, or None when none exist.
 
     Every non-synthetic manifest whose library matches is read and they must AGREE:
     two runs of one landscape scoring against different thresholds would mean the
     eligible universe moved between them, which is a finding, not something to average.
+
+    Returning None sends the caller to a recomputed 99th percentile, which rule 2.3
+    forbids - so the two reasons for None are kept apart and reported. "No run exists
+    yet" is legitimate and is exactly the state a newly reserved landscape is in. "Runs
+    exist for this landscape but their threshold could not be read" is a defect, and it
+    RAISES rather than falling through, because that is the case where a real threshold
+    is silently replaced by an invented one.
     """
     if not RUNS_DIR.is_dir():
         return None
+
     found: Dict[float, List[str]] = {}
+    n_read = 0
+    n_synthetic = 0
+    n_other_landscape = 0
+    matched_without_threshold: List[str] = []
+
     for manifest_path in sorted(RUNS_DIR.glob("*/manifest.json")):
         try:
             m = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        dataset = m.get("dataset") or {}
-        if dataset.get("synthetic"):
+        n_read += 1
+        if _manifest_first(m, MANIFEST_SYNTHETIC_PATHS):
+            n_synthetic += 1
             continue
-        if tuple(dataset.get("active_site_positions") or ()) != spec.positions:
+        library = _manifest_first(m, MANIFEST_LIBRARY_PATHS)
+        if not isinstance(library, Mapping) or not _describes_landscape(library, spec):
+            n_other_landscape += 1
             continue
-        if (dataset.get("parent_residues") or "") != spec.parent_residues:
+        threshold = _manifest_first(m, MANIFEST_THRESHOLD_PATHS)
+        if threshold is None or isinstance(threshold, Mapping):
+            matched_without_threshold.append(manifest_path.parent.name)
             continue
-        top1 = m.get("top1") or {}
-        if "threshold" not in top1:
-            continue
-        found.setdefault(float(top1["threshold"]), []).append(manifest_path.parent.name)
+        found.setdefault(float(threshold), []).append(manifest_path.parent.name)
+
+    if matched_without_threshold and not found:
+        raise ValueError(
+            f"{spec.key}: {len(matched_without_threshold)} run manifest(s) describe this "
+            f"landscape but record no threshold at any known path "
+            f"({', '.join('.'.join(p) for p in MANIFEST_THRESHOLD_PATHS)}) - e.g. "
+            f"{matched_without_threshold[0]}. Rule 2.3 forbids recomputing it, so this "
+            f"cannot fall back to a percentile. Add the manifest's actual path to "
+            f"MANIFEST_THRESHOLD_PATHS, or establish why a scored run recorded none."
+        )
+
     if not found:
+        # Legitimate: no run has scored this landscape yet. The caller computes a
+        # bootstrap percentile and the source string says so, naming what was read -
+        # a reader must be able to tell "nothing exists" from "nothing was recognised".
         return None
+
     if len(found) > 1:
         detail = "; ".join(
             f"{t!r} in {len(runs)} run(s) e.g. {runs[0]}" for t, runs in sorted(found.items())
@@ -281,6 +374,23 @@ def _manifest_threshold(spec: LandscapeSpec) -> Optional[Tuple[float, str]]:
         )
     threshold, runs = next(iter(found.items()))
     return threshold, f"manifest ({len(runs)} run(s), e.g. {runs[0]})"
+
+
+def _no_manifest_reason(spec: LandscapeSpec) -> str:
+    """Why no manifest threshold was available, for the `threshold_source` string.
+
+    The old string was the single literal "computed (no run manifest exists)", which was
+    FALSE whenever manifests existed but none were recognised - the exact condition the
+    schema drift created. A source field that lies about its own provenance is worse than
+    one that is merely unhelpful.
+    """
+    if not RUNS_DIR.is_dir():
+        return f"computed (no results directory at {RUNS_DIR})"
+    n_manifests = sum(1 for _ in RUNS_DIR.glob("*/manifest.json"))
+    if not n_manifests:
+        return "computed (no run manifest exists)"
+    return (f"computed ({n_manifests} manifest(s) read, none scored {spec.key}) - "
+            f"NOT a measured threshold")
 
 
 def load_landscape(key: str, *, strict_rows: bool = True) -> "Landscape":
@@ -390,7 +500,7 @@ def _load_cached(key: str, strict_rows: bool) -> "Landscape":
     computed = float(np.percentile(fitness, 99.0))
     manifest = _manifest_threshold(spec)
     threshold, source = (manifest if manifest is not None
-                         else (computed, "computed (no run manifest exists)"))
+                         else (computed, _no_manifest_reason(spec)))
     depths = np.asarray(
         [depth(c, spec.parent_residues) for c in combos], dtype=np.int16
     )

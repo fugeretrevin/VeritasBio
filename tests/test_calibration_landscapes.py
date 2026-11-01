@@ -115,3 +115,150 @@ def test_computed_percentile_agrees_with_every_recorded_manifest_threshold():
     for key in ("trpb", "gb1", "her2"):
         ls = load_landscape(key)
         assert ls.threshold == pytest.approx(ls.computed_threshold, rel=1e-12)
+
+
+# ======================================================================================
+# Manifest threshold reading (rule 2.3: read it, never recompute it)
+#
+# `_manifest_threshold` knew only the legacy flat schema (`dataset.*`, `top1.threshold`)
+# while today's runs are `manifest_schema_version` 2.x and record
+# `configuration.dataset.library` and `results.top1.threshold_value`. Every modern run
+# was therefore skipped, and on no match the loader RECOMPUTES the 99th percentile -
+# which rule 2.3 forbids outright. It went unnoticed because 160 legacy run directories
+# survive in the main checkout and satisfied the legacy path, and because the recomputed
+# value happens to agree numerically on all nine landscapes today. Latent, not harmless:
+# it would have begun failing silently the moment the legacy directories were pruned.
+# ======================================================================================
+import json  # noqa: E402
+
+from veritas.calibration import landscapes as lsmod  # noqa: E402
+
+_SPEC = REGISTRY["creilov"]
+
+
+def _write_manifest(directory, name, payload):
+    run = directory / name
+    run.mkdir(parents=True, exist_ok=True)
+    (run / "manifest.json").write_text(json.dumps(payload), encoding="utf-8")
+    return run
+
+
+def _current_schema(threshold, *, key="creilov"):
+    """A manifest in the shape runs actually write today."""
+    return {
+        "manifest_schema_version": "2.1",
+        "configuration": {"dataset": {
+            "synthetic": False,
+            "library": {"key": key, "positions": list(_SPEC.positions),
+                        "parent_residues": _SPEC.parent_residues},
+        }},
+        "results": {"top1": {"threshold_value": threshold, "n_hits": 1655}},
+    }
+
+
+def _legacy_schema(threshold):
+    return {
+        "dataset": {"synthetic": False,
+                    "active_site_positions": list(_SPEC.positions),
+                    "parent_residues": _SPEC.parent_residues},
+        "top1": {"threshold": threshold},
+    }
+
+
+def test_the_current_manifest_schema_is_read(tmp_path, monkeypatch):
+    monkeypatch.setattr(lsmod, "RUNS_DIR", tmp_path)
+    _write_manifest(tmp_path, "run_a", _current_schema(4.125))
+    assert lsmod._manifest_threshold(_SPEC) == (
+        4.125, "manifest (1 run(s), e.g. run_a)")
+
+
+def test_the_legacy_manifest_schema_is_still_read(tmp_path, monkeypatch):
+    """Both shapes, because 160 legacy directories are live evidence."""
+    monkeypatch.setattr(lsmod, "RUNS_DIR", tmp_path)
+    _write_manifest(tmp_path, "run_old", _legacy_schema(4.125))
+    threshold, source = lsmod._manifest_threshold(_SPEC)
+    assert (threshold, source.startswith("manifest")) == (4.125, True)
+
+
+def test_a_matched_run_with_no_readable_threshold_raises(tmp_path, monkeypatch):
+    """The decisive test. Rule 2.3 forbids recomputing, so a run that scored this
+    landscape and whose threshold cannot be read must NOT fall through to a percentile.
+    Falling through is what made the schema drift invisible."""
+    monkeypatch.setattr(lsmod, "RUNS_DIR", tmp_path)
+    payload = _current_schema(4.125)
+    del payload["results"]["top1"]["threshold_value"]
+    _write_manifest(tmp_path, "run_broken", payload)
+    with pytest.raises(ValueError, match="record no threshold at any known path"):
+        lsmod._manifest_threshold(_SPEC)
+
+
+def test_manifests_that_disagree_still_raise(tmp_path, monkeypatch):
+    """Two thresholds for one landscape means the eligible universe moved."""
+    monkeypatch.setattr(lsmod, "RUNS_DIR", tmp_path)
+    _write_manifest(tmp_path, "run_a", _current_schema(4.125))
+    _write_manifest(tmp_path, "run_b", _current_schema(4.130))
+    with pytest.raises(ValueError, match="disagree on top1.threshold"):
+        lsmod._manifest_threshold(_SPEC)
+
+
+def test_a_run_for_another_landscape_is_not_mistaken_for_this_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(lsmod, "RUNS_DIR", tmp_path)
+    other = dict(_current_schema(9.6))
+    other["configuration"]["dataset"]["library"] = {
+        "key": "trpb", "positions": list(REGISTRY["trpb"].positions),
+        "parent_residues": REGISTRY["trpb"].parent_residues}
+    _write_manifest(tmp_path, "run_trpb", other)
+    assert lsmod._manifest_threshold(_SPEC) is None
+
+
+def test_a_renamed_key_on_matching_geometry_is_refused(tmp_path, monkeypatch):
+    """Matching on geometry AND key, so neither a rename nor a reused key passes."""
+    monkeypatch.setattr(lsmod, "RUNS_DIR", tmp_path)
+    _write_manifest(tmp_path, "run_renamed", _current_schema(4.125, key="creilov_v2"))
+    assert lsmod._manifest_threshold(_SPEC) is None
+
+
+def test_a_synthetic_run_is_skipped_in_both_schemas(tmp_path, monkeypatch):
+    monkeypatch.setattr(lsmod, "RUNS_DIR", tmp_path)
+    payload = _current_schema(4.125)
+    payload["configuration"]["dataset"]["synthetic"] = True
+    _write_manifest(tmp_path, "run_synth", payload)
+    assert lsmod._manifest_threshold(_SPEC) is None
+
+
+def test_the_fallback_reason_does_not_claim_no_manifest_exists(tmp_path, monkeypatch):
+    """The old source string was the single literal "computed (no run manifest exists)",
+    which was FALSE whenever manifests existed but none were recognised - exactly the
+    condition the schema drift created. A provenance field that lies about its own
+    provenance is worse than one that is merely unhelpful."""
+    monkeypatch.setattr(lsmod, "RUNS_DIR", tmp_path)
+    assert lsmod._no_manifest_reason(_SPEC) == "computed (no run manifest exists)"
+
+    other = dict(_current_schema(9.6))
+    other["configuration"]["dataset"]["library"] = {
+        "key": "trpb", "positions": list(REGISTRY["trpb"].positions),
+        "parent_residues": REGISTRY["trpb"].parent_residues}
+    _write_manifest(tmp_path, "run_trpb", other)
+    reason = lsmod._no_manifest_reason(_SPEC)
+    assert "none scored creilov" in reason
+    assert "NOT a measured threshold" in reason
+    assert "no run manifest exists" not in reason
+
+
+def test_reading_the_current_schema_moved_no_hit_set():
+    """The safety check for the fix itself.
+
+    Seven of nine landscapes were silently recomputing before it. If the manifest
+    threshold differed from the recomputed percentile anywhere, every figure on that
+    landscape would move. Measured: it differs nowhere, so the defect was latent and no
+    published figure changes. This test is what makes that claim re-checkable rather
+    than a one-off assertion in a commit message.
+    """
+    import numpy as np
+
+    for key in sorted(REGISTRY):
+        ls = load_landscape(key)
+        recomputed = int(np.count_nonzero(ls.fitness >= ls.computed_threshold))
+        assert ls.n_hits == recomputed, (
+            f"{key}: manifest threshold yields {ls.n_hits} hits, recomputed percentile "
+            f"yields {recomputed} - a figure on this landscape has moved")
