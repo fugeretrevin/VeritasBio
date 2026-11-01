@@ -2123,11 +2123,23 @@ def select_next_micro_batch(
     #   creilov 15.68 | cr9114_h1 14.14 | cr6261_h1 11.00 | cr6261_h9 8.35
     #   eqfp611_blue 1.19 | eqfp611_red 0.80 | her2 0.56 | trpb 0.35 | gb1 0.20
     #
-    # On TrpB and GB1 - the two landscapes every quotable engine figure comes from -
-    # the assay really is centred near zero, so the row is close to true and harmless.
-    # On CreiLOV the real labels occupy 2.793..4.196, so this row sits 11.6 units below
-    # the minimum: 8.3x the entire label range, asserted at variance 1e-4 while a real
-    # measurement defaults to 1e-2. Every round's surrogate is fitted through it.
+    # On CreiLOV the real labels occupy 2.793..4.196, so this row sits **2.793 raw units**
+    # below the minimum, which is **11.62 label standard deviations** and **1.99x** the
+    # entire label range - asserted at variance 1e-4 while a real measurement defaults to
+    # 1e-2. Every round's surrogate is fitted through it.
+    #
+    # ARITHMETIC CORRECTION, 2026-11-01. This comment previously read "11.6 units below
+    # the minimum: 8.3x the entire label range". That mixed units - 11.6 is the figure in
+    # STANDARD DEVIATIONS and was printed as raw units, and 8.3x followed from it - and
+    # both numbers are wrong. The figure the argument actually rests on is the 15.68
+    # standard deviations from the label distribution's CENTRE, above.
+    #
+    # And the ordering above does NOT predict the effect. Measured at 48 paired seeds
+    # (docs/wt-anchor-fix-results.md): removing this row is worth +31.77 top-1% hits on
+    # CreiLOV and NOTHING anywhere else, while CR9114 - which violates the scale by 14.14
+    # standard deviations, second only to CreiLOV - is a tight null at +0.04 against a
+    # minimum detectable effect of 1.29. The label-scale theory of this defect is
+    # FALSIFIED: distance from zero does not predict the damage. Do not restate it.
     #
     # `wt_anchor` makes it omittable so the arm can be measured instead of argued about,
     # and `wt_anchor_mode="measured"` REPAIRS it instead of deleting it. Nothing here

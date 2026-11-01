@@ -8,6 +8,16 @@ Falsifiability is the point. Every number below is a commitment, and §7 says ex
 would make each one wrong. A result that contradicts a prediction here is reported as a
 falsification, not re-narrated.
 
+> **OUTCOME POINTER, added 2026-11-01 after the campaign, the only edit to this file.**
+> Nothing below is changed, removed or softened — no bar is moved and no prediction is
+> restated. The scored result, prediction by prediction, is in
+> [`docs/wt-anchor-fix-results.md`](wt-anchor-fix-results.md) §5. In short: §5a's CreiLOV
+> prediction and §5b's and §5c's aggregates **held**; §5a's CR9114 and §5b's TrpB
+> predictions are **falsified**; and the `err-SD` metric this document reasons from is
+> **falsified as an explanatory metric** — CR9114 ranks 2nd of nine on it and is a tight
+> null, GB1 ranks 7th and carries the only separable repair-specific gain. The
+> label-scale theory in either form does not predict the effect.
+
 ---
 
 ## 1. The defect, and why ablation is not the fix

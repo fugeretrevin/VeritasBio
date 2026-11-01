@@ -9,14 +9,26 @@ each landscape's real labels, in label standard deviations, is:
     creilov 15.68 | cr9114_h1 14.14 | cr6261_h1 11.00 | cr6261_h9 8.35
     eqfp611_blue 1.19 | eqfp611_red 0.80 | her2 0.56 | trpb 0.35 | gb1 0.20
 
-TrpB and GB1 - the two landscapes every quotable engine figure comes from - really are
-centred near zero, so the row is nearly true there and the defect is invisible. On
-CreiLOV the real labels occupy 2.793..4.196 and the row sits 11.6 units below the
-minimum, which is 8.3x the whole label range.
+On CreiLOV the real labels occupy 2.793..4.196, so the row sits **2.793 raw units** below
+the minimum, which is **11.62 label standard deviations** and **1.99x** the whole label
+range.
+
+ARITHMETIC CORRECTION, 2026-11-01: this docstring previously said "11.6 units below the
+minimum, which is 8.3x the whole label range". That mixed units - 11.6 is the figure in
+standard deviations, printed as raw units - and both numbers are wrong. The figure the
+argument rests on is the 15.68 standard deviations from the label distribution's centre.
+
+**AND THE ORDERING ABOVE DOES NOT PREDICT THE EFFECT.** Measured at 48 paired seeds
+(docs/wt-anchor-fix-results.md): omitting this row is worth +31.77 top-1% hits on CreiLOV
+(t=35.88, 48/0/0) and is a null on TrpB (+1.46, p=0.12), GB1 (+0.54, p=0.69) and - the
+falsifying case - CR9114 (+0.04, p=0.93 against a minimum detectable effect of 1.29),
+which violates the label scale by 14.14 standard deviations, second only to CreiLOV. The
+label-scale theory of this defect is FALSIFIED. The numbers above are still the correct
+description of the ROW; they are not an explanation of the DAMAGE.
 
 Measured consequence, CreiLOV, 12 paired seeds, ridge held constant at 59.17:
 omitting this one row moves the engine from 9.08 to 38.83 top-1% hits
-(+29.75, t = 12.17, better on 12 of 12 seeds) - 59% of a 50.08-hit deficit.
+(+29.75, t = 12.17, better on 12 of 12 seeds), confirmed at 48 seeds as +31.77.
 
 These tests assert the MECHANISM: that the switch removes exactly one row, that the row
 it removes is the synthetic one, and that the default path still adds it. They do not

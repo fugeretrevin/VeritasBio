@@ -625,8 +625,10 @@ LIBRARIES: Dict[str, LibrarySpec] = {
         # The landscape the defect is largest on, and the parent IS measured upstream:
         # log10 fluorescence 4.0232 (three replicates 4.0583 / 4.0641 / 3.9356). The
         # prepared CSV dropped the row. Real labels occupy 2.793..4.196, so the engine's
-        # `y = 0.0` anchor is wrong by 16.74 label sd - 4.02 absolute units, 2.9x the
-        # entire label range. 87.99th percentile; not a hit (threshold 4.1223).
+        # `y = 0.0` anchor is wrong about this parent by 4.023 RAW UNITS, which is 16.74
+        # label standard deviations and 2.87x the entire label range (1.403). 87.99th
+        # percentile; not a hit (threshold 4.1223). Units are named on every figure here
+        # because mixing them is what produced the withdrawn "8.3x the label range".
         parent_measured_fitness=4.023229753000034,
         parent_fitness_source=(
             "downloads/combingym/Data/DMS/Clean/CreiLOV_clean.xlsx, the `wt` row's "
