@@ -78,9 +78,16 @@ advance and so cannot be re-narrated now.
 > held constant at 59.167. `select_next_micro_batch` injects one row per round for the
 > wild type carrying the literal label `y = 0.0` whatever the assay's scale, at variance
 > `1e-4` against a real measurement's `1e-2`. CreiLOV's real labels occupy
-> **2.793–4.196**, so that row sits **11.6 units below the minimum — 8.3× the entire
-> label range, 15.68 label SDs from centre** — and every round's surrogate is fitted
-> through it.
+> **2.793–4.196**, so that row sits **2.793 raw units below the minimum — 11.62 label SDs,
+> or 1.99× the entire label range — and 15.68 label SDs from the centre** of the
+> distribution, and every round's surrogate is fitted through it.
+>
+> > **Arithmetic corrected 2026-11-01.** An earlier version of this paragraph said "11.6
+> > units below the minimum — 8.3× the entire label range". Both were unit-mixing: "11.6
+> > units" was the SD count stated as raw units, and "8.3×" was 11.62 SDs divided by the
+> > 1.403 *raw* range. The direction and the argument are unaffected — the
+> > 15.68-SDs-from-centre figure, which the argument rests on, is correct — but the
+> > magnitudes were wrong and propagated into four files.
 >
 > | arm | engine | Δ vs default | t | B/W/T |
 > | --- | --- | --- | --- | --- |
@@ -92,18 +99,68 @@ advance and so cannot be re-narrated now.
 > | `wt_anchor,prior` | 43.083 | +34.000 | 12.44 | 12/0/0 |
 > | **`wt_anchor,prior,physchem_features`** | **50.167** | **+41.083** | **19.48** | **12/0/0** |
 >
-> −50.08 closes to **−9.00**, and best fitness reaches **4.1880 ± 0.0001 against ridge's
-> 4.1851 ± 0.0043** — above it. **TrpB (0.35 label SDs) and GB1 (0.20) are the only
-> landscapes genuinely centred near zero, i.e. the only two where this defect is
-> invisible — and they are exactly the two every quotable engine figure here came from.**
-> CR9114 violates the scale by 14.14 SDs and the engine *wins* there, so this is not a
-> complete theory of the result set.
+> **CONFIRMED AT 48 PAIRED SEEDS, 2026-11-01.** Branch `confirm-wt-anchor-48`
+> (`90472c2`), merged cleanly against `main` `b5f090b`. Pre-registration `5474ea5`
+> committed **before any arm ran**; the one amendment (`e3812c9`, CR9114's comparator) is
+> dated 10:43:43 against that landscape's first arm starting 10:50:46, so before any
+> CR9114 outcome existed on disk. Δ = ablated − default, paired by seed.
 >
-> **Not a default change, deliberately.** `wt_anchor` is an ablatable component; dropping
-> or correcting the row moves TrpB and GB1 and would re-base every submitted number.
-> **Next:** `--ablate-components wt_anchor` on CreiLOV at **48** paired seeds, then
-> cross-landscape, where the scale-violation ordering predicts TrpB/GB1 unaffected as a
-> built-in negative control.
+> | landscape | SDs | ridge | default | ablated | **Δ** | **t** | **B/W/T** | boot95 | MDE | verdict |
+> | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+> | **creilov** | 15.68 | 57.229 | 6.938 | 38.708 | **+31.771** | **+35.88** | **48/0/0** | **[+30.00, +33.44]** | 1.77 | **CONFIRMED** |
+> | trpb | 0.35 | 31.104 | 49.646 | 51.104 | +1.458 | +1.60 | 27/18/3 | [−0.29, +3.25] | 1.83 | not separable |
+> | gb1 | 0.20 | 33.292 | 20.396 | 20.938 | +0.542 | +0.41 | 26/20/2 | [−2.02, +3.11] | 2.67 | not separable |
+> | **cr9114_h1** | 14.14 | 1.833 | 5.000 | 5.042 | **+0.042** | **+0.09** | 18/21/9 | **[−0.85, +0.94]** | 0.92 | **tight null** |
+> | eqfp611_blue | 1.19 | 8.792 | 9.521 | 11.146 | **+1.625** | **+7.83** | 38/1/9 | [+1.23, +2.02] | 0.42 | small, real |
+> | eqfp611_red | 0.80 | — | — | — | — | — | — | — | — | **REFUSED** (budget gate, 71 of 81) |
+>
+> The measured +31.771 lands inside the pre-registered [+24, +36], and the bootstrap's
+> **lower** bound (+30.00) clears the dominance threshold of +25.04 fixed in advance. It
+> accounts for **63.2%** of the −50.292 deficit. Three-way stack
+> `wt_anchor,prior,physchem_features` = **+42.583** (t=+46.24, 48/0/0). **The engine still
+> loses CreiLOV**: −18.521 ablated, −7.708 with all three.
+>
+> **The negative controls HELD. Every quotable TrpB and GB1 figure survives.** One
+> precision that must travel with them: *"not separable" is not "identical"* — TrpB's
+> point estimate sits just under its MDE of 1.826, so a real one-to-three-hit effect is
+> not excluded, and those figures would need re-stating if the default ever changes.
+>
+> **THE LABEL-SCALE THEORY IS FALSIFIED, and the falsification was pre-registered.** The
+> theory said distance from zero predicts the effect. CR9114 violates the scale by 14.14
+> SDs **and by 2.47 label-ranges — worse than CreiLOV's 1.99** — and measures Δ=+0.042
+> against an MDE of 0.924: a tight null, not a power failure. Relative-effect ordering:
+> creilov (+457.9%) ≫ blue (+17.1%) > trpb (+2.9%) ≈ gb1 (+2.7%) > **cr9114 (+0.8%)** —
+> CR9114 at the wrong end of *both* candidate covariates. So state the finding narrowly:
+> **the row is the dominant cause of the CreiLOV loss specifically; it is not a general
+> explanation of the engine's losses, and distance from zero does not predict its effect.**
+> The CR9114 counter-example stands, supporting the baseline panel's
+> two-independent-deficiencies conclusion. **GB1's −12.896 remains unexplained** after two
+> pre-registered root-cause campaigns.
+>
+> **RULE 2.4 HAS FIRED: CREILOV IS NOW DEVELOPMENT DATA.** `wt_anchor` was built against
+> CreiLOV's measured failure, so **+31.771 is mechanism evidence, not generalization
+> evidence.** The baseline panel had just established CreiLOV as the only non-development
+> landscape in it — so **this project now holds no non-development landscape among its
+> measured results.** A new independent landscape must be reserved before any generality
+> claim is made again. The only generalization evidence the campaign produced is
+> **eqFP611-blue, +1.625 at t=+7.83 on 38 of 48 seeds**, on a landscape the intervention
+> was not designed against.
+>
+> **Not a default change, deliberately.** The drafted, unexecuted recommendation: use the
+> measured WT label; omit the row where no measured label exists; give it a real
+> measurement's `1e-2` variance rather than `1e-4`; ship as a **named policy version**
+> (`wt_anchor_measured_v2` beside `wt_anchor_synthetic_v1`) per §5.1, never a silent flip;
+> and re-measure all nine landscapes at 48 seeds first, because "not separable" is not
+> "identical". Verbatim amendment text is in that branch's
+> `docs/wt-anchor-confirmation-results.md` §7.
+>
+> **A latent defect found alongside, NOT fixed, which will fail unconditionally later:**
+> `veritas/calibration/landscapes.py::_manifest_threshold` reads a manifest schema that no
+> longer exists (legacy flat `dataset.active_site_positions` / `top1.threshold` against
+> today's nested `results.top1.threshold_value`). On no match **it does not raise — it
+> recomputes the 99th percentile, which rule 2.3 forbids outright.** It passes in the main
+> checkout only because 160 legacy run directories survive there, and it will break the
+> moment they are pruned. It touched no figure in this campaign.
 >
 > **The candidate-pool depth hypothesis is also FALSIFIED, on all nine landscapes.**
 > `max_mutation_depth` does not cap the pool — `recombine_lead_variants` carries it past

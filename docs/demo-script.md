@@ -56,9 +56,11 @@ paired seeds** (branch `worktree-agent-a83565bcde59a81f3`, `bb925c9`), the CreiL
 root-caused, and the cause is a **fabricated training row**. `select_next_micro_batch`
 injects one row per round for the wild type with the literal label `y = 0.0` whatever the
 assay's scale, at variance `1e-4` against a real measurement's `1e-2`. CreiLOV's real
-labels occupy **2.793–4.196**, so that row sits **11.6 units below the minimum — 8.3× the
-entire label range, 15.68 label SDs from centre** — and every round's surrogate is fitted
-through it.
+labels occupy **2.793–4.196**, so that row sits **2.793 raw units below the minimum — 11.62
+label SDs, or 1.99× the entire label range — and 15.68 label SDs from the centre** of the
+distribution, and every round's surrogate is fitted through it. (An earlier draft said
+"11.6 units below the minimum, 8.3× the label range". Both were unit-mixing; the
+15.68-SDs-from-centre figure is the correct one and is what the argument rests on.)
 
 | ablation (12 paired seeds, ridge constant at 59.167) | engine | Δ vs default | t |
 |---|---|---|---|

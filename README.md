@@ -472,28 +472,62 @@ Each had been plausible enough to act on, and two of them were ours.
 What CreiLOV binds on is **ranking**, and the dominant cause is a defect in our own training
 data: `select_next_micro_batch` injects one row per round for the wild type carrying the
 literal label `y = 0.0` *whatever the assay's scale*, at variance `1e-4` against a real
-measurement's `1e-2`. CreiLOV's real labels occupy 2.793–4.196, so that row sits 11.6 units
-below the minimum — **15.68 label SDs from centre** — and every round's surrogate is fitted
-through it. Ablating it is worth **+29.75 hits (t=12.17, 12 of 12 seeds)**; with the prior
-and one-hot features as well, **+41.08**, closing −50.08 to −9.00, and best fitness reaches
-4.1880 ± 0.0001 against ridge's 4.1851 ± 0.0043.
+measurement's `1e-2`. CreiLOV's real labels occupy 2.793–4.196, so that row sits **2.793
+raw units below the minimum — 11.62 label SDs, or 1.99× the entire label range — and
+15.68 label SDs from the centre** of the distribution, and every round's surrogate is
+fitted through it.
 
-**TrpB (0.35 label SDs) and GB1 (0.20) are the only landscapes whose assays are genuinely
-centred near zero — the only two where this defect is invisible — and they are exactly the
-two every quotable engine figure in this repository came from.** They are also the only two
-of the candidate generator's native shape, which is a second, independent reason the same
-pair flatters this engine. CR9114 violates the scale by 14.14 SDs and the engine *wins*
-there, so this is not a complete theory of the result set.
+**Confirmed at 48 paired seeds: +31.771, t=+35.88, better on 48 of 48 seeds, bootstrap
+[+30.000, +33.438].** It accounts for **63.2%** of CreiLOV's −50.292 deficit. With the
+prior and one-hot features as well, **+42.583** (t=+46.24, 48/0/0). Branch
+`confirm-wt-anchor-48` (`90472c2`), pre-registration committed before any arm ran; the
+measured value lands inside the pre-registered [+24, +36] and the bootstrap's **lower**
+bound clears the dominance threshold of +25.04 that was fixed in advance.
 
-> **Provisional, and marked as such: 12 paired seeds, not 48.** A 48-seed confirmation is
-> running, with TrpB and GB1 as built-in negative controls — the theory predicts the
-> ablation is a no-op on both, and if it moves TrpB materially then the theory is wrong
-> *and* every TrpB figure above changes meaning. The fix is deliberately an **ablatable
-> component, not a default**: correcting or dropping that row re-bases every number on this
-> page. Do not quote the −9.00 as a result until the confirmation lands.
+**The engine still loses CreiLOV**: −18.521 with the row ablated, −7.708 with all three
+changes. None of this is a CreiLOV win.
+
+**TrpB and GB1 are unaffected, as the negative control required** — +1.458 (t=+1.60,
+bootstrap [−0.292, +3.250]) and +0.542 (t=+0.41, [−2.021, +3.105]), both straddling zero.
+**Every quotable TrpB and GB1 figure survives.** One precision the agent insisted on, and
+it is right: *"not separable" is not "identical"* — TrpB's point estimate sits just under
+its minimum detectable effect of 1.826, so a real one-to-three-hit effect is not excluded.
+
+> **The label-scale theory is FALSIFIED, and this was pre-registered.** The theory said
+> distance from zero predicts the defect's effect. **CR9114 violates the scale by 14.14
+> SDs and by 2.47 label-ranges — *worse* than CreiLOV's 1.99 — and the effect is
+> Δ=+0.042, t=+0.09, bootstrap [−0.854, +0.938].** A tight null against an MDE of 0.924,
+> not a power failure. The measured ordering by relative effect is CreiLOV (+457.9%) ≫
+> eqFP611-blue (+17.1%) > TrpB (+2.9%) ≈ GB1 (+2.7%) > **CR9114 (+0.8%)** — CR9114 at the
+> wrong end of *both* candidate covariates. The agent's own primary CR9114 prediction was
+> wrong and its pre-registration said in advance what that would mean.
 >
-> **One term of the three-way stack is now actively disputed, so −9.00 is weaker than it
-> reads.** At 48 paired seeds with the prior ablated, the one-hot increment measures
+> So the honest statement is narrower than the one this section first carried: **the row
+> is the dominant cause of the CreiLOV loss specifically. It is not a general explanation
+> of the engine's losses, and distance from zero does not predict its effect.** **GB1's
+> −12.896 remains unexplained** and has now survived two pre-registered root-cause
+> campaigns. eqFP611-red was **REFUSED** — its arm failed the budget gate at 71 of 81.
+
+> **RULE 2.4 HAS FIRED: CreiLOV IS NOW DEVELOPMENT DATA.** `wt_anchor` was built against
+> CreiLOV's measured failure, so the +31.771 is **mechanism evidence, not generalization
+> evidence**. Combined with the baseline panel's finding that CreiLOV was the only
+> non-development landscape in it, **this project now has no non-development landscape
+> among its measured results**, and a new independent one must be reserved before any
+> generality claim is made again.
+>
+> The only generalization evidence the confirmation produced is **eqFP611-blue: +1.625 at
+> t=+7.83 on 38 of 48 seeds** — small, real, and on a landscape the intervention was not
+> designed against.
+
+> **Still an ablatable component, not a default.** Correcting or dropping that row
+> re-bases every number on this page, so it ships as a **named policy version** or not at
+> all. The recommendation, drafted and deliberately unexecuted: use the measured WT label,
+> omit the row where no measured label exists, give it a real measurement's `1e-2`
+> variance rather than `1e-4`, and re-measure all nine landscapes at 48 seeds first —
+> precisely because "not separable" is not "identical".
+>
+> **One term of the three-way stack is actively disputed, so the −7.708 figure is weaker
+> than it reads.** At 48 paired seeds with the prior ablated, the one-hot increment measures
 > **−0.19, CI [−1.04, +0.65], p=0.547** — an interval that **excludes** the +3.67 measured
 > at 12 seeds, so it is not an underpowered estimate of the same quantity. The two
 > implementations differ in **scope**: one moves all five featurisation call sites including
