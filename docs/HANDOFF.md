@@ -257,6 +257,78 @@ On TrpB, held-out seeds 48–95, 25 initial + 4×25 = 125 measurements:
 | at a 50-measurement budget | ~~**6.3×** the best baseline, decaying to 1.7× at 125~~ — **WITHDRAWN, the figure is wrong** |
 | vs the strongest of a seven-arm baseline panel | **+12.88, t=+3.57, 31/16/1** — the margin survives |
 | GB1 | ~~parity at every budget~~ — **WITHDRAWN**, measured as a loss; see above |
+| with the one-hot GP surrogate, vs the strongest of seven | **+17.88 raw, t=+5.08, 37/11/0; +7.85 at d≥2, t=+15.41, 48/0/0** — measured on one seed block; see below |
+
+> **Measured 2026-11-01 — the COMBINED head-to-head, nine arms in ONE run folder per
+> landscape, one shared starting sample per seed, 48 paired seeds, budgets gate-verified
+> matched (all nine arms spent all 125 distinct measurements on all 48 seeds).** Branch
+> `worktree-agent-aa53d65b7e6a10b8f`; pre-registered in
+> [`prereg-combined-head-to-head.md`](prereg-combined-head-to-head.md) and read out in
+> [`results-combined-head-to-head.md`](results-combined-head-to-head.md). TrpB
+> `run_20261101_163432_c6faa21c` on the held-out block 48–95; GB1
+> `run_20261101_164651_45ecc6b2` on 0–47.
+>
+> It exists because the panel's +12.88 (seeds 48–95) and the one-hot arm's +7.71
+> (seeds 0–47) are on **different seed blocks** and adding them is the same move that
+> produced the withdrawn 6.3×. The splice gives +20.59; **the direct measurement gives
+> +17.88**, so it was 2.7 hits too high.
+>
+> | landscape | endpoint | strongest baseline | it scores | engine+one-hot | Δ | t | b/w/t | verdict |
+> | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+> | TrpB | raw | `gp_onehot` | 38.54 | 56.42 | **+17.88** | +5.08 | 37/11/0 | WIN |
+> | TrpB | d≥2 | `ridge` | 6.40 | 14.25 | **+7.85** | +15.41 | **48/0/0** | WIN |
+> | GB1 | raw | `gp_onehot` | 46.02 | 24.71 | **−21.31** | −9.10 | 7/41/0 | LOSS |
+> | GB1 | d≥2 | `ridge` | 6.90 | 7.69 | +0.79 | +1.81 | 24/16/8 | **not separable** |
+>
+> **Three things in this table are new and two of them are bad news.**
+>
+> **`ridge` is NOT GB1's strongest baseline — `gp_onehot` is, at 46.02 against ridge's
+> 33.29.** The panel never ran GB1, so **every GB1 figure above is a contrast against the
+> third-strongest raw arm** and the loss is worse than recorded: −25.62 for
+> `panoptes_default`, not −12.90.
+>
+> **The one-hot surrogate's TrpB gain is REDUNDANT hits and vanishes at d≥2.**
+> `panoptes_onehot_surrogate − panoptes_default` is +5.00 raw (t=+5.33, 40/6/2) and
+> **+0.10 at d≥2 (t=+0.29, 22/19/7, NOT SEPARABLE)**; redundancy rises 3.63× → 3.96×. On
+> the co-primary diversity endpoint the two engine arms are indistinguishable on TrpB, so
+> "one-hot improves the engine" must be scoped to the raw count.
+>
+> **GB1's loss is raw-only.** At d≥2 the engine is at parity with the strongest baseline
+> (+0.04 default, +0.79 one-hot, both not separable) and at d≥3 it wins (+0.67, +0.75); the
+> baselines' GB1 raw leads carry 7.3–8.0× redundancy against the engine's 2.9–3.2×. This
+> does **not** rescue the engine — the raw loss is real and the comparator moved against it —
+> but "the engine loses on GB1" is endpoint-dependent and must always be stated with its
+> endpoint.
+>
+> **The open question is settled: one-hot does NOT close GB1's gap, it closes 33.4% of it**
+> (ridge contrast −12.896 → −8.583), which the pre-registration predicted at 33%, 80%
+> interval [10%, 60%]. So the GB1 loss is not a feature-space defect, and with the veto and
+> the `y = 0.0` WT row already eliminated the residual is attributable only to **acquisition
+> and selection**. That is a narrowing, not a diagnosis; the GB1 loss remains unexplained.
+> GB1's one-hot effect is still **pool-confounded** (the GFlowNet reward scores through this
+> GP).
+>
+> **One registered prediction was WRONG**: §3C named `ridge` as GB1's strongest raw baseline
+> and predicted Δ = −8.6, 80% interval [−17, −1]. Against ridge that is right to 0.02 hits;
+> against the actual strongest baseline Δ is −21.31, **outside** the interval. The sign held,
+> the magnitude did not, because the comparator was mis-predicted.
+>
+> **The gate: `threshold.trpb` and `threshold.gb1` failed on this branch's gate code and the
+> defect is FIXED on `main` (`30c1e94`).** Re-run against these two **unchanged** run folders
+> with main at `789b005` — same `--run-dir`, same `--arms`, nothing re-measured — the gate is
+> **14 passed, 0 FAILED, 10 not applicable, exit 0 on both landscapes**. So these runs
+> recorded the bar correctly all along and **carry no un-passed check**; the earlier FAIL was
+> the reader resolving `configuration.components.qualify_threshold` as a mapping when it is a
+> scalar and discarding the siblings beside it. The published 2026-11-01 runs that carry this
+> failure should be re-gated rather than continue to carry it. Pre-run gate 4 passed /
+> 0 failed on both.
+>
+> Every premise figure reproduced **exactly**: TrpB 51.42 and +12.875/t=+3.57/31-16-1,
+> d≥2 +7.750/t=+13.40, `gp_onehot` redundancy 7.06× vs ridge's 4.54×; GB1 20.40,
+> −12.896/t=−5.63/6-41-1, one-hot 24.71 and +4.312/34-12-2. The merged tree's default path is
+> **byte-identical** to `main`: 21,120 cells across all 22 behavioural columns of
+> `round_metrics.csv`, 4 arms × 48 seeds × 5 rounds, identical `seed_block_sha256` and
+> different `source_tree_sha256`.
 
 > **The 6.3× front-loading figure is WITHDRAWN as incorrect, independently of any
 > re-measurement.** It was computed as `frontier−dkl,dpp,gflownet` (14.12) ÷ **ALDE**
@@ -472,6 +544,59 @@ corrected qualification bar accepts the identical variant set, so none of the
 - **Parent functionality predicts enrichment on 9 of 9 landscapes.** Parent functional
   for the measured phenotype → shallow enrichment above 1×; parent not functional →
   near zero. This needs no labels, unlike shell enrichment itself.
+
+> **A new selectable arm, and it is NOT a new default.** The GP surrogate's feature
+> space is now ablatable: `--ablate-components biophysical_features` removes
+> `featurize_variant_on_positions` from the GP's fit and predict inputs, which fall back
+> to one-hot over the library's declared per-site alphabets — the same encoder
+> `_one_hot_matrix` hands the baselines. To run it *beside* the default rather than in
+> place of it, name the registered method **`panoptes_onehot_surrogate`** in `--methods`:
+> both arms then share one starting sample per seed and pair within seed.
+>
+> **With the component absent nothing changes.** The engine default stays
+> `engine_biophysical`, `workers.math_worker.effective_surrogate_features` is the single
+> gate, and on the default path the GP is handed the *same array object* the biophysical
+> path always built (no one-hot column is even constructed). So every figure in this file
+> keeps its meaning. `panoptes_onehot_surrogate` is a **different arm on every landscape
+> including TrpB** and must never be reported as a correction to a TrpB figure.
+>
+> The motivation is offline and retrospective: over a *fixed* design matrix one-hot beats
+> the biophysical encoding on surrogate Spearman rho on 8 of 9 landscapes, because the
+> encoding's 6-dimensional global block is a deterministic linear function of the rest yet
+> carries ~50% of feature variance, and `build_gp_model`'s Matern is **isotropic**. That is
+> a statement about a fixed matrix, not about a campaign. Read
+> `configuration.model.surrogate_features.per_arm` for which arm a run folder actually
+> measured (rule 2.12).
+>
+> **Measured at 48 paired seeds** — pre-registered in
+> [`prereg-onehot-featurisation-arm.md`](prereg-onehot-featurisation-arm.md), results and
+> caveats in [`results-onehot-featurisation-arm.md`](results-onehot-featurisation-arm.md).
+> Δ is `onehot_surrogate − panoptes_default` on top-1% hits, paired within seed in one run
+> folder. **TrpB +7.71 (p=2.6e-08, 41/3/4); GB1 +4.31 (p=0.0031, 34/12/2); CreiLOV +0.79
+> (p=0.33, 25/16/7, not separable).** The CreiLOV gap to ridge stays at **−49.50 on 0 of 48
+> seeds**, so the featurisation is **not** what loses CreiLOV. Two warnings that travel with
+> those numbers: the pre-flight gate **FAILS** `threshold.<library>` on all three (a gate
+> reader/schema mismatch that also fails the published runs — see §0 of the results doc), so
+> they are provisional; and the GFlowNet's reward scores candidates through this same GP, so
+> on GB1 the candidate pool moved too (7,833 distinct at 0.801 deep-enrichment against 8,832
+> at 0.690) and **+4.31 is confounded with pool composition.** CreiLOV's pool did not move,
+> which is what makes its null a clean one.
+>
+> **The CreiLOV figures above were measured THROUGH the fabricated `y = 0.0` wild-type
+> training row** (`wt_anchor`, which is `worktree-agent-a83565bcde59a81f3`'s component and
+> is not in this branch's vocabulary). That row is 15.68 label SDs from CreiLOV's centre and
+> is worth +29.75 hits on its own, which is the dominant cause and must not be attributed to
+> featurisation. **Ablating the prior replicates at 48 seeds (+4.00 against their +4.25), but
+> the claimed one-hot/prior interaction does not: with the prior ablated this component gives
+> −0.19 (p=0.547, CI [−1.04, +0.65]), an interval that excludes their +3.67.** The prime
+> suspect is the scope difference — their arm also moves `AssayAdaptedHead`, which becomes the
+> dominant non-GP ranking term once the prior is zero. So on CreiLOV the GP's column basis is
+> ruled out in *both* regimes, and that is also why the arm works on TrpB and GB1, the only
+> two landscapes where the fabricated row is nearly true (0.35 and 0.20 SDs). There are **two independent
+> implementations** of this arm, `biophysical_features` here and `physchem_features` on
+> `bb925c9`; they agree on the CreiLOV answer and differ in scope (this one moves the GP's
+> columns only; that one also moves `AssayAdaptedHead`, the linear readout where the
+> biophysical features win on GB1). §4b of the results doc compares them line by line.
 
 ### What is void — do not quote these
 

@@ -43,6 +43,19 @@ are listed in `joint_arms.json` and in the `HELDOUT` / `ARMS` tables inside each
 | `responsive.py` | whether the degenerate TrpB configuration ignores its measurements |
 | `reachable.py` | what the degenerate configuration's candidate generator can actually reach |
 | `gb1_mechanism.py` | why reliability wins on TrpB and loses on GB1 |
+| `baseline_panel.ps1` | runs the pre-registered baseline panel: `generality_sweep.ps1`'s invocation with seven baselines instead of one, on TrpB / CR9114-H1 / CreiLOV |
+| `baseline_panel_readout.py` | **is `ridge` a fair reference baseline, and how many engine results survive the strongest baseline rather than ridge alone** |
+| `baseline_panel_diversity.py` | the same survival question with hits required to be Hamming-distinct, since three arms that beat the engine are local-exploit rules |
+
+The three `baseline_panel*` scripts exist because every comparative claim in this project
+was against one baseline. See [`../../docs/prereg-baseline-panel.md`](../../docs/prereg-baseline-panel.md)
+for the predictions, written before any of it ran, and
+[`../../docs/baseline-panel-results.md`](../../docs/baseline-panel-results.md) for what
+happened. `ridge` is **not** promoted or replaced by any of them.
+
+Unlike `heldout.py`, `diversity.py` and `budget.py`, these three take run ids as
+**arguments** rather than hard-coding them, and resolve the results root through
+`veritas.paths` so they work from a worktree.
 
 ## Two corrections worth knowing about
 
