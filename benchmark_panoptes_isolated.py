@@ -25,6 +25,21 @@ Methods compared:
     A. random          - uniform sampling of untested eligible variants, without replacement.
     B. ridge           - one-hot (4 positions x 20 AA = 80 features) ridge regression, refit each round.
     C. random_forest   - same encoding, RandomForestRegressor, refit each round.
+    C2. gbm_onehot      - same encoding, GradientBoostingRegressor at sklearn defaults.
+    C3. knn_hamming     - same encoding, KNeighborsRegressor(k=5, distance-weighted). Euclidean
+                          distance on one-hot is a monotone function of Hamming distance, so the
+                          neighbour sets are sequence-space neighbour sets.
+    C4. gp_onehot       - same encoding, GaussianProcessRegressor with a FITTED noise term,
+                          greedy on the posterior mean.
+    C5. greedy_measured - no model at all: exploit the neighbourhood of the best measured
+                          variants, nearest-first.
+                          C2-C5 exist because every comparative claim in this project was
+                          against ridge alone, and nobody had measured whether ridge is a
+                          strong baseline or a weak one. They are ADDITIONAL ARMS. Ridge
+                          remains the registered reference baseline (docs/HANDOFF.md 5.4
+                          makes promoting a second model an amendment to a frozen
+                          hypothesis), and none of them is in DEFAULT_METHODS.
+                          Pre-registration: docs/prereg-baseline-panel.md.
     D. alde            - the published ALDE implementation (jsunn-y/ALDE). Availability-probed;
                          never silently replaced by a homemade method. Requesting it when the
                          checkout, interpreter or dependencies are absent ABORTS the run (exit 4)
@@ -1785,6 +1800,294 @@ class RandomForestSelector(Selector):
         self.model_calls += 1
         predictions = model.predict(view.one_hot[[view.index_of[v] for v in pool]])
         return _rank_select(predictions, pool, min(n, len(pool)))
+
+
+# ----------------------------------------------------------------------------------------------
+# C2-C5. The baseline panel
+#
+# Every comparative claim in this project was against ONE baseline - `ridge` above. That made
+# "beats ridge" read as "beats the baselines", which it is not entitled to mean, and it left two
+# facts unreconciled: on CR9114 `ridge` was measured as NOT SEPARABLE FROM RANDOM, so the one win
+# this project has is a win over a comparator that may be no better than chance; and on TrpB
+# `ridge` found the global optimum the engine never did, so ridge is not uniformly weak either.
+# These arms measure how strong ridge is relative to its neighbours.
+#
+# THEY ARE ADDITIONAL ARMS AND NOTHING MORE. `ridge` stays the registered reference baseline:
+# docs/HANDOFF.md 5.4 makes promoting a second model to reference status an amendment to a frozen
+# hypothesis, which needs an explicit amendment record. None of these is in DEFAULT_METHODS and
+# no existing comparison is re-pointed at them.
+#
+# Shared contract with `ridge`, deliberately identical so the paired test is valid:
+#   - the candidate pool is `view.untested(revealed)` - the same oracle_evaluable_pool every
+#     baseline always receives, with no arm-specific filtering;
+#   - round 1 (nothing revealed) delegates to RandomSelector(self.seed), so the first batch is
+#     drawn by the same rule and from the same stream as ridge's;
+#   - the batch is `min(n, len(pool))`, so budget accounting matches per arm;
+#   - the initial sample is the harness's shared per-seed sample, untouched here;
+#   - ties break by position in the universe's fixed lexicographic order via `_rank_select`.
+#
+# Nothing below was tuned against hidden results. Where a hyperparameter is not a library
+# scikit-learn default it is named in `config` and justified in the docstring.
+# Pre-registration, with predictions written before any of this ran:
+# docs/prereg-baseline-panel.md.
+# ----------------------------------------------------------------------------------------------
+class GbmOneHotSelector(Selector):
+    """
+    C2. Gradient-boosted regression trees on the same one-hot encoding, refit each round,
+    greedy on prediction.
+
+    `GradientBoostingRegressor` at sklearn defaults rather than
+    `HistGradientBoostingRegressor`, and that choice is not cosmetic: the Hist variant
+    defaults to `min_samples_leaf=20`, so on the 25-measurement first refit it can barely
+    split and predicts a near-constant. A constant prediction vector does not degrade to
+    "random" - it degrades to `_rank_select`'s tie-break, i.e. the first n variants in the
+    universe's lexicographic order, which is a systematic and arbitrary region of sequence
+    space. The classic implementation's `min_samples_leaf=1` fits at n=25 and avoids that.
+
+    Only `random_state` departs from the defaults, for per-seed reproducibility.
+    """
+
+    name = "gbm_onehot"
+    config = {
+        "model": "sklearn.ensemble.GradientBoostingRegressor",
+        "params": "library defaults (n_estimators=100, lr=0.1, max_depth=3, min_samples_leaf=1)",
+        "random_state": "per-seed",
+        "acquisition": "greedy on prediction",
+        "encoding": "onehot_per_site_declared_alphabet",
+        "tuned_on_results": False,
+    }
+
+    def propose(self, round_index: int, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
+        from sklearn.ensemble import GradientBoostingRegressor
+
+        pool = view.untested(revealed)
+        if not revealed.measured:
+            return RandomSelector(self.seed).propose(round_index, n, view, revealed)
+        train_rows = [view.index_of[v] for v in revealed.measured]
+        model = GradientBoostingRegressor(random_state=self.seed)
+        model.fit(view.one_hot[train_rows], np.array([revealed.measured[v] for v in revealed.measured]))
+        self.model_calls += 1
+        predictions = model.predict(view.one_hot[[view.index_of[v] for v in pool]])
+        return _rank_select(predictions, pool, min(n, len(pool)))
+
+
+class KnnHammingSelector(Selector):
+    """
+    C3. k-nearest-neighbour regression in sequence space, refit each round, greedy on
+    prediction.
+
+    Euclidean distance between two one-hot rows of this encoding is `sqrt(2 * Hamming)`:
+    each differing site contributes exactly one 1 removed and one 1 added. The map is
+    strictly monotone, so sklearn's Euclidean neighbour sets ARE the Hamming neighbour sets
+    and no custom metric is needed. Distance weighting is `1/d`, sklearn's own option, which
+    is monotone in `1/sqrt(Hamming)` - the weight ORDER is the Hamming order either way.
+
+    No candidate can be at distance zero from a training point: distinct variant ids have
+    distinct genotype strings, so the `weights="distance"` zero-distance path cannot fire.
+
+    This is the memorisation baseline. It asks whether anything beyond "this sequence will
+    behave like the measured sequences nearest to it" is needed on a landscape.
+
+    k=5 is a stated choice, not a sklearn default (which is 5 for the classifier and 5 here
+    too), clamped to the training-set size for the 25-point first refit.
+    """
+
+    name = "knn_hamming"
+    config = {
+        "model": "sklearn.neighbors.KNeighborsRegressor",
+        "n_neighbors": 5,
+        "weights": "distance",
+        "metric": "euclidean on one-hot == monotone in Hamming",
+        "acquisition": "greedy on prediction",
+        "encoding": "onehot_per_site_declared_alphabet",
+        "tuned_on_results": False,
+    }
+
+    def propose(self, round_index: int, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
+        from sklearn.neighbors import KNeighborsRegressor
+
+        pool = view.untested(revealed)
+        if not revealed.measured:
+            return RandomSelector(self.seed).propose(round_index, n, view, revealed)
+        train_rows = [view.index_of[v] for v in revealed.measured]
+        model = KNeighborsRegressor(
+            n_neighbors=min(5, len(train_rows)),
+            weights="distance",
+        )
+        model.fit(view.one_hot[train_rows], np.array([revealed.measured[v] for v in revealed.measured]))
+        self.model_calls += 1
+        predictions = model.predict(view.one_hot[[view.index_of[v] for v in pool]])
+        return _rank_select(predictions, pool, min(n, len(pool)))
+
+
+class GpOneHotSelector(Selector):
+    """
+    C4. Gaussian-process regression on the same one-hot encoding with a FITTED noise term,
+    refit each round, greedy on the POSTERIOR MEAN.
+
+    This is the arm a reviewer asks for first, because the engine under test is itself a
+    GP-based Bayesian-optimisation method. A plain GP on one-hot separates what the engine
+    adds on top of a GP from what a GP was doing anyway.
+
+    Acquisition is held at greedy-on-mean on purpose. Every other model arm in the panel is
+    greedy on its prediction, so holding acquisition fixed makes the panel vary exactly one
+    thing - the surrogate. Switching this arm to UCB or EI would vary the surrogate and the
+    acquisition function at once and the comparison would attribute nothing. (It also means
+    this arm is NOT "a Bayesian optimiser"; it is a GP surrogate under the panel's shared
+    acquisition rule, and it must not be described as the former.)
+
+    `WhiteKernel` carries the fitted noise term, which is the point of the arm: a
+    noise-free GP interpolates 125 assay measurements exactly and its mean surface is
+    dominated by replicate noise. `alpha` is left at its tiny numerical default so the noise
+    is learned rather than asserted. `normalize_y=True` because the assay scales differ by
+    orders of magnitude across landscapes and an un-normalised constant-mean prior would be
+    a per-landscape tuning decision. `n_restarts_optimizer=0` keeps the marginal-likelihood
+    optimisation deterministic given the seed.
+    """
+
+    name = "gp_onehot"
+    config = {
+        "model": "sklearn.gaussian_process.GaussianProcessRegressor",
+        "kernel": "ConstantKernel * RBF + WhiteKernel  (noise FITTED, not asserted)",
+        "normalize_y": True,
+        "n_restarts_optimizer": 0,
+        "acquisition": "greedy on posterior mean (panel-shared, NOT UCB/EI)",
+        "encoding": "onehot_per_site_declared_alphabet",
+        "tuned_on_results": False,
+    }
+
+    def propose(self, round_index: int, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
+        from sklearn.gaussian_process import GaussianProcessRegressor
+        from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel
+
+        pool = view.untested(revealed)
+        if not revealed.measured:
+            return RandomSelector(self.seed).propose(round_index, n, view, revealed)
+        train_rows = [view.index_of[v] for v in revealed.measured]
+        kernel = (
+            ConstantKernel(1.0, (1e-3, 1e3))
+            * RBF(length_scale=1.0, length_scale_bounds=(1e-2, 1e3))
+            + WhiteKernel(noise_level=1.0, noise_level_bounds=(1e-8, 1e2))
+        )
+        model = GaussianProcessRegressor(
+            kernel=kernel,
+            normalize_y=True,
+            n_restarts_optimizer=0,
+            random_state=self.seed,
+        )
+        y = np.array([revealed.measured[v] for v in revealed.measured], dtype=np.float64)
+        model.fit(view.one_hot[train_rows].astype(np.float64), y)
+        self.model_calls += 1
+        self.notes.append(f"round {round_index}: fitted kernel {model.kernel_}")
+        # Chunked so the posterior mean over a 165,000-variant pool does not materialise a
+        # single oversized intermediate. Chunking changes no value: the posterior mean of a
+        # test point depends only on that point and the training set.
+        rows = np.asarray([view.index_of[v] for v in pool], dtype=np.int64)
+        predictions = np.empty(rows.size, dtype=np.float64)
+        for start in range(0, rows.size, 20_000):
+            stop = min(start + 20_000, rows.size)
+            predictions[start:stop] = model.predict(
+                view.one_hot[rows[start:stop]].astype(np.float64)
+            )
+        return _rank_select(predictions, pool, min(n, len(pool)))
+
+
+class GreedyMeasuredSelector(Selector):
+    """
+    C5. Greedy-on-measured: exploit the neighbourhood of the best measured variants, with NO
+    MODEL AT ALL.
+
+    Untested candidates are ranked lexicographically by Hamming distance to the
+    fitness-ordered list of measured variants: nearest to the best measured variant first,
+    ties broken by distance to the second best, then the third, and finally by position in
+    the universe's fixed lexicographic order. The radius therefore expands by itself - when
+    the best variant's Hamming-1 shell is smaller than the batch, distance 2 fills the rest -
+    without a radius parameter to choose, and without a fallback rule that fires invisibly
+    after failure.
+
+    It has zero learned parameters, so it is the control for "is the surrogate doing
+    anything?". If it matches the engine, the engine's model and acquisition machinery are
+    not what produced the engine's result.
+
+    Hamming distance is computed as `n_sites - X_cand @ X_lead.T` on the one-hot matrix:
+    every row of this encoding has exactly `n_sites` ones, one per site, so the dot product
+    counts AGREEING sites exactly. That is an identity on this encoding, not an
+    approximation, and the row sums are CHECKED below rather than assumed.
+
+    Rule 2.1: this operates on `view.combos` / `view.one_hot`, which are full-length
+    per-site genotypes with wild-type positions PRESENT - not mutation strings, which omit
+    them. Equal length is asserted below rather than assumed, and nothing here zips two
+    genotype strings together.
+    """
+
+    name = "greedy_measured"
+    config = {
+        "model": "none - no surrogate, no learned parameters",
+        "rule": ("rank untested candidates lexicographically by Hamming distance to the "
+                 "fitness-ordered measured variants (best lead first)"),
+        "radius": "expands implicitly; no radius parameter",
+        "encoding": "onehot_per_site_declared_alphabet",
+        "tuned_on_results": False,
+    }
+
+    #: Leads beyond this many are not used as tie-break keys. 125 is the whole budget, so at
+    #: the registered protocol no lead is ever dropped; the cap only bounds the key count if
+    #: this arm is ever run at a much larger budget.
+    MAX_LEAD_KEYS = 256
+
+    def propose(self, round_index: int, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
+        pool = view.untested(revealed)
+        if not revealed.measured:
+            return RandomSelector(self.seed).propose(round_index, n, view, revealed)
+        if not pool:
+            return []
+
+        n_sites = view.library.n_sites
+        # Leads: measured variants, best fitness first. Ties among equal-fitness leads break
+        # by universe index, so the key order is deterministic.
+        leads = sorted(
+            revealed.measured,
+            key=lambda v: (-revealed.measured[v], view.index_of[v]),
+        )[: self.MAX_LEAD_KEYS]
+
+        # Rule 2.1 / rule 2.2: assert the genotypes are full length before differencing them.
+        # A mutation string with wild-type positions omitted would be SHORTER than n_sites,
+        # and silently comparing one would understate every distance below.
+        for variant in (leads[0], pool[0]):
+            combo = view.combos[variant]
+            if len(combo) != n_sites:
+                raise BenchmarkError(
+                    f"greedy_measured: genotype {combo!r} for {variant!r} has "
+                    f"{len(combo)} site(s) but library {view.library.key!r} declares "
+                    f"{n_sites}. Wild-type positions must be PRESENT, not omitted."
+                )
+
+        lead_rows = np.asarray([view.index_of[v] for v in leads], dtype=np.int64)
+        cand_rows = np.asarray([view.index_of[v] for v in pool], dtype=np.int64)
+        lead_x = view.one_hot[lead_rows].astype(np.float32)
+        # Premise of the dot-product identity: exactly one 1 per site in every row.
+        sums = lead_x.sum(axis=1)
+        if not np.allclose(sums, float(n_sites)):
+            raise BenchmarkError(
+                f"greedy_measured: lead one-hot rows do not each carry exactly "
+                f"{n_sites} ones (saw {sums.min()}..{sums.max()}); the "
+                f"n_sites - X@X.T Hamming identity does not hold."
+            )
+
+        # np.lexsort takes its keys LAST-is-primary, so reverse: the final key must be the
+        # distance to the best lead, and the first key the index tie-break.
+        keys: List[np.ndarray] = [np.arange(cand_rows.size)]
+        chunk_distances: List[np.ndarray] = []
+        for start in range(0, cand_rows.size, 20_000):
+            stop = min(start + 20_000, cand_rows.size)
+            cand_x = view.one_hot[cand_rows[start:stop]].astype(np.float32)
+            chunk_distances.append(float(n_sites) - cand_x @ lead_x.T)
+        distances = np.concatenate(chunk_distances, axis=0) if chunk_distances else np.zeros((0, len(leads)))
+        for column in range(len(leads) - 1, -1, -1):
+            keys.append(distances[:, column])
+        order = np.lexsort(tuple(keys))
+        take = min(n, len(pool))
+        return [pool[int(i)] for i in order[:take]]
 
 
 # ----------------------------------------------------------------------------------------------
@@ -5555,9 +5858,21 @@ def repository_state(ignore_prefixes: Sequence[str] = ()) -> Dict[str, Any]:
 # ==============================================================================================
 # Orchestration
 # ==============================================================================================
-ALL_METHODS = ("random", "ridge", "random_forest", "alde", "panoptes_default", "panoptes_muse",
+ALL_METHODS = ("random", "ridge", "random_forest", "gbm_onehot", "knn_hamming", "gp_onehot",
+               "greedy_measured", "alde", "panoptes_default", "panoptes_muse",
                "panoptes_qualify_then_optimize", "panoptes_conditional_probe")
+#: DELIBERATELY UNCHANGED. The four panel arms added on 2026-11-01 (gbm_onehot,
+#: knn_hamming, gp_onehot, greedy_measured) are opt-in via --methods and are NOT defaults.
+#: `ridge` is the registered reference baseline and stays the reference: docs/HANDOFF.md 5.4
+#: makes promoting another model to reference status an amendment to a frozen hypothesis,
+#: and an amendment needs an explicit dated record, not a tuple edit.
 DEFAULT_METHODS = ("random", "ridge", "random_forest", "panoptes_default")
+#: The pre-registered baseline panel of docs/prereg-baseline-panel.md, in panel order.
+#: Named here so a sweep cannot quietly run a subset of it: a panel missing `random`
+#: cannot calibrate the others, and a panel missing `ridge` is not comparable to any
+#: figure already published in this project.
+BASELINE_PANEL_METHODS = ("random", "ridge", "random_forest", "gbm_onehot", "knn_hamming",
+                          "gp_onehot", "greedy_measured", "panoptes_default")
 
 
 
@@ -5731,6 +6046,48 @@ def build_selector_factories(
         elif method == "random_forest":
             factories[method] = lambda seed: RandomForestSelector(seed)
             status[method] = {"status": "available", "detail": "sklearn RandomForestRegressor(n_estimators=300)"}
+        elif method == "gbm_onehot":
+            factories[method] = lambda seed: GbmOneHotSelector(seed)
+            status[method] = {
+                "status": "available",
+                "detail": (
+                    f"sklearn GradientBoostingRegressor() at library defaults on "
+                    f"{library.one_hot_width} one-hot features; greedy on prediction; "
+                    f"ADDITIONAL ARM, not the reference baseline"
+                ),
+            }
+        elif method == "knn_hamming":
+            factories[method] = lambda seed: KnnHammingSelector(seed)
+            status[method] = {
+                "status": "available",
+                "detail": (
+                    f"sklearn KNeighborsRegressor(n_neighbors=5, weights='distance') on "
+                    f"{library.one_hot_width} one-hot features; Euclidean there is monotone "
+                    f"in Hamming over {library.n_sites} sites, so the neighbour sets are "
+                    f"sequence-space neighbour sets; ADDITIONAL ARM"
+                ),
+            }
+        elif method == "gp_onehot":
+            factories[method] = lambda seed: GpOneHotSelector(seed)
+            status[method] = {
+                "status": "available",
+                "detail": (
+                    f"sklearn GaussianProcessRegressor, C*RBF + WhiteKernel with the noise "
+                    f"term FITTED, normalize_y, on {library.one_hot_width} one-hot features; "
+                    f"greedy on the POSTERIOR MEAN under the panel's shared acquisition rule, "
+                    f"so this is a GP surrogate and NOT a Bayesian optimiser; ADDITIONAL ARM"
+                ),
+            }
+        elif method == "greedy_measured":
+            factories[method] = lambda seed: GreedyMeasuredSelector(seed)
+            status[method] = {
+                "status": "available",
+                "detail": (
+                    f"no model: untested candidates ranked lexicographically by Hamming "
+                    f"distance over {library.n_sites} sites to the fitness-ordered measured "
+                    f"variants, best lead first; radius expands implicitly; ADDITIONAL ARM"
+                ),
+            }
         elif method == "alde":
             # Resolution and probing are separate: the resolver records every path it
             # looked at so an UNAVAILABLE reason can name them, which is what turns an
