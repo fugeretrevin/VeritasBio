@@ -33,10 +33,22 @@ We hit it. On the CR9114 antibody landscape our own engine's arm:
 | measurement budget spent | **26 of 125** |
 | rounds that committed a short batch | **192 of 192** |
 | top-1% variants found | **0 of 651** |
-| what the harness reported | **`Run state: SUCCESS`** |
+| what the aggregate metrics said | mean top-1% hits and best fitness placed it exactly where a weak-but-working method sits |
+| what this harness said | **`Run state: PARTIAL`**, arm **`DEGENERATE`** |
 
-Source: [`docs/day1-reachability.md`](docs/day1-reachability.md) §, reproduced in the
+Source: [`docs/day1-reachability.md`](docs/day1-reachability.md) §6, reproduced in the
 summary block of [`scripts/demo/gate_catches_planner.py`](scripts/demo/gate_catches_planner.py).
+
+The last two rows are the point, and they need stating carefully. **This harness did catch
+it** — a run demotes to `PARTIAL` on any degenerate arm, and the per-arm `DEGENERATE`
+classification is `veritas/preflight.py` check 3. Both exist *because of this episode*.
+The code comment on the demotion says so: "A degenerate run must never leave the state
+SUCCESS. The HER2 ALDE run completed cleanly, wrote every file, and was a null arm."
+
+What did not distinguish it is the thing everyone reports: mean top-1% yield and best
+fitness. Those two numbers are identical in shape for an arm that searched and lost and an
+arm that never searched. The rejection reason that would have separated them was recorded
+in the run's own artifacts and used by no reported metric.
 
 The cause was not the model or the surrogate. The candidate generator was hardcoded to one
 library geometry — four saturated sites, 20 residues each, depth capped at 4 by a pydantic
