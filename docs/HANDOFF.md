@@ -23,6 +23,73 @@ trusting a commit hash quoted in prose, which goes stale the moment this file is
 
 ## 1. Where things stand in one page
 
+### The cross-protein sweep has now RUN, and the engine loses
+
+**Read this before the TrpB table below.** 2026-11-01, commit `406ef58`, clean tree, six
+landscapes, 48 paired seeds each, budgets matched per arm, seed as the unit of
+independence, 10,000-sample whole-seed bootstrap. Δ is `panoptes_default − ridge` on
+top-1% hits excluding the initial sample. Reproduce with
+`scripts/analysis/generality_sweep.ps1` and read out with the recipe in §4.
+
+| landscape | Δ vs ridge | t | seeds better/worse/tied | verdict |
+| --- | --- | --- | --- | --- |
+| CreiLOV | **−50.29** | **−32.01** | **0 / 48 / 0** | loss on every seed |
+| GB1 | **−12.90** | **−5.63** | 6 / 41 / 1 | decisive loss |
+| eqFP611-red | 0 hits vs ridge's 15.35 | — | — | loss; 7 short batches |
+| eqFP611-blue | +0.73 | +0.77 | 25 / 18 / 5 | **not separable** |
+| CR9114-H1 | **+3.17** | **+6.10** | 41 / 5 / 2 | win — but development data |
+| HER2 | — | — | — | **gate FAILED, un-quotable** |
+
+**One win on development data, one tie, three losses.** CR9114 is development data under
+rule 2.4 — the intervention was designed against its measured failure — so it is
+mechanism evidence, not generalization evidence. The day1 §7a pre-registration predicted
+improvement on the reachability-limited landscapes; CreiLOV is reachability-limited at
+13.3% and lost on **48 of 48 seeds**. That prediction is **falsified**.
+
+This is close to what §8 of this document pre-registered ("that we lose… across-the-board
+regression against ridge"), which is the one good thing about it: it was written down in
+advance and so cannot be re-narrated now.
+
+**Every previously reported figure reproduced exactly** — CR9114 +3.167 against the
+reported 5.000−1.833, eqFP611-blue +0.729 against 9.500−8.792, red's ridge 15.354 to three
+decimals. The measurements were sound. Two **verdicts** were wrong:
+
+- **eqFP611-blue was called a WIN. It is not.** +0.73 at t=0.77, better on 25 of 48
+  seeds — a coin flip. The win was asserted from a mean difference with no paired test,
+  and it was one of only two generalization data points.
+- **GB1 was called "parity at every budget". It is a decisive loss**, ridge 33.29 against
+  the engine's 20.40, better on 6 of 48 seeds.
+
+**Both controls are unsatisfactory, so the geometry diagnosis is NOT cleanly confirmed:**
+
+- **GB1 (negative control) held, weakly.** 20.90 documented → 20.40 measured, so the
+  generator fixes are a no-op on a saturated 4-site library as predicted. But only one
+  GB1 48-seed run exists on disk, so the "before" is a number quoted in a document, not a
+  re-analysable artifact. No per-seed data, no t, no interval.
+- **HER2 (null control) MOVED**: 2.833 → 1.188, t=−8.29, paired on 48 seeds. HER2 is
+  `pool_restricted`, so `generate_candidate_variants` is never called and nothing in the
+  fix set can reach it. That is either a side effect or the dpp/dkl default change, and
+  it **cannot be attributed from the artifacts** because both manifests wrongly claim dpp
+  and dkl were enabled (fixed in `e083333`; see §2.11).
+- **HER2's gate failed on an off-by-one against our own rule.** `endpoint.her2` rejects a
+  113-measurement budget against a 113-variant tier. The registered rule
+  (`preregistration-motif-narrowness.md` §3C) is `budget = min(125, tier − 1)` = **112**.
+  `generality_sweep.sh` uses `--initial-size 25 --batch-size 22` = 113. So HER2 is not
+  "permanently untestable at this endpoint" as §3A says — it was one measurement over.
+  `--initial-size 24 --batch-size 22` gives 112.
+
+**Unexpectedly, HER2 may supply the falsification test §3A called unavailable.** Between
+the two runs k-DPP went on → off, and HER2's yield **fell** by 1.65. Removing diversity
+*hurt* on the only diffuse landscape (z = −2.58), which is the predicted sign flip. Not
+claimable: confounded across a commit range, on a landscape whose gate failed. It needs
+one controlled arm — identical code, `--ablate-components dpp` against baseline, at
+budget 112. That is the highest-value experiment currently available.
+
+> **Careful:** `--ablate-components dpp` and `dkl` are currently **no-ops**, since both
+> default off. An arm so labelled is identical to the default arm. To measure either, set
+> the global True for the baseline arm. Pinned by
+> `test_ablating_an_already_disabled_component_is_a_no_op`.
+
 ### What survives and can be quoted
 
 On TrpB, held-out seeds 48–95, 25 initial + 4×25 = 125 measurements:
@@ -32,7 +99,7 @@ On TrpB, held-out seeds 48–95, 25 initial + 4×25 = 125 measurements:
 | `panoptes_default` ("reliability"), raw top-1% hits | 45.21 (50.44 with `dkl,gflownet` ablated) |
 | vs ridge, diversity-adjusted at d≥2 | **+7.93, t=+17.1** — larger than the raw t of +8.4 |
 | at a 50-measurement budget | **6.3×** the best baseline, decaying to 1.7× at 125 |
-| GB1 | parity at every budget — but see the caveat below |
+| GB1 | ~~parity at every budget~~ — **WITHDRAWN**, measured as a loss; see above |
 
 That arm was budget-matched at exactly 125, and TrpB is the one landscape where the
 corrected qualification bar accepts the identical variant set, so none of the
@@ -44,11 +111,12 @@ corrected qualification bar accepts the identical variant set, so none of the
 > **different arms under one name**. Always carry the flag state with the number; a
 > bare "panoptes_default" is no longer a sufficient description of a configuration.
 >
-> **GB1's parity is suspect for the same reason.** Removing k-DPP is worth **+6.25**
-> top-1% hits on GB1 (t=3.92, better on 36 of 48 seeds) — more than twice its effect on
-> TrpB. The weakest headline result in this table may be substantially an artifact of a
-> mis-signed component rather than a property of the landscape. Re-measure before
-> quoting it. See [`preregistration-motif-narrowness.md`](preregistration-motif-narrowness.md) §3B.
+> **GB1's parity claim is withdrawn, and the re-measurement is done.** It was suspect
+> because removing k-DPP is worth +6.25 top-1% hits on GB1 (t=3.92, 36 of 48 seeds,
+> [`preregistration-motif-narrowness.md`](preregistration-motif-narrowness.md) §3B) —
+> more than twice its effect on TrpB. The sweep settles it: on today's defaults the
+> engine scores 20.40 against ridge's 33.29, better on 6 of 48 seeds. GB1 was never
+> parity; it is a loss.
 
 **Mechanistic findings, all intact:**
 
@@ -186,6 +254,37 @@ the figure is 0.908, so **it passed the exact defect it was written for.** Alway
 validate a new check against the real artifact, not the fixture you built beside it.
 
 ---
+
+### 2.11 A verdict needs a paired test, not a mean difference
+
+`eqFP611-blue: 9.50 vs 8.79` was published as a **WIN**. The paired test on the same
+numbers gives t=0.77, better on 25 of 48 seeds — a coin flip. It was one of only two
+generalization data points this project had, and it was not a result at all.
+
+Before any arm is called better or worse: compute the paired statistic over seeds, report
+seeds-better / worse / tied, and state the interval. A difference of means with no test
+is not a verdict. Two numbers side by side invite one anyway, so write the test next to
+them.
+
+The same rule killed the redundancy argument in `docs/545.md` §4 and inverted two of five
+ablation signs. It is the most repeated error in this project.
+
+### 2.12 The manifest's component states are only as honest as what they read
+
+`component_states()` derived state from `--ablate-components` alone, so `dpp` and `dkl` —
+gated by module globals — were recorded as **enabled** in every run where they were in
+fact off. The `configuration_fingerprint`, whose documented job is telling two
+configurations apart, was blind to the change: a dpp-on and a dpp-off run of one library
+hashed identically.
+
+That cost a real attribution. The HER2 null control moved by t=−8.29 and the cause could
+not be read from the artifacts, because both manifests claimed the same component state.
+Fixed in `e083333`, which **changes the fingerprint of every future run** — so a
+fingerprint comparison across that commit is meaningless. Quote the commit, not the
+fingerprint.
+
+The general form: when a behaviour is gated in two places, a record that reads one of
+them is worse than no record, because it will be trusted.
 
 ## 3. Known traps
 

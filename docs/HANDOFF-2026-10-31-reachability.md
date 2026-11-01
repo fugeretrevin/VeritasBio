@@ -19,10 +19,25 @@ math and onto feature representation.
 
 48 paired seeds, `--base-seed 0`, 4 rounds. `top1` is `mean_top1_hits_excluding_initial`.
 
-| landscape | geometry | random | ridge | **panoptes** | verdict |
+> **VERDICTS CORRECTED 2026-11-01.** Every number below reproduced exactly in the full
+> generality sweep (commit `406ef58`, 48 paired seeds). Two of the verdicts did not
+> survive a paired test, which none of them had been given:
+>
+> | landscape | Δ vs ridge | t | seeds b/w/t | corrected verdict |
+> |---|---|---|---|---|
+> | CR9114-H1 | +3.17 | +6.10 | 41/5/2 | WIN stands — but development data (rule 2.4) |
+> | **eqFP611-blue** | **+0.73** | **+0.77** | **25/18/5** | **NOT SEPARABLE — not a win** |
+> | eqFP611-red | 0 vs 15.35 | — | — | loss stands |
+>
+> `eqFP611-blue` was the only landscape here offering generalization evidence, and it is
+> a coin flip. The sweep also added CreiLOV (**−50.29, t=−32.01, 0 of 48 seeds better**)
+> and GB1 (**−12.90, t=−5.63**), so the full picture is one development-data win, one
+> tie and three losses. See `HANDOFF.md` §1 and rule 2.11.
+
+| landscape | geometry | random | ridge | **panoptes** | verdict as first published |
 |---|---|---|---|---|---|
 | **CR9114-H1** | 16 sites, binary | 0.875 | 1.833 | **5.000** | **WIN, 2.7x** |
-| **eqFP611-blue** | 13 sites, binary | 0.729 | 8.792 | **9.500** | **WIN** |
+| **eqFP611-blue** | 13 sites, binary | 0.729 | 8.792 | **9.500** | ~~WIN~~ → not separable |
 | **eqFP611-red** | 13 sites, binary | 0.688 | **15.354** | **0** | **LOSS, total** |
 | TrpB | 4 sites, saturated | — | — | 49.6458 | unchanged (control) |
 
