@@ -478,7 +478,44 @@ not measurements of zero.
 Do not tune anything against them and do not present a result on them as
 generalization evidence. If you inspect a held-out target and change the algorithm
 because of what you saw, that target is reclassified as development data and a new
-one must be reserved. This rule has already fired once, on HER2.
+one must be reserved. This rule has already fired ~~once, on HER2~~ **twice: on HER2,
+and on CreiLOV on 2026-11-01** — `wt_anchor` was built against CreiLOV's measured
+failure.
+
+> **THERE IS CURRENTLY NO NON-DEVELOPMENT LANDSCAPE AMONG THE NINE.** TrpB, GB1 and
+> HER2 by this rule; CR9114 because the generator fix was designed against its measured
+> failure; CreiLOV as of today. Both eqFP611 channels and both CR6261 landscapes have
+> been measured and re-measured repeatedly, and CR6261's endpoint is degenerate at 19
+> hits. **The only generalization evidence anywhere in this project is eqFP611-blue,
+> +1.625 at t=+7.83 on 38 of 48 seeds** (the `wt_anchor` confirmation, on a landscape the
+> intervention was not designed against).
+>
+> **And the pinned corpus is exhausted for the registered endpoint.** The four landscapes
+> never promoted to `REGISTRY` are already designated `reserve` in
+> [`corpus-audit.md`](corpus-audit.md) §3, and none survives contact with a
+> 125-measurement budget and a 1% tier:
+>
+> | candidate | design space | real rows | why it fails |
+> | --- | --- | --- | --- |
+> | `sacas9` | 1,296 | 1,296 — **combinatorially complete** | 125 measurements is **9.6% of the universe**; a 1% tier is **13 hits** |
+> | `spcas9` | 952 | **597** (5,151 rows are empty padding) | far too small; attrition is depth-correlated (§5.1) |
+> | `hiv1_protease` | 4,608 | 1,175 (25.5%) | dropout falls from 100% at depth 1 to **0.6% at depth 9** |
+> | `rhla` ×3 | 663,552 | 2,346 (0.35%) | **nothing beyond depth 3**; already void under §6.3's degeneracy guard |
+>
+> So reserving real generality evidence needs one of three things, and the first two are
+> the live options: **(a)** a documented endpoint/budget amendment for a small *complete*
+> universe — `sacas9` is the only clean candidate, and §5.2's defect (its clean phenotype
+> silently averages three of six sgRNAs) must be resolved in the pre-registration, not
+> after; **(b)** growing the lock, which rule 2.5 explicitly permits while the pin may not
+> move, with a 10⁴–10⁵-variant library that supports the endpoint unchanged; **(c)** not
+> avGFP — `GFP_AEQVI_Sarkisyan_2016.csv` is already present at 51,714 variants but is
+> **not a fixed-site combinatorial library** (mutations scatter across the whole protein,
+> so it does not fit `LandscapeSpec`), and `d85dca2` records that an avGFP benchmark had
+> already scored the model on its own training set.
+>
+> **Whatever is reserved must not be scored before its pre-registration is sealed** — not
+> by `panoptes_default`, not by `ridge`, not by `random`, not for one seed. The value of a
+> reserved landscape is entirely that no outcome on it has been seen.
 
 ### 2.5 The pin must not change; the lock may only grow
 

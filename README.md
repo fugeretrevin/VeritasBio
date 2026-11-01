@@ -542,10 +542,25 @@ its minimum detectable effect of 1.826, so a real one-to-three-hit effect is not
 
 Read these before quoting anything above.
 
-* **TrpB, GB1 and HER2 are development data** ([`docs/HANDOFF.md`](docs/HANDOFF.md) rule
-  2.4). The intervention was designed against failures observed on them, so an improvement
-  there is **mechanism evidence, not generalization evidence**. CR9114 is development data
-  for the same reason: the generator fix was designed against its measured failure.
+* **Every landscape here is now development data, and that is the limitation to read
+  first.** TrpB, GB1 and HER2 by [`docs/HANDOFF.md`](docs/HANDOFF.md) rule 2.4; CR9114
+  because the generator fix was designed against its measured failure; **CreiLOV as of
+  2026-11-01**, because `wt_anchor` was built against *its* measured failure. Rule 2.4 has
+  now fired twice. An improvement on development data is **mechanism evidence, not
+  generalization evidence**.
+
+  **The only generalization evidence in this project is eqFP611-blue: +1.625 at t=+7.83 on
+  38 of 48 seeds**, from the `wt_anchor` confirmation, on a landscape the intervention was
+  not designed against. Everything else is mechanism.
+
+  And the pinned corpus cannot currently supply a replacement: the four landscapes never
+  promoted to the registry are all too small or too sparse for a 125-measurement budget
+  and a 1% tier — `sacas9` is combinatorially complete but only 1,296 variants (13 hits at
+  the 1% tier), `spcas9` has 597 real rows, `hiv1_protease` drops to 0.6% saturation by
+  depth 9, and `rhla` holds nothing beyond depth 3. Reserving a real one needs either a
+  documented endpoint amendment for a small complete universe or a new dataset added to the
+  lock (which rule 2.5 permits; the pin itself may not move). This is the top item on the
+  roadmap, and until it is done **no generality claim should be made from this repository.**
 * **Zero independent protein validation, and zero wet-lab validation.** Every number here
   is retrospective replay against a published measured landscape. Nothing was synthesised.
 * **The live-agent evidence is one landscape and 12 seeds**, not the 48 the cross-protein
