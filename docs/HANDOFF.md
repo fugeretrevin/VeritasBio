@@ -196,10 +196,14 @@ corrected qualification bar accepts the identical variant set, so none of the
 > **The CreiLOV figures above were measured THROUGH the fabricated `y = 0.0` wild-type
 > training row** (`wt_anchor`, which is `worktree-agent-a83565bcde59a81f3`'s component and
 > is not in this branch's vocabulary). That row is 15.68 label SDs from CreiLOV's centre and
-> is worth +29.75 hits on its own; one-hot is worth nothing there alone and **+7.08 once the
-> anti-correlated prior is ablated**. So the CreiLOV null is real and now *explained* rather
-> than overturned — and it is also why the arm works on TrpB and GB1, the only two landscapes
-> where that row is nearly true (0.35 and 0.20 SDs). There are **two independent
+> is worth +29.75 hits on its own, which is the dominant cause and must not be attributed to
+> featurisation. **Ablating the prior replicates at 48 seeds (+4.00 against their +4.25), but
+> the claimed one-hot/prior interaction does not: with the prior ablated this component gives
+> −0.19 (p=0.547, CI [−1.04, +0.65]), an interval that excludes their +3.67.** The prime
+> suspect is the scope difference — their arm also moves `AssayAdaptedHead`, which becomes the
+> dominant non-GP ranking term once the prior is zero. So on CreiLOV the GP's column basis is
+> ruled out in *both* regimes, and that is also why the arm works on TrpB and GB1, the only
+> two landscapes where the fabricated row is nearly true (0.35 and 0.20 SDs). There are **two independent
 > implementations** of this arm, `biophysical_features` here and `physchem_features` on
 > `bb925c9`; they agree on the CreiLOV answer and differ in scope (this one moves the GP's
 > columns only; that one also moves `AssayAdaptedHead`, the linear readout where the

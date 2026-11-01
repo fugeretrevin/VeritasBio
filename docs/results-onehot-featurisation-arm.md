@@ -308,6 +308,42 @@ anti-correlated prior is ablated** — the prior's rho against true fitness on C
 **−0.249**, negative in 48 of 48 campaigns, and `mu(x) = m(x) + mu_res(x)` adds the two on
 one scale, so an anti-correlated prior cancels and then reverses a weakly-correct surrogate.
 
+### The interaction at 48 seeds — it does NOT replicate with the GP-only component
+
+Their ladder predicts a specific thing this branch *can* test: `prior` is in both
+vocabularies, so running `--ablate-components prior` with both arms in one run folder
+measures the one-hot effect **with the anti-correlated prior removed**, at 48 paired seeds.
+
+CreiLOV, `--ablate-components prior`, 48 paired seeds, run
+`run_20261101_152647_2ff33b69`, gate 8 passed / 1 FAILED (`threshold.creilov`, the same §0
+reader mismatch), all four arms at a full 125 distinct measurements:
+
+| arm | mean | Δ vs the arm above | 95% CI | Wilcoxon p | W/L/T |
+| --- | --- | --- | --- | --- | --- |
+| `panoptes_default`, prior in place (§2) | 6.9375 | — | — | — | — |
+| `panoptes_default`, **prior ablated** | 10.9375 | **+4.00** | — | — | — |
+| `panoptes_onehot_surrogate`, **prior ablated** | 10.7500 | **−0.1875** | [−1.042, +0.646] | **0.547** | 18/19/11 |
+
+* **Ablating the prior replicates.** +4.00 here against their +4.25 at 12 seeds.
+* **The interaction does not.** Their 12-seed ladder gives `prior,physchem` 17.000 against
+  `prior` 13.333, i.e. **+3.67** for one-hot once the prior is gone. This branch's component
+  gives **−0.19 (p=0.547)**, and the 48-seed interval **[−1.04, +0.65] excludes +3.67**. So
+  this is not an underpowered estimate of the same quantity; the two measurements disagree.
+
+**The most likely reason is the scope difference in the table above, and it is testable.**
+With the prior ablated, `zero_shot_scores` is zero and `AssayAdaptedHead` becomes the
+dominant non-GP term in `means = assay_adapter.predict(X_cand, zero_shot_scores=gp_means)` —
+and the head is precisely the consumer `physchem_features` moves and
+`biophysical_features` does not. **So the +3.67 they measured may be an `AssayAdaptedHead`
+effect rather than a GP effect**, which would make "one-hot features are worth +7.08 once the
+prior is gone" an attribution to the wrong stage. The decisive experiment is both components
+on one branch at one seed block: if `physchem_features` reproduces +3.67 at 48 seeds where
+`biophysical_features` gives −0.19, the head is the cause.
+
+Alternatives not excluded: 12 seeds against 48 (but the interval argues against it); a
+different seed block (their ridge is 59.167 against this run's 57.229); and the possibility
+that the effect needs `wt_anchor` ablated too, which this branch cannot do.
+
 **Therefore: every CreiLOV figure in §2 of this document was measured *through* that
 fabricated row.** `wt_anchor` is not in this branch's `ABLATABLE_COMPONENTS` — it is
 `bb925c9`'s component — so the confound is disclosed here and not removed. The right place
@@ -352,18 +388,23 @@ So the pool is not the binding stage on CreiLOV, and neither is the GP's column 
    deficit. This is the dominant cause and must **not** be attributed to featurisation.
 2. **The anti-correlated calibrated prior** (`rho = −0.249` against true fitness, negative
    in 48 of 48 campaigns; `mu(x) = m(x) + mu_res(x)` adds it to the GP residual on one
-   scale). Worth +4.25 alone, and it is what *gates* the featurisation: one-hot is worth
-   **+7.08 once the prior is ablated** and nothing while it is in place.
+   scale). Worth **+4.00 at 48 paired seeds here**, replicating their +4.25 at 12. The claim
+   that it *gates* the featurisation does **not** replicate with the GP-only component:
+   with the prior ablated, one-hot is **−0.19 (p=0.547, CI [−1.04, +0.65])**, an interval
+   that excludes their +3.67. See §4b — the prime suspect is that their arm also moves
+   `AssayAdaptedHead`, which becomes the dominant non-GP term once the prior is zero.
 3. The acquisition and Pareto stages, worth about +0.25 together — small, and consistent
    with HANDOFF's finding that greedy beats EI+Thompson by +11.27 on TrpB, which is a
    different landscape and a different regime.
 
 **The composed statement.** On CreiLOV the featurisation is not a standalone cause and the
-pool is not the binding stage; the two live causes are a synthetic training row and a prior
-that is anti-correlated with fitness, and the featurisation only becomes worth anything once
-the second is removed. On **GB1 and TrpB** — the two landscapes where that synthetic row is
-nearly true at 0.20 and 0.35 label SDs — the featurisation *is* worth something on its own,
-+4.31 and +7.71, which is the same mechanism seen from the other side.
+pool is not the binding stage. The two live causes are a synthetic training row (+29.75 at
+12 seeds) and a prior anti-correlated with fitness (+4.00 at 48 seeds here). Giving the GP
+one-hot columns is worth nothing **either with the prior in place (+0.79, p=0.33) or with it
+removed (−0.19, p=0.547)** — so on CreiLOV the GP's column basis is ruled out twice, in both
+regimes, at 48 paired seeds each. On **GB1 and TrpB** — the two landscapes where that
+synthetic row is nearly true at 0.20 and 0.35 label SDs — the featurisation *is* worth
+something on its own, +4.31 and +7.71, which is the same mechanism seen from the other side.
 
 On **GB1** and **TrpB** the surrogate basis is *not* ruled out — it is a real, significant
 campaign effect there, confounded with pool composition on GB1 and not on TrpB.
@@ -468,6 +509,7 @@ the real repository root:
 * GB1 `C:\Users\stoof\OneDrive\Documents\GitHub\VeritasBio\.claude\worktrees\agent-a14c69a80e0afa44a\benchmark_comparison_results\run_20261101_143628_d91f53ab`
 * TrpB `C:\Users\stoof\OneDrive\Documents\GitHub\VeritasBio\.claude\worktrees\agent-a14c69a80e0afa44a\benchmark_comparison_results\run_20261101_143938_7776a616`
 * identity B `…\benchmark_comparison_results\run_20261101_142627_4db47fab`
+* CreiLOV, `prior` ablated (the §4b interaction test) `C:\Users\stoof\OneDrive\Documents\GitHub\VeritasBio\.claude\worktrees\agent-a14c69a80e0afa44a\benchmark_comparison_results\run_20261101_152647_2ff33b69`
 * identity A `C:\Users\stoof\AppData\Local\Temp\claude\c--Users-stoof-OneDrive-Documents-GitHub-VeritasBio\0691478f-a671-445d-b8dc-a7025937cb24\scratchpad\baseline-7415846\benchmark_comparison_results\run_20261101_142511_24587b09`
   — a detached `git worktree` at `7415846`, i.e. a temporary checkout; if it has been pruned
   the run folder is gone with it and run A must be reproduced from that commit.
