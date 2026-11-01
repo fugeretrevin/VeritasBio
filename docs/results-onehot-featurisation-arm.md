@@ -452,6 +452,14 @@ Per-repeat iteration counts: biophysical `[8,8,9,10,9,10,9,10]`, one-hot `[8,10,
    **exactly the same rate, 5/8**. An observation that flipping the featurisation "broke
    `test_regret_stopping`" is therefore fully consistent with one unlucky draw and is not
    evidence about the featurisation.
+
+   **Confirmed in the suite itself, not only in the probe.** `pytest
+   tests/test_regret_stopping.py::TestRegretStopping::test_regret_early_stopping` run six
+   times in a row at commit `ecd5e9a` with no change between repeats: **5 passed, 1 failed.**
+   It also passed in both full-suite runs of this work and then failed on a third invocation
+   of the same unchanged code. The test has **not** been edited to make it pass — a test that
+   fails because of a change is a finding about the change, and a test that fails without one
+   is a finding about the test.
 2. **The featurisation does change a user-visible behaviour, not only a threshold the test
    happened to encode.** Round-1 `max_pool_ei` is the same to four decimals (median 1.43659
    vs 1.43632 — at round 1 the GP has almost no data and the prior dominates), but the
