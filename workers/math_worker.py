@@ -1107,17 +1107,87 @@ def generate_candidate_variants(
     diverse_amino_acids: Optional[Sequence[str]] = None,
     lead_variants: Optional[List[Variant]] = None,
     catalytic_invariants: Optional[Set[int]] = None,
+    allowed_residues: Optional[Dict[int, Sequence[str]]] = None,
 ) -> List[Variant]:
     """
     Generates combinatorial candidate variants across and between target clusters.
     Prioritizes high-impact physicochemical substitutions (T, Y, L, K, A, R)
     to discover synergistic epistatic multi-point improvements.
     Also executes iterative lead maturation and epistatic recombination on prior leads.
+
+    `allowed_residues` maps a 1-indexed position to the residues the LIBRARY actually
+    contains at that site. Supply it for any library that is not saturated, or the
+    generator proposes sequences nobody can order: on the 16-site binary CR9114 library
+    a 19-letter alphabet makes ~94.7% of single mutants nonexistent and the ineligibility
+    compounds with depth, which produced a measured 99.9% `not_in_eligible_universe`
+    rate and starved the arm to 26 of 125 measurements. See docs/day1-reachability.md.
+    Omitting it leaves the saturated-library behaviour exactly as it was.
     """
     # Complete amino acid alphabet (excluding Proline in helical active sites unless specified)
     target_aas = list(diverse_amino_acids) if diverse_amino_acids else [
         "A", "C", "D", "E", "F", "G", "H", "I", "K", "L", "M", "N", "Q", "R", "S", "T", "V", "W", "Y"
     ]
+
+    site_alleles: Dict[int, Tuple[str, ...]] = {
+        int(pos): tuple(aas) for pos, aas in (allowed_residues or {}).items()
+    }
+
+    def _alleles(pos: int, pool: Sequence[str]) -> List[str]:
+        """Permitted residues at `pos`, intersected with a pool narrowed for a reason.
+
+        Use this where `pool` carries real information - a catalytic invariant guard,
+        say - so the narrower of the two constraints wins.
+        """
+        declared = site_alleles.get(pos)
+        if declared is None:
+            return list(pool)
+        permitted = set(pool)
+        return [aa for aa in declared if aa in permitted]
+
+    def _alleles_unpruned(pos: int, pool: Sequence[str]) -> List[str]:
+        """Permitted residues at `pos`, ignoring an arbitrary truncation of `pool`.
+
+        Three pools in this function are arbitrary rather than meaningful: the
+        alphabetical prefixes `target_aas[:10]` and `target_aas[:8]`, and `target_aas`
+        itself, which omits proline. Intersecting a declared allele set with any of them
+        can discard a site's only legal allele - a binary site whose alternate is P, or
+        anything past I in the alphabet - so a restricted site uses its declared set in
+        full here. Unrestricted sites keep the existing truncation untouched, which is
+        what holds the TrpB and GB1 numbers fixed.
+        """
+        declared = site_alleles.get(pos)
+        if declared is None:
+            return list(pool)
+        return list(declared)
+
+    #: The alphabet size the position slices below were written against: 19 letters
+    #: minus the wild type, so ~18 usable substitutions per site.
+    _SATURATED_ALTERNATIVES = 18.0
+
+    def _position_budget(base: int, positions: Sequence[int]) -> int:
+        """How many positions a stage may draw on, given how many alleles each offers.
+
+        The literals in this function - `available_pos[:6]`, `[:4]`, `cluster_allowed[:4]`,
+        `c1_pos[:3]` - bound the number of CANDIDATES a stage emits, not the number of
+        positions. At 18 usable residues per site, 6 positions is ~108 candidates. On a
+        binary library the same 6 positions yield 6, so the whole generative pool
+        collapsed to 37-115 candidates against a 125-measurement campaign on CR9114 and
+        batches ran short even after the alphabet was fixed (measured: 57-60 of 125
+        spent). Scaling by the mean number of alternatives holds each stage's candidate
+        budget roughly constant instead.
+
+        Returns `base` unchanged when no per-site restriction is declared, so saturated
+        libraries - TrpB and GB1, and every published number from them - are untouched.
+        """
+        if not site_alleles:
+            return base
+        alternatives = [
+            max(1, len(site_alleles[pos]) - 1) for pos in positions if pos in site_alleles
+        ]
+        if not alternatives:
+            return base
+        mean_alternatives = sum(alternatives) / len(alternatives)
+        return max(base, int(base * _SATURATED_ALTERNATIVES / mean_alternatives))
 
     all_cluster_positions: Set[int] = set()
     for cluster in strategy.target_clusters:
@@ -1135,9 +1205,14 @@ def generate_candidate_variants(
     # 1. Single mutants across all allowed cluster positions
     for pos in allowed_positions:
         # Dynamic Catalytic invariant guard across ANY target (Pillars 1 & 4)
+        # True when a chromophore guard below narrowed the alphabet for a biophysical
+        # reason, so a per-site allele restriction must INTERSECT with it rather than
+        # replace it.
+        chromophore_guarded = False
         if catalytic_invariants and pos in catalytic_invariants:
             if pos == 66 and wt_sequence[pos - 1] == "Y":
                 pos_target_aas = [aa for aa in target_aas if aa in ("Y", "H", "W")]
+                chromophore_guarded = True
             else:
                 continue
         elif pos == 67 and wt_sequence[pos - 1] == "G":
@@ -1147,6 +1222,7 @@ def generate_candidate_variants(
             continue
         elif pos == 66 and wt_sequence[pos - 1] == "Y":
             pos_target_aas = [aa for aa in target_aas if aa in ("Y", "H", "W")]
+            chromophore_guarded = True
         else:
             pos_target_aas = target_aas
 
@@ -1165,6 +1241,13 @@ def generate_candidate_variants(
                         seen_aas.add(aa)
                         reordered.append(aa)
                 pos_target_aas = reordered
+
+        # Applied last, so a chromophore guard still wins and so every single mutant
+        # emitted is a member of the library rather than a sequence nobody can order.
+        pos_target_aas = (
+            _alleles(pos, pos_target_aas) if chromophore_guarded
+            else _alleles_unpruned(pos, pos_target_aas)
+        )
 
         wt_aa = wt_sequence[pos - 1]
         for mut_aa in pos_target_aas:
@@ -1197,9 +1280,9 @@ def generate_candidate_variants(
                 continue
             lead_positions = {m.position for m in lead.mutations}
             available_pos = [p for p in allowed_positions if p not in lead_positions]
-            for pos in available_pos[:6]:
+            for pos in available_pos[:_position_budget(6, available_pos)]:
                 wt_aa = wt_sequence[pos - 1]
-                for mut_aa in target_aas:
+                for mut_aa in _alleles_unpruned(pos, target_aas):
                     if mut_aa != wt_aa:
                         new_muts = sorted(
                             lead.mutations + [SingleMutation(wt_aa=wt_aa, position=pos, mut_aa=mut_aa)],
@@ -1216,13 +1299,15 @@ def generate_candidate_variants(
 
             # If multi-mutation depth allowed, stack pairs of mutations from new clusters onto leads (hierarchical pocket-hopping)
             if max_depth >= 4 and len(available_pos) >= 2:
-                for pos1, pos2 in itertools.combinations(available_pos[:4], 2):
+                for pos1, pos2 in itertools.combinations(
+                    available_pos[:_position_budget(4, available_pos)], 2
+                ):
                     wt1 = wt_sequence[pos1 - 1]
                     wt2 = wt_sequence[pos2 - 1]
-                    for mut1 in target_aas:
+                    for mut1 in _alleles_unpruned(pos1, target_aas):
                         if mut1 == wt1:
                             continue
-                        for mut2 in target_aas:
+                        for mut2 in _alleles_unpruned(pos2, target_aas):
                             if mut2 == wt2:
                                 continue
                             new_muts = sorted(
@@ -1245,13 +1330,15 @@ def generate_candidate_variants(
         cluster_allowed = [p for p in cluster.positions if p in allowed_positions]
         if len(cluster_allowed) >= 2 and strategy.max_mutation_depth >= 2:
             aa_pool = target_aas if len(cluster_allowed) <= 3 else target_aas[:10]
-            for pos1, pos2 in itertools.combinations(cluster_allowed[:4], 2):
+            for pos1, pos2 in itertools.combinations(
+                cluster_allowed[:_position_budget(4, cluster_allowed)], 2
+            ):
                 wt1 = wt_sequence[pos1 - 1]
                 wt2 = wt_sequence[pos2 - 1]
-                for mut1 in aa_pool:
+                for mut1 in _alleles_unpruned(pos1, aa_pool):
                     if mut1 == wt1:
                         continue
-                    for mut2 in aa_pool:
+                    for mut2 in _alleles_unpruned(pos2, aa_pool):
                         if mut2 == wt2:
                             continue
                         notation = f"{wt1}{pos1}{mut1}:{wt2}{pos2}{mut2}"
@@ -1264,18 +1351,20 @@ def generate_candidate_variants(
     # 4. Inter-cluster cross-talk double mutants (e.g. chromophore triad + pocket contact)
     if len(strategy.target_clusters) >= 2 and strategy.max_mutation_depth >= 2:
         for c1, c2 in itertools.combinations(strategy.target_clusters, 2):
-            c1_pos = [p for p in c1.positions if p in allowed_positions][:3]
-            c2_pos = [p for p in c2.positions if p in allowed_positions][:3]
+            c1_all = [p for p in c1.positions if p in allowed_positions]
+            c2_all = [p for p in c2.positions if p in allowed_positions]
+            c1_pos = c1_all[:_position_budget(3, c1_all)]
+            c2_pos = c2_all[:_position_budget(3, c2_all)]
             for pos1 in c1_pos:
                 for pos2 in c2_pos:
                     if pos1 == pos2:
                         continue
                     wt1 = wt_sequence[pos1 - 1]
                     wt2 = wt_sequence[pos2 - 1]
-                    for mut1 in target_aas[:8]:
+                    for mut1 in _alleles_unpruned(pos1, target_aas[:8]):
                         if mut1 == wt1:
                             continue
-                        for mut2 in target_aas[:8]:
+                        for mut2 in _alleles_unpruned(pos2, target_aas[:8]):
                             if mut2 == wt2:
                                 continue
                             notation = f"{wt1}{pos1}{mut1}:{wt2}{pos2}{mut2}"
@@ -1300,6 +1389,7 @@ def sample_policy_gradient_candidates(
     n_iterations: int = 40,
     batch_size: int = 32,
     random_state: int = 42,
+    allowed_residues: Optional[Dict[int, Sequence[str]]] = None,
 ) -> List[Variant]:
     """
     Sample multi-mutant candidates from a learned per-position substitution policy.
@@ -1330,8 +1420,58 @@ def sample_policy_gradient_candidates(
         return []
 
     P = len(valid_positions)
-    A = len(target_aas)
-    idx_to_aa = {i: a for i, a in enumerate(target_aas)}
+
+    # Per-site allele restriction. This sampler produced 6,506 of 7,415 candidates on a
+    # CR9114 campaign - the clear majority - so restricting only the combinatorial
+    # generator left 84.9% of the engine's actual ballot using residues the library does
+    # not contain. The action alphabet is EXTENDED with any declared allele missing from
+    # `target_aas` (which omits proline, and CR6261 has proline at two sites), then
+    # masked per position. See docs/day1-reachability.md.
+    site_alleles: Dict[int, Tuple[str, ...]] = {
+        int(pos): tuple(aas) for pos, aas in (allowed_residues or {}).items()
+    }
+    action_aas = list(target_aas)
+    if site_alleles:
+        known = set(action_aas)
+        for pos in valid_positions:
+            for aa in site_alleles.get(pos, ()):
+                if aa not in known:
+                    known.add(aa)
+                    action_aas.append(aa)
+
+    A = len(action_aas)
+    idx_to_aa = {i: a for i, a in enumerate(action_aas)}
+
+    # legal[p_idx, a_idx]: may this residue be proposed at this position? All True when
+    # nothing is declared, which keeps the saturated-library behaviour identical.
+    legal = np.ones((P, A), dtype=bool)
+    if site_alleles:
+        for p_idx, pos in enumerate(valid_positions):
+            declared = site_alleles.get(pos)
+            if declared is None:
+                continue
+            permitted = set(declared)
+            row = np.array([aa in permitted for aa in action_aas], dtype=bool)
+            # A site whose declared set somehow excludes everything would make the
+            # softmax undefined, so leave such a row unrestricted rather than NaN.
+            if row.any():
+                legal[p_idx] = row
+
+    def _sample_action(p_idx: int) -> Tuple[int, np.ndarray]:
+        """Sample a residue index at `p_idx` from the masked policy, with its probs.
+
+        The probabilities are returned because REINFORCE differentiates the policy it
+        actually sampled from, so the gradient must use the MASKED distribution.
+        """
+        row = logits[p_idx]
+        shifted = row - np.max(row[legal[p_idx]])
+        weights = np.where(legal[p_idx], np.exp(shifted), 0.0)
+        total = float(np.sum(weights))
+        if total <= 0.0 or not np.isfinite(total):
+            weights = legal[p_idx].astype(np.float64)
+            total = float(np.sum(weights))
+        probs = weights / total
+        return int(rng.choice(A, p=probs)), probs
 
     logits = np.zeros((P, A), dtype=np.float64)
     baseline = 0.0
@@ -1350,10 +1490,7 @@ def sample_policy_gradient_candidates(
 
             for p_idx in chosen_pos_indices:
                 p = valid_positions[p_idx]
-                row = logits[p_idx]
-                probs = np.exp(row - np.max(row))
-                probs /= np.sum(probs)
-                a_idx = int(rng.choice(A, p=probs))
+                a_idx, probs = _sample_action(p_idx)
 
                 wt_aa = wt_sequence[p - 1]
                 mut_aa = idx_to_aa[a_idx]
@@ -1415,10 +1552,7 @@ def sample_policy_gradient_candidates(
 
         for p_idx in chosen_pos_indices:
             p = valid_positions[p_idx]
-            row = logits[p_idx]
-            probs = np.exp(row - np.max(row))
-            probs /= np.sum(probs)
-            a_idx = int(rng.choice(A, p=probs))
+            a_idx, _probs = _sample_action(p_idx)
 
             wt_aa = wt_sequence[p - 1]
             mut_aa = idx_to_aa[a_idx]
@@ -1756,6 +1890,7 @@ def select_next_micro_batch(
     ablate: Optional[Set[str]] = None,
     candidate_pool: Optional[Sequence[Variant]] = None,
     candidate_trace: Optional[Any] = None,
+    allowed_residues: Optional[Dict[int, Sequence[str]]] = None,
 ) -> SelectedBatch:
     """
     Executes the Gaussian Process active learning selection (Phases 1-4):
@@ -1963,6 +2098,10 @@ def select_next_micro_batch(
             # pairs proposed without reference to what has already been measured.
             lead_variants=None if "generator" in ablated else lead_variants,
             catalytic_invariants=invariants_set,
+            # Without this the generator proposes a 19-residue alphabet at every site,
+            # which on a non-saturated library is mostly sequences the library does not
+            # contain. See docs/day1-reachability.md.
+            allowed_residues=allowed_residues,
         )
         if "generator" in ablated and candidates:
             # Uniform shuffle, so downstream stages receive the same pool SIZE with no
@@ -2038,6 +2177,10 @@ def select_next_micro_batch(
             target_aas=["T", "Y", "L", "K", "A", "R", "D", "E", "G", "V", "F", "S", "H", "N", "Q"],
             wt_sequence=wt_sequence,
             reward_fn=gfn_reward,
+            # This sampler is the majority candidate source, so without the per-site
+            # restriction most of the engine's real ballot is sequences the library
+            # does not contain. See docs/day1-reachability.md.
+            allowed_residues=allowed_residues,
             n_candidates=max(250, min(1000, batch_size * 5)),
             max_mutations=max_gfn_depth,
             catalytic_invariants=invariants_set,

@@ -5,9 +5,19 @@ rules in **§2 are load-bearing**: each one is written down because violating it
 already produced a wrong result in this project, in one case silently inverting a
 published conclusion.
 
-Suite: **664 passing, 0 failures**. Everything described here is committed and pushed
-to `origin/main`; run `git log --oneline -40` for the day's work rather than trusting a
-commit hash quoted in prose, which goes stale the moment this file is edited.
+Suite: **674 passing, 2 skipped, 0 failures**. Everything described here is committed and
+pushed to `origin/main`; run `git log --oneline -40` for the day's work rather than
+trusting a commit hash quoted in prose, which goes stale the moment this file is edited.
+
+> **Newer than this file:** [`HANDOFF-2026-10-31-reachability.md`](HANDOFF-2026-10-31-reachability.md)
+> and its analysis [`day1-reachability.md`](day1-reachability.md). The candidate generator
+> was hardcoded to one library geometry — four saturated sites, 20 residues each, depth
+> capped at 4 by a schema validator — and was therefore blind on seven of the nine
+> landscapes. Fixed and measured: the engine now beats one-hot ridge on CR9114 (5.00 vs
+> 1.833 top-1%, 48 paired seeds, global optimum found) and on eqFP611-blue (9.50 vs 8.79),
+> and scores **zero** on eqFP611-red against ridge's 15.35. TrpB is bit-identical, as the
+> negative control requires. Three further rules are added there, §7 — the first being
+> that a task-stop is not a process kill, which voided ten run directories.
 
 ---
 

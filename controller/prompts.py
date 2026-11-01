@@ -97,7 +97,18 @@ class SearchStrategy(BaseModel):
     hypothesis: str = Field(..., description="Scientific hypothesis explaining the chosen search boundaries")
     target_clusters: List[ResidueCluster] = Field(..., min_length=1, description="Residue clusters to sample combinations from")
     forbidden_positions: List[int] = Field(default_factory=list, description="Residues that should NOT be mutated")
-    max_mutation_depth: int = Field(default=2, ge=1, le=4, description="Max simultaneous mutations (e.g. 2 for double mutants)")
+    # `le` was 4, which made every library deeper than four mutations unsearchable by
+    # construction: with `max_depth = max(strategy.max_mutation_depth, 3)` in
+    # math_worker.generate_candidate_variants the effective depth was always 3 or 4, for
+    # every library at every budget and round count. On the 16-site CR9114 library that
+    # put 647 of 651 top-1% hits - and the optimum, at depth 7 - outside the reachable
+    # set. Measured in docs/day1-reachability.md.
+    #
+    # 64 is a bound on obviously-wrong LLM output, not a library limit: this is a schema
+    # for model-generated plans, so it stays bounded. The real per-library limit is
+    # applied downstream by clip_strategy_to_assayable_scope, which clamps with
+    # min(max_mutation_depth, measurable_sites) and so can only narrow this.
+    max_mutation_depth: int = Field(default=2, ge=1, le=64, description="Max simultaneous mutations (e.g. 2 for double mutants)")
     mechanistic_hypotheses: List[BiophysicalHypothesis] = Field(
         default_factory=list,
         description="Detailed biophysical hypotheses connecting 3D structure and chemistry",

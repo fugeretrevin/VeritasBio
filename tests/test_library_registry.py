@@ -102,7 +102,28 @@ class TestNoActiveLibraryState(unittest.TestCase):
                 self.assertEqual(len(spec.parent_residues), spec.n_sites)
                 self.assertEqual(sorted(spec.positions), list(spec.positions))
                 self.assertEqual(len(set(spec.positions)), spec.n_sites)
-                self.assertEqual(spec.one_hot_width, spec.n_sites * 20)
+                # The width must follow the DECLARED per-site alphabets, not assume 20
+                # residues everywhere. Asserting n_sites * 20 pinned the saturated-library
+                # assumption in place: five of these libraries are binary by design and
+                # one is mixed (CreiLOV, 5 x 3 x 3 x 2^12), so a 20-wide block per site
+                # encodes 18 columns that cannot occur. See docs/day1-reachability.md.
+                self.assertEqual(
+                    spec.one_hot_width,
+                    sum(len(spec.alphabet_for(slot)) for slot in range(spec.n_sites)),
+                )
+                if spec.allowed_aa_per_position is None:
+                    self.assertEqual(spec.one_hot_width, spec.n_sites * 20)
+                else:
+                    self.assertEqual(len(spec.allowed_aa_per_position), spec.n_sites)
+                    for slot, (parent, alphabet) in enumerate(
+                        zip(spec.parent_residues, spec.allowed_aa_per_position)
+                    ):
+                        self.assertIn(
+                            parent, alphabet,
+                            f"{key} slot {slot} (position {spec.positions[slot]}): the "
+                            f"parent residue {parent!r} is absent from its own declared "
+                            f"allele set {alphabet!r}, so the wild type is not in the library",
+                        )
                 self.assertIn(spec.fitness_direction,
                               [d.value for d in FitnessDirection])
                 self.assertIn(spec.selection_mode, (SelectionMode.POOL_RESTRICTED,

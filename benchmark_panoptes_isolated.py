@@ -455,6 +455,13 @@ LIBRARIES: Dict[str, LibrarySpec] = {
         accession=None,
         positions=(28, 30, 58, 59, 62, 74, 75, 76, 77, 79, 104),
         parent_residues="TSANQKSTSAL",
+        # Per-site alleles read from the prepared table and corroborated against
+        # CombinGym's independently stated Variant Space (2^11 = 2,048), so this is a
+        # declaration of the library DESIGN, not an inference from what the assay
+        # happened to sample. Without it the generator proposed a 19-residue
+        # alphabet at every site and ~99.9% of its candidates did not exist in the
+        # library. See docs/day1-reachability.md.
+        allowed_aa_per_position=("PT", "RS", "AT", "KN", "PQ", "DK", "FS", "AT", "GS", "AV", "LV"),
         structure_pdb=REPO_ROOT / "workers" / "data" / "5WKZ.pdb",
         # No literature optimum in hand; the best OBSERVED variant is recorded in
         # the provenance note instead, because calling it published would be a
@@ -480,6 +487,13 @@ LIBRARIES: Dict[str, LibrarySpec] = {
         accession=None,
         positions=(28, 30, 58, 59, 62, 74, 75, 76, 77, 79, 104),
         parent_residues="TSANQKSTSAL",
+        # Per-site alleles read from the prepared table and corroborated against
+        # CombinGym's independently stated Variant Space (2^11 = 2,048), so this is a
+        # declaration of the library DESIGN, not an inference from what the assay
+        # happened to sample. Without it the generator proposed a 19-residue
+        # alphabet at every site and ~99.9% of its candidates did not exist in the
+        # library. See docs/day1-reachability.md.
+        allowed_aa_per_position=("PT", "RS", "AT", "KN", "PQ", "DK", "FS", "AT", "GS", "AV", "LV"),
         structure_pdb=REPO_ROOT / "workers" / "data" / "5WKZ.pdb",
         # No literature optimum in hand; the best OBSERVED variant is recorded in
         # the provenance note instead, because calling it published would be a
@@ -505,6 +519,13 @@ LIBRARIES: Dict[str, LibrarySpec] = {
         accession=None,
         positions=(29, 30, 31, 52, 57, 58, 59, 71, 74, 75, 76, 77, 84, 87, 95, 106),
         parent_residues="FSSITANTKSTSSRYY",
+        # Per-site alleles read from the prepared table and corroborated against
+        # CombinGym's independently stated Variant Space (2^16 = 65,536), so this is a
+        # declaration of the library DESIGN, not an inference from what the assay
+        # happened to sample. Without it the generator proposed a 19-residue
+        # alphabet at every site and ~99.9% of its candidates did not exist in the
+        # library. See docs/day1-reachability.md.
+        allowed_aa_per_position=("FS", "NS", "NS", "IS", "ST", "AT", "AN", "ST", "IK", "FS", "ST", "NS", "NS", "RT", "FY", "SY"),
         structure_pdb=REPO_ROOT / "workers" / "data" / "5WL2.pdb",
         # No literature optimum in hand; the best OBSERVED variant is recorded in
         # the provenance note instead, because calling it published would be a
@@ -530,6 +551,13 @@ LIBRARIES: Dict[str, LibrarySpec] = {
         accession=None,
         positions=(3, 4, 5, 7, 29, 34, 47, 60, 61, 92, 96, 98, 107, 109, 113),
         parent_residues="GLRTAGQRDIDRVVT",
+        # Per-site alleles read from the prepared table and corroborated against
+        # CombinGym's independently stated Variant Space (5 x 3 x 3 x 2^12 = 184,320), so this is a
+        # declaration of the library DESIGN, not an inference from what the assay
+        # happened to sample. Without it the generator proposed a 19-residue
+        # alphabet at every site and ~99.9% of its candidates did not exist in the
+        # library. See docs/day1-reachability.md.
+        allowed_aa_per_position=("EG", "LN", "DR", "HST", "AHK", "GT", "CIQRV", "NR", "DQ", "CI", "DQ", "DR", "MV", "QV", "ET"),
         structure_pdb=REPO_ROOT / "workers" / "data" / "8QI9.pdb",
         # No literature optimum in hand; the best OBSERVED variant is recorded in
         # the provenance note instead, because calling it published would be a
@@ -555,6 +583,13 @@ LIBRARIES: Dict[str, LibrarySpec] = {
         accession=None,
         positions=(20, 45, 63, 127, 143, 158, 168, 172, 174, 197, 206, 207, 231),
         parent_residues="DVLTFNSAAYNNK",
+        # Per-site alleles read from the prepared table and corroborated against
+        # CombinGym's independently stated Variant Space (2^13 = 8,192), so this is a
+        # declaration of the library DESIGN, not an inference from what the assay
+        # happened to sample. Without it the generator proposed a 19-residue
+        # alphabet at every site and ~99.9% of its candidates did not exist in the
+        # library. See docs/day1-reachability.md.
+        allowed_aa_per_position=("DN", "AV", "LM", "PT", "FS", "AN", "GS", "AC", "AL", "RY", "DN", "KN", "KR"),
         structure_pdb=REPO_ROOT / "workers" / "data" / "3M24.pdb",
         # No literature optimum in hand; the best OBSERVED variant is recorded in
         # the provenance note instead, because calling it published would be a
@@ -580,6 +615,13 @@ LIBRARIES: Dict[str, LibrarySpec] = {
         accession=None,
         positions=(20, 45, 63, 127, 143, 158, 168, 172, 174, 197, 206, 207, 231),
         parent_residues="DVLTFNSAAYNNK",
+        # Per-site alleles read from the prepared table and corroborated against
+        # CombinGym's independently stated Variant Space (2^13 = 8,192), so this is a
+        # declaration of the library DESIGN, not an inference from what the assay
+        # happened to sample. Without it the generator proposed a 19-residue
+        # alphabet at every site and ~99.9% of its candidates did not exist in the
+        # library. See docs/day1-reachability.md.
+        allowed_aa_per_position=("DN", "AV", "LM", "PT", "FS", "AN", "GS", "AC", "AL", "RY", "DN", "KN", "KR"),
         structure_pdb=REPO_ROOT / "workers" / "data" / "3M24.pdb",
         # No literature optimum in hand; the best OBSERVED variant is recorded in
         # the provenance note instead, because calling it published would be a
@@ -917,9 +959,24 @@ def _combo_from_notation(notation: str, library: LibrarySpec) -> Optional[str]:
 
 
 def _one_hot_matrix(combos: Sequence[str], library: LibrarySpec) -> np.ndarray:
-    """One-hot encodes combos as len(library.positions) x 20 binary features
-    (80 for the four-site libraries, 200 for the ten-site HER2 library)."""
-    matrix = np.zeros((len(combos), library.n_sites * len(AA_ALPHABET)), dtype=np.float32)
+    """One-hot encodes combos using each site's DECLARED alphabet.
+
+    Width is `library.one_hot_width`, which is what the manifest reports as
+    `one_hot_features`: 80 for the saturated four-site libraries, 200 for HER2, and 32
+    for the 16-site binary CR9114 library.
+
+    This previously built `n_sites * 20` columns unconditionally. On CR9114 that was 320
+    columns of which 288 were identically zero at every row, because each site admits
+    exactly two residues - so the baselines were handed ten times the features the
+    library can express, and the width disagreed with `one_hot_width`.
+    """
+    offsets: List[int] = []
+    width = 0
+    for slot in range(library.n_sites):
+        offsets.append(width)
+        width += len(library.alphabet_for(slot))
+
+    matrix = np.zeros((len(combos), width), dtype=np.float32)
     for row, combo in enumerate(combos):
         if len(combo) != library.n_sites:
             raise BenchmarkError(
@@ -927,7 +984,19 @@ def _one_hot_matrix(combos: Sequence[str], library: LibrarySpec) -> np.ndarray:
                 f"{library.key!r} declares {library.n_sites}"
             )
         for slot, residue in enumerate(combo):
-            matrix[row, slot * len(AA_ALPHABET) + AA_INDEX[residue]] = 1.0
+            alphabet = library.alphabet_for(slot)
+            index = alphabet.find(residue)
+            if index < 0:
+                # Refused rather than encoded: a residue outside the declared alphabet
+                # means the data and the spec disagree about the library, and silently
+                # dropping or remapping it would put that disagreement into the features.
+                raise BenchmarkError(
+                    f"genotype {combo!r} at row {row} has residue {residue!r} at site "
+                    f"{slot} (position {library.positions[slot]}), which library "
+                    f"{library.key!r} does not declare: its alleles there are "
+                    f"{alphabet!r}"
+                )
+            matrix[row, offsets[slot] + index] = 1.0
     return matrix
 
 
@@ -1661,7 +1730,12 @@ class RidgeSelector(Selector):
     """
 
     name = "ridge"
-    config = {"model": "sklearn.linear_model.Ridge", "alpha": 1.0, "encoding": "onehot_4x20"}
+    # The encoding is one block per site over that site's DECLARED alphabet, so its width
+    # is library-dependent: 80 for the saturated four-site libraries, 32 for 16-site
+    # binary CR9114. It was labelled "onehot_4x20", which was wrong for every library
+    # with more or fewer than four sites.
+    config = {"model": "sklearn.linear_model.Ridge", "alpha": 1.0,
+              "encoding": "onehot_per_site_declared_alphabet"}
 
     def propose(self, round_index: int, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
         from sklearn.linear_model import Ridge
@@ -1692,7 +1766,7 @@ class RandomForestSelector(Selector):
         "n_estimators": 300,
         "max_depth": None,
         "min_samples_leaf": 1,
-        "encoding": "onehot_4x20",
+        "encoding": "onehot_per_site_declared_alphabet",
     }
 
     def propose(self, round_index: int, n: int, view: CandidateView, revealed: RevealedState) -> List[str]:
@@ -2365,8 +2439,13 @@ class _AnnotationDrivenPlanner:
             target_clusters=clusters,
             forbidden_positions=catalytic,
             # Depth tracks the annotated site count so a combinatorially complete
-            # library is reachable, rather than being fixed to a literal.
-            max_mutation_depth=min(len(targetable), 2 if round_number == 1 else 4),
+            # library is reachable, rather than being fixed to a literal. It previously
+            # read `min(len(targetable), 2 if round_number == 1 else 4)`, which WAS
+            # fixed to the literal 4 and contradicted this comment: on the 16-site
+            # CR9114 library it pre-clipped depth to 4 before the engine saw it, which
+            # put the depth-7 optimum and 647 of 651 top-1% hits out of reach. TrpB and
+            # GB1 have four annotated sites, so this is a no-op for both of them.
+            max_mutation_depth=2 if round_number == 1 else len(targetable),
             mechanistic_hypotheses=[
                 BiophysicalHypothesis(
                     pocket_name="annotated_active_site",
@@ -2655,6 +2734,7 @@ class PanoptesSelector(Selector):
         ablate_components: Optional[Set[str]] = None,
         acquisition_mode: Optional[str] = None,
         exploration_xi: Optional[float] = None,
+        candidate_source: str = "generate",
     ) -> None:
         super().__init__(seed)
         # Ablation arm. 'none' is the shipped configuration; the others restore one
@@ -2668,6 +2748,25 @@ class PanoptesSelector(Selector):
         # None means leave the engine default, so an unset flag changes nothing.
         self.acquisition_mode = acquisition_mode
         self.exploration_xi = exploration_xi
+        # "generate" keeps the production generative path, which is the task every
+        # published number here was measured on. "enumerate" hands this arm the same
+        # untested eligible pool that RandomSelector and RidgeSelector always receive,
+        # which is a DIFFERENT and strictly easier task - and the only way the three are
+        # compared on equal footing. The default preserves every existing number.
+        if candidate_source not in ("generate", "enumerate"):
+            raise BenchmarkError(
+                f"candidate_source must be 'generate' or 'enumerate', got "
+                f"{candidate_source!r}"
+            )
+        self.candidate_source = candidate_source
+        if candidate_source == "enumerate":
+            self.notes.append(
+                "CANDIDATE SOURCE=enumerate: this arm ranked the enumerated untested "
+                "eligible pool instead of generating under mutation constraints. That "
+                "is the same task the random and ridge baselines always perform, and it "
+                "is strictly easier than generation; success here does not validate "
+                "generative proposal."
+            )
         if acquisition_mode is not None or exploration_xi is not None:
             self.notes.append(
                 f"ACQUISITION mode={acquisition_mode or 'engine default'} "
@@ -3160,7 +3259,7 @@ class PanoptesSelector(Selector):
         # that nobody assayed. Everything after generation - prior, DKL, Pareto, DPP -
         # runs unchanged; only the source of candidates differs.
         candidate_pool = None
-        if self.library.pool_restricted:
+        if self.library.pool_restricted or self.candidate_source == "enumerate":
             from controller.gatekeeper import Variant
 
             candidate_pool = [Variant(notation=vid) for vid in view.untested(revealed)]
@@ -3169,6 +3268,19 @@ class PanoptesSelector(Selector):
                     "pool-restricted library exhausted: every eligible variant is "
                     "already measured"
                 )
+
+        # The alphabet the LIBRARY contains, per position, for the generative path.
+        # Passed only when the spec declares it, so a saturated library's behaviour -
+        # and every published TrpB and GB1 number - is untouched. Without it the
+        # generator proposed 19 residues at every site and 25,712 of 25,744 of its
+        # CR9114 proposals were rejected as not_in_eligible_universe, starving the arm
+        # to 26 of 125 measurements. See docs/day1-reachability.md.
+        allowed_residues = None
+        if self.library.allowed_aa_per_position is not None:
+            allowed_residues = {
+                position: self.library.alphabet_for(slot)
+                for slot, position in enumerate(self.library.positions)
+            }
 
         # select_next_micro_batch draws its Thompson sample from numpy's global RNG; seeding it
         # here is a caller-side action that makes the production path reproducible.
@@ -3188,6 +3300,7 @@ class PanoptesSelector(Selector):
             **({} if self.exploration_xi is None
                else {"exploration_xi": float(self.exploration_xi)}),
             candidate_pool=candidate_pool,
+            allowed_residues=allowed_residues,
             # Write-only diagnostics sink, attached by the harness. This is what
             # captures the engine's REAL ballot: the selection trace holds committed
             # picks plus harness rejections only, which cannot separate a narrow
@@ -5533,6 +5646,7 @@ def build_selector_factories(
                                  ablate_components=set(c),
                                  acquisition_mode=args.acquisition_mode,
                                  exploration_xi=args.exploration_xi,
+                                 candidate_source=args.production_candidate_source,
                                  qualify_threshold=q, probe_after_qualify=pr)
             )
             detail = (
@@ -6037,6 +6151,21 @@ examples:
             "silently marked UNAVAILABLE because ALDE_PATH was unset, and two complete "
             "benchmark runs were quoted from that report. Use this only to probe what an "
             "environment can run - a run made with it is not a complete comparison."
+        ),
+    )
+    parser.add_argument(
+        "--production-candidate-source", choices=("generate", "enumerate"),
+        default="generate",
+        help=(
+            "Where the production arm's candidates come from. 'generate' is the "
+            "production path and the default, and is the task every published number "
+            "here was measured on. 'enumerate' hands the arm the untested eligible pool "
+            "instead - the same pool the random and ridge baselines ALWAYS receive, "
+            "since both call view.untested() unconditionally. Those baselines were "
+            "therefore being scored on pool ranking while the production arm was scored "
+            "on constrained generation; 'enumerate' is the only setting under which the "
+            "three are compared on the same task. Ranking an enumerated pool is "
+            "strictly easier, so a result obtained with it does not validate generation."
         ),
     )
     parser.add_argument(
