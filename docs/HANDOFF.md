@@ -200,6 +200,74 @@ On TrpB, held-out seeds 48–95, 25 initial + 4×25 = 125 measurements:
 | at a 50-measurement budget | ~~**6.3×** the best baseline, decaying to 1.7× at 125~~ — **WITHDRAWN, the figure is wrong** |
 | vs the strongest of a seven-arm baseline panel | **+12.88, t=+3.57, 31/16/1** — the margin survives |
 | GB1 | ~~parity at every budget~~ — **WITHDRAWN**, measured as a loss; see above |
+| with the one-hot GP surrogate, vs the strongest of seven | **+17.88 raw, t=+5.08, 37/11/0; +7.85 at d≥2, t=+15.41, 48/0/0** — measured on one seed block; see below |
+
+> **Measured 2026-11-01 — the COMBINED head-to-head, nine arms in ONE run folder per
+> landscape, one shared starting sample per seed, 48 paired seeds, budgets gate-verified
+> matched (all nine arms spent all 125 distinct measurements on all 48 seeds).** Branch
+> `worktree-agent-aa53d65b7e6a10b8f`; pre-registered in
+> [`prereg-combined-head-to-head.md`](prereg-combined-head-to-head.md) and read out in
+> [`results-combined-head-to-head.md`](results-combined-head-to-head.md). TrpB
+> `run_20261101_163432_c6faa21c` on the held-out block 48–95; GB1
+> `run_20261101_164651_45ecc6b2` on 0–47.
+>
+> It exists because the panel's +12.88 (seeds 48–95) and the one-hot arm's +7.71
+> (seeds 0–47) are on **different seed blocks** and adding them is the same move that
+> produced the withdrawn 6.3×. The splice gives +20.59; **the direct measurement gives
+> +17.88**, so it was 2.7 hits too high.
+>
+> | landscape | endpoint | strongest baseline | it scores | engine+one-hot | Δ | t | b/w/t | verdict |
+> | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+> | TrpB | raw | `gp_onehot` | 38.54 | 56.42 | **+17.88** | +5.08 | 37/11/0 | WIN |
+> | TrpB | d≥2 | `ridge` | 6.40 | 14.25 | **+7.85** | +15.41 | **48/0/0** | WIN |
+> | GB1 | raw | `gp_onehot` | 46.02 | 24.71 | **−21.31** | −9.10 | 7/41/0 | LOSS |
+> | GB1 | d≥2 | `ridge` | 6.90 | 7.69 | +0.79 | +1.81 | 24/16/8 | **not separable** |
+>
+> **Three things in this table are new and two of them are bad news.**
+>
+> **`ridge` is NOT GB1's strongest baseline — `gp_onehot` is, at 46.02 against ridge's
+> 33.29.** The panel never ran GB1, so **every GB1 figure above is a contrast against the
+> third-strongest raw arm** and the loss is worse than recorded: −25.62 for
+> `panoptes_default`, not −12.90.
+>
+> **The one-hot surrogate's TrpB gain is REDUNDANT hits and vanishes at d≥2.**
+> `panoptes_onehot_surrogate − panoptes_default` is +5.00 raw (t=+5.33, 40/6/2) and
+> **+0.10 at d≥2 (t=+0.29, 22/19/7, NOT SEPARABLE)**; redundancy rises 3.63× → 3.96×. On
+> the co-primary diversity endpoint the two engine arms are indistinguishable on TrpB, so
+> "one-hot improves the engine" must be scoped to the raw count.
+>
+> **GB1's loss is raw-only.** At d≥2 the engine is at parity with the strongest baseline
+> (+0.04 default, +0.79 one-hot, both not separable) and at d≥3 it wins (+0.67, +0.75); the
+> baselines' GB1 raw leads carry 7.3–8.0× redundancy against the engine's 2.9–3.2×. This
+> does **not** rescue the engine — the raw loss is real and the comparator moved against it —
+> but "the engine loses on GB1" is endpoint-dependent and must always be stated with its
+> endpoint.
+>
+> **The open question is settled: one-hot does NOT close GB1's gap, it closes 33.4% of it**
+> (ridge contrast −12.896 → −8.583), which the pre-registration predicted at 33%, 80%
+> interval [10%, 60%]. So the GB1 loss is not a feature-space defect, and with the veto and
+> the `y = 0.0` WT row already eliminated the residual is attributable only to **acquisition
+> and selection**. That is a narrowing, not a diagnosis; the GB1 loss remains unexplained.
+> GB1's one-hot effect is still **pool-confounded** (the GFlowNet reward scores through this
+> GP).
+>
+> **One registered prediction was WRONG**: §3C named `ridge` as GB1's strongest raw baseline
+> and predicted Δ = −8.6, 80% interval [−17, −1]. Against ridge that is right to 0.02 hits;
+> against the actual strongest baseline Δ is −21.31, **outside** the interval. The sign held,
+> the magnitude did not, because the comparator was mis-predicted.
+>
+> **`threshold.trpb` and `threshold.gb1` FAIL the post-run gate** on both runs — the known
+> unfixed `QUALIFICATION_MANIFEST_PATHS` reader/schema mismatch (scalar read as a mapping).
+> Symmetric across arms and consumed only by arms that did not run, so it cannot bias a
+> paired contrast; it is nonetheless un-passed and is stated wherever these figures are.
+> Otherwise 13 passed / 10 not applicable, pre-run 4 passed / 0 failed, both landscapes.
+>
+> Every premise figure reproduced **exactly**: TrpB 51.42 and +12.875/t=+3.57/31-16-1,
+> d≥2 +7.750/t=+13.40, `gp_onehot` redundancy 7.06× vs ridge's 4.54×; GB1 20.40,
+> −12.896/t=−5.63/6-41-1, one-hot 24.71 and +4.312/34-12-2. The merged tree's default path is
+> **byte-identical** to `main`: 21,120 cells across all 22 behavioural columns of
+> `round_metrics.csv`, 4 arms × 48 seeds × 5 rounds, identical `seed_block_sha256` and
+> different `source_tree_sha256`.
 
 > **The 6.3× front-loading figure is WITHDRAWN as incorrect, independently of any
 > re-measurement.** It was computed as `frontier−dkl,dpp,gflownet` (14.12) ÷ **ALDE**
