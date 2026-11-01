@@ -6066,6 +6066,16 @@ DEFAULT_METHODS = ("random", "ridge", "random_forest", "panoptes_default")
 #: figure already published in this project.
 BASELINE_PANEL_METHODS = ("random", "ridge", "random_forest", "gbm_onehot", "knn_hamming",
                           "gp_onehot", "greedy_measured", "panoptes_default")
+#: The combined head-to-head of docs/prereg-combined-head-to-head.md: the baseline panel
+#: PLUS `panoptes_onehot_surrogate`, so the engine-with-one-hot and the seven baselines are
+#: measured in ONE run folder, on ONE seed block, from ONE shared starting sample per seed.
+#: It exists because the two 48-seed TrpB results it supersedes were measured on DIFFERENT
+#: seed blocks (panel on seeds 48-95, surrogate arm on 0-47) and so cannot be combined -
+#: and an exactly analogous splice produced the withdrawn "6.3x the best baseline" claim.
+#: Named here so a sweep cannot quietly run a subset: dropping `random` removes the only
+#: arm that says whether the landscape's endpoint can discriminate methods at all, and
+#: dropping `ridge` makes the run non-comparable to every figure already published here.
+COMBINED_HEAD_TO_HEAD_METHODS = BASELINE_PANEL_METHODS + (PANOPTES_ONEHOT_SURROGATE,)
 
 
 

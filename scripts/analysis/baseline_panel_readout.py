@@ -60,12 +60,22 @@ PANEL_ORDER = (
     "gp_onehot",
     "greedy_measured",
     "panoptes_default",
+    # The combined head-to-head's ninth arm. Listed so it prints in panel order rather than
+    # being appended; adding it changes nothing for the 2026-11-01 panel runs, which do not
+    # contain it.
+    "panoptes_onehot_surrogate",
 )
 
-#: Arms that are baselines. `panoptes_default` is the thing under test and is excluded from
-#: "the strongest baseline", which is the whole point of the comparison.
+#: Arms that are NOT baselines: the engine under test, in any of its configurations. Excluded
+#: from "the strongest baseline", which is the whole point of the comparison.
+#:
+#: `panoptes_onehot_surrogate` MUST be in this list. It is the same engine with
+#: `biophysical_features` ablated, and without it the maximum over "baselines" would be taken
+#: over a set containing the arm under test - so on TrpB, where it is expected to be the
+#: highest-mean arm in the run, "the strongest baseline" would have come out as the engine
+#: itself and the reported margin would have been its difference from itself, i.e. zero.
 ENGINE_ARMS = ("panoptes_default", "panoptes_muse", "panoptes_qualify_then_optimize",
-               "panoptes_conditional_probe")
+               "panoptes_conditional_probe", "panoptes_onehot_surrogate")
 
 #: |t| below this, with no clear seed majority, is reported as NOT SEPARABLE. Two-sided,
 #: 47 degrees of freedom at 48 paired seeds; 2.0 is the convention already used in
