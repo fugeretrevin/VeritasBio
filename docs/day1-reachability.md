@@ -657,9 +657,9 @@ gate failed on `corpus.derived_table` (§10) and its landscapes were never gated
 
 ```
 python -m veritas.paths                      # resolve dataset and results dirs first
-python -I <scratchpad>/hit_depth.py          # §4 reachability table
-python -I <scratchpad>/cr9114_facts.py       # §3 depth table, optimum, §4b arithmetic
-python -I <scratchpad>/depth_profile.py \
+python -I scripts/analysis/hit_depth_reachability.py          # §4 reachability table
+python -I scripts/analysis/cr9114_depth_facts.py       # §3 depth table, optimum, §4b arithmetic
+python -I scripts/analysis/depth_profile.py \
     benchmark_comparison_results/run_20261031_164431_b6c27377=CreiLOV \
     benchmark_comparison_results/run_20261031_165647_2804608c=eqFP611-red
 ```

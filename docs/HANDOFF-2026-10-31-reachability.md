@@ -69,7 +69,7 @@ residues. *Scope an audit to the measured dominant path, not the apparent one.*
 ## 4. Deep analysis: what will and will not work next
 
 Run offline, no campaigns needed. Script:
-`scratchpad/surrogate_headroom.py` (train on a realistic budget, predict on 3,000 random
+`scripts/analysis/surrogate_headroom.py` (train on a realistic budget, predict on 3,000 random
 held-out variants, 5 repeats, identical one-hot features for every model).
 
 | landscape | budget | ridge | GP | RandomForest | GP − ridge |
@@ -119,7 +119,7 @@ chance alone predicts 3.01**. Local expansion from random low-fitness leads does
 red's hit set, which sits at 6.1x the library mean.
 
 Two pre-registered landscape predictors were computed before these results existed and
-**both are falsified** (`scratchpad/landscape_predictors.py`):
+**both are falsified** (`scripts/analysis/landscape_predictors.py`):
 
 - rho_1 (neighbour fitness autocorrelation) predicted local search would fail where it is
   low. eqFP611-red's rho_1 is **0.687**, among the highest; HER2 (0.031), TrpB (0.400) and
@@ -134,7 +134,7 @@ landscapes and CR6261-H1/H9 non-independent, effective n = 8 and a correlation n
 ## 6. Not done
 
 - **Generality sweep incomplete.** CreiLOV, GB1, CR9114 (fair-encoding re-run) and HER2
-  were not run. Script: `scratchpad/generality_sweep.sh`, which now refuses to start if a
+  were not run. Script: `scripts/analysis/generality_sweep.sh`, which now refuses to start if a
   benchmark is already running.
 - **Enumerate mode never run.** Implemented, tested for wiring, zero campaign data.
 - **The CR9114 win is confounded** across fixes 1–6, applied together. Attribution needs
