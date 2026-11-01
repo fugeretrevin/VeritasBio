@@ -217,6 +217,56 @@ Grading TrpB as badly compromised as the other two would be its own kind of dish
 The audit can only ever **downgrade** a verdict, so a bad input can never manufacture a
 pass.
 
+## A second mode: qualify, then optimize
+
+The default policy optimises for **breadth** — how many top-1% variants a campaign finds.
+That is the right objective when you want a panel of candidates, and the wrong one when you
+want *one very good* variant. `panoptes_qualify_then_optimize` runs the default policy
+unchanged until a measured variant clears a qualification bar, then switches the remaining
+budget to greedy Hamming-1 search around the incumbent:
+
+```powershell
+.venv\Scripts\python.exe -X utf8 benchmark_panoptes_isolated.py --library trpb `
+  --methods ridge,panoptes_default,panoptes_qualify_then_optimize --qualify-quantile 99.96
+```
+
+Because every trajectory is **identical to the default until the protected event has
+occurred**, the reliability curves are preserved by construction — and they measured
+byte-identical at every budget. The bar is a quantile of the eligible universe, not an
+absolute: an absolute does not transfer across landscapes, which is what the gate's
+`threshold` check exists to catch (0.70 is TrpB's 99.96th percentile and sits *below the
+global minimum* on four of the nine landscapes).
+
+| | default | qualify-then-optimize |
+|---|---|---|
+| P(≥0.50) and P(≥0.70) at every budget | — | **identical** |
+| seeds reaching ≥0.80 | 3/48 | **13/48** |
+| seeds reaching ≥0.90 | **0/48** | **8/48** |
+| best variant found | 0.8326 | **1.0000** |
+| top-1% hits | 45.23 | 39.90 (**−5.33**, t=−3.20) |
+| best fitness | 0.7457 | 0.7570 (t=0.94, **not** significant) |
+
+> **These figures were measured on a superseded tree and need one re-run before they are
+> quoted.** `panoptes_default` on this block measures 51.42 today, not the 45.23 above —
+> `DPP_DIVERSITY_ENABLED` and `TWO_STAGE_GP_ENABLED` changed default since. The *shape* of
+> the result is what is being claimed here, not the decimals.
+>
+> One more caveat that is a property of the landscape, not the method: the 99.96 bar is
+> favourable on TrpB specifically because 88% of campaigns qualify by measurement 50,
+> leaving three batches to spend on the frontier phase. On a slower landscape there would
+> be no budget left to switch into, and the mode would degenerate to the default.
+
+Honest description: **threshold attainment at the top improves; average peak does not.**
+The mean best-fitness gain is not significant and loses 25 of 38 decided seeds. It buys the
+tail for a real and measured cost in breadth, which is a trade a campaign owner should make
+deliberately rather than a strict improvement. It is shipped as a *mode*, not a default, for
+exactly that reason.
+
+This is also the mode the baseline panel independently argues for: `greedy_measured`, pure
+local exploitation with **zero learned parameters**, is the strongest arm on CR9114. Where
+the assay floors and most of the library carries no gradient, exploiting a measured lead
+beats modelling.
+
 ## Measured results
 
 Protocol, shared by every arm: one evaluator owns the complete measured fitness table and
