@@ -49,6 +49,37 @@ That is the story: a gate that refuses plans, turned on its own authors, killing
 favourite explanation for our own bad results. It is stronger than a win, and it cannot
 be falsified by the repo, because it *is* the repo.
 
+### The strongest available beat, pending one confirmation run
+
+**Do not record this until the 48-seed confirmation lands.** Measured 2026-11-01 at **12
+paired seeds** (branch `worktree-agent-a83565bcde59a81f3`, `bb925c9`), the CreiLOV loss is
+root-caused, and the cause is a **fabricated training row**. `select_next_micro_batch`
+injects one row per round for the wild type with the literal label `y = 0.0` whatever the
+assay's scale, at variance `1e-4` against a real measurement's `1e-2`. CreiLOV's real
+labels occupy **2.793–4.196**, so that row sits **11.6 units below the minimum — 8.3× the
+entire label range, 15.68 label SDs from centre** — and every round's surrogate is fitted
+through it.
+
+| ablation (12 paired seeds, ridge constant at 59.167) | engine | Δ vs default | t |
+|---|---|---|---|
+| default | 9.083 | — | — |
+| `wt_anchor` | **38.833** | **+29.75** | **12.17**, 12/12 seeds |
+| `wt_anchor,prior` | 43.083 | +34.00 | 12.44 |
+| `wt_anchor,prior,physchem_features` | **50.167** | **+41.08** | **19.48** |
+
+That closes −50.08 to **−9.00**, and best fitness goes to **4.1880 ± 0.0001 against
+ridge's 4.1851 ± 0.0043** — above it.
+
+The line that makes this the beat: **TrpB (0.35 label SDs) and GB1 (0.20) are the only two
+landscapes whose assays are genuinely centred near zero** — which is to say, the only two
+where this defect is invisible, and they are exactly the two every quotable engine figure
+in this repository came from.
+
+Why it is not yet in the shot list: 12 seeds, not 48, and the fix is deliberately an
+ablatable component rather than a default, because changing the default moves TrpB and
+GB1 and would re-base every submitted number. Run `--ablate-components wt_anchor` on
+CreiLOV at 48 paired seeds first. If it holds, it replaces the depth beat at 0:55.
+
 ---
 
 ## Pre-flight, before you hit record
@@ -119,14 +150,28 @@ command once *without* the redirect first to confirm it succeeded.
 *Hold on the `ONE PLAN, EVERY LANDSCAPE` table.*
 
 > "On CreiLOV, depth three reaches seventy-five of one thousand six hundred and
-> fifty-five hits. Four and a half percent. A perfect model with an unlimited budget
-> still finds seventy-five, because the answers are deeper than the plan. One plan, nine
+> fifty-five hits. Four and a half percent. Any proposer that honours that depth finds
+> seventy-five at most, whatever its model and whatever its budget. One plan, nine
 > measured landscapes, sound on none of them.
 >
 > And the model is not being careless. Depth three is a reasonable exploration budget for
 > a protein. How deep a library's answers sit is not in the sequence, not in the
 > structure, not in the annotation — it is a property of the measured landscape. Only the
 > gate knows it."
+
+> **CORRECTED 2026-11-01, and the correction is why this beat is now the WEAKEST of the
+> three.** An earlier draft said "a perfect model with an unlimited budget still finds
+> seventy-five, because the answers are deeper than the plan." That is true of a proposer
+> that *honours* its declared depth and **false of our own engine**, which does not:
+> `recombine_lead_variants` stacks measured leads and carries the candidate pool past the
+> declared depth from round 1. Instrumented over the real selection path on all nine
+> landscapes, the pre-veto ballot spans depths **1–12** on CreiLOV and reaches **99.9%**
+> of its hit set; the depth ceiling costs **1 hit of 1,655** there and **0** on the other
+> eight. The tool now prints that distinction itself.
+>
+> So REACH is a correct statement about a *plan* and the wrong thing to narrate as a
+> prediction about our engine. Keep the beat only in the depth-honouring framing above —
+> "any proposer that honours that depth" — or cut it for the stronger beat below.
 
 ### 1:35 – 2:15 · We pointed it at ourselves, and it found our own bug
 

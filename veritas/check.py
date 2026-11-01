@@ -17,6 +17,24 @@ and the failure is invisible in the metrics everyone reports - mean top-1% yield
 fitness are identical in shape for a search that lost and a search that was never
 permitted to begin. This command computes the ceilings and refuses.
 
+WHAT EACH CEILING IS A CEILING *ON* - read this before quoting REACH
+--------------------------------------------------------------------
+SCOPE and VIABILITY bind on this engine: an unmeasurable position cannot be assayed, and
+the veto runs on every candidate inside `select_next_micro_batch`. **REACH does not.**
+`max_mutation_depth` is a property of the PLAN, and this engine does not honour it -
+`recombine_lead_variants` stacks measured leads and carries the candidate pool past the
+declared depth from round 1. Measured 2026-11-01 over the real selection path on all
+nine landscapes: the pre-veto ballot spans depths 1-12 on CreiLOV and reaches 99.9% of
+its hit set, and the depth ceiling costs **1 hit of 1,655** there and **0** on the other
+eight (`scripts/analysis/pool_hit_reachability.py`).
+
+So a REACH refusal says "a proposer that honours this depth cannot succeed", which is
+the right question to ask of a plan and of any system that enforces a depth bound - a
+schema validator capping depth at 4 was binding in this repository historically - and is
+NOT a prediction about this engine's yield. An earlier version of this module asserted
+the stronger reading, and that was wrong. The check prints the distinction itself rather
+than relying on a reader having seen this paragraph.
+
 Measured cost of skipping it, on CR9114 before these checks existed: 757,829 candidate
 proposals built, 25,712 rejections of which 100% were `not_in_eligible_universe`, 26 of
 125 measurements spent, 0 of 651 top-1% hits found.
@@ -431,8 +449,22 @@ def check_reach(plan: Plan, landscape) -> CheckOutcome:
     if verdict == REFUSE:
         detail.append("")
         detail.append(
-            f"A perfect surrogate and an unlimited budget still find at most {reachable}. "
-            f"This is not a modelling problem; the answers are deeper than the plan.")
+            f"A proposer that HONOURS this depth finds at most {reachable}, whatever its "
+            f"surrogate and whatever its budget. That is arithmetic about the plan.")
+    if verdict != PASS:
+        detail.append("")
+        detail.append(
+            "NOT ENFORCED BY THIS ENGINE - measured, 2026-11-01. `max_mutation_depth` "
+            "does not cap the candidate pool: `recombine_lead_variants` stacks measured "
+            "leads and carries the pool past the declared depth from round 1. "
+            "Instrumented over the real selection path on all nine landscapes, the "
+            "pre-veto ballot spans depths 1-12 on CreiLOV and reaches 99.9% of its hit "
+            "set, and the depth ceiling costs 1 hit of 1,655 there and 0 on the other "
+            "eight. So read this row as a property of the PLAN, not as a prediction "
+            "about this engine's yield. It is the right question to ask of any proposer "
+            "that enforces a depth bound - a schema validator capping depth at 4 was "
+            "binding here historically - and it is the wrong question to ask of this "
+            "one. See `scripts/analysis/pool_hit_reachability.py`.")
     return CheckOutcome("reach", verdict, headline, detail,
                         {"depth": plan.depth, "n_hits": n_hits,
                          "n_reachable": reachable, "pct_reachable": round(pct, 2)})

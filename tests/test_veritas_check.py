@@ -193,6 +193,44 @@ class TestReachCheck(unittest.TestCase):
         self.assertEqual(outcome.verdict, vcheck.REFUSE)
         self.assertLess(outcome.numbers["pct_reachable"], 25.0)
 
+    def test_a_non_passing_reach_discloses_that_the_engine_ignores_the_depth(self) -> None:
+        """REACH is a ceiling on the PLAN, not a prediction about this engine.
+
+        `max_mutation_depth` does not cap the candidate pool: `recombine_lead_variants`
+        stacks measured leads past the declared depth from round 1. Measured over the
+        real selection path, the pre-veto ballot spans depths 1-12 on CreiLOV and reaches
+        99.9% of its hit set, and the depth ceiling costs 1 hit of 1,655 there and 0 on
+        the other eight landscapes.
+
+        An earlier version of this check asserted the stronger reading - that a perfect
+        surrogate with an unlimited budget could not exceed the reachable count on this
+        engine - and that was wrong. The disclosure is pinned here rather than left to a
+        docstring, because the wrong reading went into a demo script within hours of the
+        check being written.
+        """
+        landscape = load_landscape("creilov")
+        for depth, expect_disclosure in ((3, True), (int(np.asarray(landscape.depths).max()), False)):
+            with self.subTest(depth=depth):
+                outcome = vcheck.check_reach(
+                    vcheck.Plan(positions=landscape.spec.positions, depth=depth,
+                                source="test"), landscape)
+                said = any("NOT ENFORCED BY THIS ENGINE" in line for line in outcome.detail)
+                self.assertEqual(said, expect_disclosure)
+
+    def test_reach_never_claims_the_engine_is_capped(self) -> None:
+        """The specific wrong sentence must not come back.
+
+        It read "A perfect surrogate and an unlimited budget still find at most N",
+        which is true of a depth-honouring proposer and false of this engine.
+        """
+        landscape = load_landscape("creilov")
+        outcome = vcheck.check_reach(
+            vcheck.Plan(positions=landscape.spec.positions, depth=3, source="test"),
+            landscape)
+        joined = " ".join(outcome.detail)
+        self.assertNotIn("perfect surrogate and an unlimited budget", joined)
+        self.assertIn("HONOURS this depth", joined)
+
 
 class TestPlanParsing(unittest.TestCase):
     def test_a_raw_search_strategy_dump_is_accepted(self) -> None:
