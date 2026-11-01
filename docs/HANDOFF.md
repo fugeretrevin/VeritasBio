@@ -32,18 +32,39 @@ On TrpB, held-out seeds 48–95, 25 initial + 4×25 = 125 measurements:
 | `panoptes_default` ("reliability"), raw top-1% hits | 45.21 (50.44 with `dkl,gflownet` ablated) |
 | vs ridge, diversity-adjusted at d≥2 | **+7.93, t=+17.1** — larger than the raw t of +8.4 |
 | at a 50-measurement budget | **6.3×** the best baseline, decaying to 1.7× at 125 |
-| GB1 | parity at every budget |
+| GB1 | parity at every budget — but see the caveat below |
 
 That arm was budget-matched at exactly 125, and TrpB is the one landscape where the
 corrected qualification bar accepts the identical variant set, so none of the
 2026-10-31 fixes touch it.
 
+> **`panoptes_default` changed meaning on 2026-10-31.** `DPP_DIVERSITY_ENABLED` and
+> `TWO_STAGE_GP_ENABLED` now default **False**, because both were measured to *hurt*
+> top-1% yield. So the 45.21 above and any figure produced after that commit are
+> **different arms under one name**. Always carry the flag state with the number; a
+> bare "panoptes_default" is no longer a sufficient description of a configuration.
+>
+> **GB1's parity is suspect for the same reason.** Removing k-DPP is worth **+6.25**
+> top-1% hits on GB1 (t=3.92, better on 36 of 48 seeds) — more than twice its effect on
+> TrpB. The weakest headline result in this table may be substantially an artifact of a
+> mis-signed component rather than a property of the landscape. Re-measure before
+> quoting it. See [`preregistration-motif-narrowness.md`](preregistration-motif-narrowness.md) §3B.
+
 **Mechanistic findings, all intact:**
 
-- The candidate generator is healthy — 2.80% landscape coverage at mean depth 3.28 in
-  four campaigns, where ridge needs 48 campaigns to reach 2.52%.
-- **Acquisition is the bottleneck.** Round 1 was offered 193 depth-4 candidates across
-  four campaigns and selected **zero** (9→0, 18→0, 139→0, 27→0).
+> **Read the first two scoped to TrpB.** They were measured on TrpB only, and on TrpB
+> they hold. They do **not** generalise, and stating them unscoped inverts the diagnosis
+> everywhere else: on seven of the nine landscapes the generator was *structurally
+> blind* and generation is the confirmed bottleneck
+> ([`HANDOFF-2026-10-31-reachability.md`](HANDOFF-2026-10-31-reachability.md)). Both
+> pictures are true because TrpB is 4 saturated sites — depth 4 is full saturation, so
+> the generator's radius-4 ceiling is invisible there and only acquisition can bind.
+
+- **On TrpB**, the candidate generator is healthy — 2.80% landscape coverage at mean
+  depth 3.28 in four campaigns, where ridge needs 48 campaigns to reach 2.52%.
+- **On TrpB, acquisition is the bottleneck.** Round 1 was offered 193 depth-4 candidates
+  across four campaigns and selected **zero** (9→0, 18→0, 139→0, 27→0). Consistent with
+  greedy acquisition later measuring +11.27 top-1% (t=+12.20) against EI+Thompson.
 - `_AnnotationDrivenPlanner` hard-codes `max_mutation_depth = 2` in round 1, and the
   GFlowNet sampler's `max_gfn_depth = max(strategy.max_mutation_depth, 3)` is the only
   thing that lifts it. That is why ablating `gflownet` shifts the engine shallower and

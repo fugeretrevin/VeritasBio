@@ -142,6 +142,18 @@ the run is not to be trusted, so no HER2 arm is run.
 runner. The z values in §2 were measurable on all nine because the instrument reads
 only a prepared table; the *arms* are not.
 
+> **RESOLVED 2026-10-31, later the same day.** Constraint 2 no longer holds. `LIBRARIES`
+> now carries **all nine** landscapes with per-site alphabets declared, and the four
+> structure files named below (3M24, 8QI9, 5WL2, 5WKZ) are present under `workers/data/`.
+> Verify with the registry rather than trusting this line: every key in
+> `benchmark_panoptes_isolated.LIBRARIES` is runnable, and `one_hot_width` now follows the
+> declared alphabets (CR9114 is 32 columns, not 320 of which 288 were identically zero).
+>
+> **Constraint 1 — HER2's degenerate endpoint — still stands**, and it is the one that
+> blocks §4's falsification test. It is a library property, not a budget choice, so
+> wiring the landscapes does not touch it. The testable set is therefore widened for the
+> *narrow* band (§3C) and unchanged for the *diffuse* band, which remains untestable.
+
 **What this leaves testable now:** `gb1` alone, which §2 assigns to the
 concentrated-no-motif band and which therefore carries **no prediction**. Running it
 tests the band assignment — a landscape carrying no prediction should show no strong
@@ -340,6 +352,51 @@ One observation for whoever runs them later: CreiLOV's baseline reaches **2.60**
 this budget, so a small true effect may not reach significance there even if the
 direction is right. A null on CreiLOV would be weak evidence, and should be
 pre-committed as such before the arm runs.
+
+---
+
+## 3E. AMENDMENT 2026-10-31 — which HER2 universe §2 measured, and why the band survives
+
+§2 reports `her2` at **n = 36,391**. That is the zero-**inclusive** universe. Handoff rule
+2.3 holds that HER2's 25,114 rows scoring exactly 0.0 are **absent labels, not
+measurements of zero**, and `veritas.calibration.landscapes` accordingly reports
+n = 11,277 with a 113-variant top-1% tier. `tail_motif_narrowness.py` reads the prepared
+CSV directly and so did not apply the exclusion. The registration did not record which
+universe it used.
+
+This matters more here than anywhere else in the document: **HER2 is the only landscape
+in the diffuse band**, and §4's falsification condition requires the sign to flip on a
+diffuse landscape. If HER2's band were an artifact of the universe choice, the
+registration would have no falsifier at all rather than an unavailable one.
+
+**Measured both ways, 2,000 permutations, seed 0, identical settings:**
+
+| universe | n | tail | concentration | null mean | z | p | conserved | band |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| zero-inclusive (as registered) | 36,391 | 5 (floor) | 0.380 | 0.440 | **−1.31** | .946 | 0 | **diffuse** |
+| zero-excluded (rule 2.3) | 11,277 | 5 (floor) | 0.380 | 0.508 | **−2.58** | .999 | 0 | **diffuse** |
+
+**The band is stable, and HER2 is *more* diffuse under the correct universe**, not less.
+The tail is identical under both — the same five genotypes, since the tail is taken by
+score and placeholder rows cannot enter it — so only the permutation null's genotype set
+changes, which moves the null mean from 0.440 to 0.508 and makes the observed
+concentration more anomalously *low*.
+
+So §2's band assignment stands and no conclusion in this document moves. Recorded because
+the figure in §2 is reproducible only with the zero-inclusive universe, and a later reader
+re-running the instrument against the canonical loader would otherwise find a number that
+does not match and have no way to tell which was intended.
+
+**For whoever runs the HER2 arm**, if §3A's blocker is ever cleared: the arm would run on
+the canonical 11,277-variant universe, i.e. the second row. The z recorded for the
+prediction is therefore **−2.58**, not −1.31. Both are in the diffuse band so the
+prediction is unchanged, but the arm and the instrument should report the same universe.
+
+Reproduce: `scripts/analysis/tail_motif_narrowness.py --library her2` for the first row;
+the second requires filtering `DMS_score != 0.0` before `analyse`, which no committed flag
+does yet. **Adding that flag is the clean fix** and is left as a follow-up rather than done
+here, because changing the instrument after registering with it is the move this document
+exists to prevent — the amendment records the number instead.
 
 ---
 
