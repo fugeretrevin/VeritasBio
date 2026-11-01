@@ -207,6 +207,17 @@ class SelectedBatch(BaseModel):
     predicted_uncertainties: List[float] = Field(..., description="GP predicted standard deviation")
     pareto_ranks: Optional[List[int]] = Field(default=None, description="Multi-objective Pareto rank per variant (0 = non-dominated)")
     max_pool_ei: Optional[float] = Field(default=None, description="Maximum Expected Improvement across entire candidate pool")
+    #: Which batch-construction rule ACTUALLY chose these indices. Written inside the
+    #: branch that chose them - not derived from the argument that asked for it - so a
+    #: caller can record what the engine did rather than what it requested. HANDOFF rule
+    #: 2.12: two manifests claimed `dpp` and `dkl` were enabled because the record read
+    #: the CLI flag instead of the module-level global, and that cost a real attribution.
+    #: Vocabulary: 'kdpp', 'top_n_quality', 'random_from_ballot'.
+    selection_rule_applied: Optional[str] = Field(
+        default=None,
+        description="The batch-construction branch that selected these variants, stamped "
+                    "at that branch: kdpp | top_n_quality | random_from_ballot",
+    )
 
 
 def compute_expected_improvement(
@@ -1660,7 +1671,26 @@ ABLATABLE_COMPONENTS: Set[str] = {
     # viability VETO, which is a different stage and was previously unreachable by any
     # flag - see the note at its call site in select_next_micro_batch for what it removes.
     "spatial_filter",
+    # `wt_anchor` omits the SYNTHETIC wild-type training row that
+    # select_next_micro_batch injects into every fit with the literal label y = 0.0,
+    # regardless of the assay's scale. See its call site for the per-landscape distance
+    # between that label and the real ones; on CreiLOV it is 15.68 label standard
+    # deviations and on TrpB and GB1 it is 0.35 and 0.20, which is why the row is
+    # invisible on the two landscapes every quotable engine figure comes from.
+    "wt_anchor",
 }
+
+#: How the batch is constructed from the scored ballot. `ranked` is the shipped engine and
+#: the only configuration any published figure was measured on: it runs the ranking stack
+#: (surrogate -> acquisition -> Pareto -> k-DPP or top-n) and commits its top picks.
+#:
+#: `random_from_ballot` replaces that stack with a COIN. Generation, lead recombination,
+#: the GFlowNet sampler, the novelty filter and the spatial viability veto all run exactly
+#: as before, so the candidate pool is the engine's own; the batch is then drawn uniformly
+#: without replacement from the surviving ballot. Nothing the ranking stack computes
+#: reaches the selection, which is what makes it an isolation of the ranking stack rather
+#: than of the pool. See docs/prereg-random-from-ballot.md.
+SELECTION_RULES: Tuple[str, ...] = ("ranked", "random_from_ballot")
 
 
 class _AblationSkip(Exception):
@@ -1895,6 +1925,7 @@ def select_next_micro_batch(
     candidate_pool: Optional[Sequence[Variant]] = None,
     candidate_trace: Optional[Any] = None,
     allowed_residues: Optional[Dict[int, Sequence[str]]] = None,
+    selection_rule: str = "ranked",
 ) -> SelectedBatch:
     """
     Executes the Gaussian Process active learning selection (Phases 1-4):
@@ -1904,6 +1935,12 @@ def select_next_micro_batch(
       4. Generates combinatorial candidates & epistatic recombinants (capped at 3 mutations).
       5. Predicts mean mu(x) = m(x) + mu_res(x) and uncertainty sigma(x).
       6. Evaluates hybrid Thompson sampling & Expected Improvement with batch position diversity.
+
+    `selection_rule` chooses how the batch is built from the scored ballot: `ranked` is the
+    shipped stack and the default, `random_from_ballot` replaces it with a uniform draw
+    over the post-veto ballot. See `SELECTION_RULES`. The rule that actually ran is
+    returned on `SelectedBatch.selection_rule_applied`, stamped inside the branch that ran,
+    so a caller records behaviour rather than the argument it passed (HANDOFF rule 2.12).
 
     `candidate_trace` is an optional, write-only diagnostics sink (see
     `veritas.diagnostics.trace.BoundedCandidateTrace`). It is duck-typed on purpose:
@@ -1930,6 +1967,16 @@ def select_next_micro_batch(
         raise ValueError(
             f"unknown ablation component(s) {sorted(unknown)}; "
             f"recognised: {sorted(ABLATABLE_COMPONENTS)}"
+        )
+
+    # Rejected here rather than falling through to the default. A typo in a selection rule
+    # would otherwise run the shipped ranking stack inside a folder labelled as the coin
+    # arm - the same failure mode `parse_ablate_components` was hardened against, where an
+    # unrecognised component name produced an unablated run reported as an ablation.
+    if selection_rule not in SELECTION_RULES:
+        raise ValueError(
+            f"unknown selection_rule {selection_rule!r}; recognised: "
+            f"{list(SELECTION_RULES)}"
         )
 
     # Collect all positions from the strategy clusters AND prior evidence
@@ -1976,15 +2023,39 @@ def select_next_micro_batch(
     y_train_list: List[float] = []
     y_train_direct_list: List[float] = []
     train_priors_list: List[float] = []
-    sample_variances_list: List[float] = [1e-4]  # WT sequence reference variance
+    sample_variances_list: List[float] = []
 
     # Include WT sequence baseline as score 0.0 (reference)
-    wt_var = Variant(notation="WT", mutations=[])
-    wt_features = featurize_variant_on_positions(wt_var, active_positions, wt_sequence, spatial_map=spatial_map)
-    X_train_list.append(wt_features)
-    y_train_list.append(0.0)
-    y_train_direct_list.append(0.0)
-    train_priors_list.append(0.0)
+    #
+    # This row is SYNTHETIC: no assay produced it, and the label is the literal 0.0
+    # whatever the assay's scale is. Measured distance from 0.0 to the centre of each
+    # landscape's real labels, in label standard deviations:
+    #
+    #   creilov 15.68 | cr9114_h1 14.14 | cr6261_h1 11.00 | cr6261_h9 8.35
+    #   eqfp611_blue 1.19 | eqfp611_red 0.80 | her2 0.56 | trpb 0.35 | gb1 0.20
+    #
+    # On TrpB and GB1 - the two landscapes every quotable engine figure comes from - the
+    # assay really is centred near zero, so the row is close to true and harmless. On
+    # CreiLOV the real labels occupy 2.793..4.196, so this row sits 11.6 units below the
+    # minimum: 8.3x the entire label range, asserted at variance 1e-4 while a real
+    # measurement defaults to 1e-2. Every round's surrogate is fitted through it.
+    #
+    # `wt_anchor` makes it omittable so the arm can be measured instead of argued about.
+    # Nothing here changes by default: without that component the row is added exactly as
+    # before, variance included, and `sample_variances_list` still leads with the 1e-4.
+    if "wt_anchor" not in ablated:
+        sample_variances_list.append(1e-4)  # WT sequence reference variance
+        wt_var = Variant(notation="WT", mutations=[])
+        wt_features = featurize_variant_on_positions(wt_var, active_positions, wt_sequence, spatial_map=spatial_map)
+        X_train_list.append(wt_features)
+        y_train_list.append(0.0)
+        y_train_direct_list.append(0.0)
+        train_priors_list.append(0.0)
+    else:
+        logger.info(
+            "wt_anchor ABLATED: the synthetic wild-type training row (y=0.0, variance "
+            "1e-4) is omitted; the surrogate sees only measured labels"
+        )
 
     f_best = 0.0
 
@@ -2045,6 +2116,17 @@ def select_next_micro_batch(
                     sample_variances_list.append(max(float(fantasy_variance), 1e-3))
                 except Exception as spec_exc:
                     logger.debug("Skipping unparseable speculative sequence: %s", spec_exc)
+
+    # Ablating `wt_anchor` removes the only row that existed unconditionally, so with no
+    # evidence at all there is nothing to fit. Named here rather than left to surface as
+    # an IndexError on `X_train.shape[1]` thirty lines down, which reads as a featurisation
+    # bug rather than as "this arm was asked to fit a surrogate on zero rows".
+    if not X_train_list:
+        raise ValueError(
+            "no training rows: `wt_anchor` is ablated and no evidence was supplied, so "
+            "the surrogate has nothing to fit. Supply evidence, or keep the wild-type "
+            "anchor row."
+        )
 
     X_train = np.array(X_train_list, dtype=np.float64)
     y_train = np.array(y_train_list, dtype=np.float64)
@@ -2395,7 +2477,61 @@ def select_next_micro_batch(
 
     # Phase 1 / Pillar 1: Determinantal Point Process (k-DPP) Orthogonal Batch Diversity
     # Maximizes the determinant volume det(L_B) to guarantee mutually orthogonal biophysical coverage
-    if "dpp" in ablated or not DPP_DIVERSITY_ENABLED:
+    #
+    # `selection_rule_applied` is assigned INSIDE each branch, never before the if. That is
+    # the point: it records which code path ran, so a caller's manifest is not reporting the
+    # argument it passed. HANDOFF rule 2.12.
+    if selection_rule == "random_from_ballot":
+        # A COIN ON THE ENGINE'S OWN BALLOT.
+        #
+        # Everything above this line is the shipped engine: annotation-driven planning,
+        # combinatorial generation, lead recombination, the GFlowNet sampler, the novelty
+        # filter and the spatial viability veto. `novel_candidates` is therefore the exact
+        # ballot the ranking stack would have been handed. The batch is drawn uniformly
+        # without replacement from it, so NONE of mu(x), sigma(x), the prior, the
+        # acquisition value, the Pareto multiplier or the quality score reaches the
+        # decision - they are still computed, and still written to the candidate trace, so
+        # the committed picks can be scored against the ranking they did not use.
+        #
+        # What this does NOT remove: the surrogate still shapes the BALLOT, because
+        # `gfn_reward` scores GFlowNet trajectories through it. That is deliberate - the
+        # arm is the engine's candidate pipeline with its ranking stack replaced, not an
+        # engine without a surrogate - and it is the reason the arm isolates ranking
+        # rather than the pool. Any report of this arm must say so.
+        #
+        # Dedup by variant identity is kept, for the reason the top-n branch gives below:
+        # distinct notations can collapse to one substitution set, and an arm whose
+        # duplicates are rejected without backfill spends a SMALLER budget than the arm it
+        # is paired against. Budget matching is the entire basis of the paired test.
+        #
+        # The RNG is its own RandomState, not numpy's global: the global is seeded by the
+        # caller per round and consumed by the Thompson draw above, so drawing from it
+        # would couple the coin to the acquisition function's state. Seeded only from
+        # `random_seed`, which is fixed within a round, so asking for a LONGER batch
+        # returns a strict prefix-extension of the shorter one - which is what the
+        # harness's backfill contract requires of a ranked list.
+        selection_rule_applied = "random_from_ballot"
+        ballot_rng = np.random.RandomState(
+            ((random_seed if random_seed is not None else 42) * 31 + 104_729) % (2 ** 32 - 1)
+        )
+        order = ballot_rng.permutation(n_cands)
+        selected_indices = []
+        seen_identities = set()
+        for idx in order:
+            cand = novel_candidates[int(idx)]
+            identity = frozenset((m.position, m.mut_aa) for m in cand.mutations)
+            if identity in seen_identities:
+                continue
+            seen_identities.add(identity)
+            selected_indices.append(int(idx))
+            if len(selected_indices) >= batch_size:
+                break
+        logger.info(
+            "selection_rule=random_from_ballot: %d of %d ballot members committed by "
+            "uniform draw; the ranking stack was computed and not consulted",
+            len(selected_indices), n_cands,
+        )
+    elif "dpp" in ablated or not DPP_DIVERSITY_ENABLED:
         # Top-n by quality score, with no diversity term. The engine's low variance
         # is widely attributed to this stage, so removing it is the direct test.
         #
@@ -2405,6 +2541,7 @@ def select_next_micro_batch(
         # measurement budget than every other arm - confounding 'diversity removed'
         # with 'fewer measurements'. k-DPP never hit this because it selects for
         # dissimilarity in the first place.
+        selection_rule_applied = "top_n_quality"
         order = np.argsort(quality_scores)[::-1]
         selected_indices = []
         seen_identities = set()
@@ -2418,6 +2555,7 @@ def select_next_micro_batch(
             if len(selected_indices) >= batch_size:
                 break
     else:
+        selection_rule_applied = "kdpp"
         selected_indices = greedy_dpp_sample(
             quality_scores=quality_scores,
             features=X_cand,
@@ -2491,6 +2629,7 @@ def select_next_micro_batch(
         predicted_uncertainties=selected_stds,
         pareto_ranks=selected_pareto_ranks,
         max_pool_ei=max_pool_ei,
+        selection_rule_applied=selection_rule_applied,
     )
 
 
