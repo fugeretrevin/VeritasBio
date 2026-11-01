@@ -50,6 +50,92 @@ This is close to what §8 of this document pre-registered ("that we lose… acro
 regression against ridge"), which is the one good thing about it: it was written down in
 advance and so cannot be re-narrated now.
 
+> **The veto hypothesis for these losses is FALSIFIED.** Measured 2026-11-01 at 48
+> paired seeds with `--ablate-components spatial_filter`, branch
+> `worktree-agent-a038e3b42e920227a` (`3804237`), pre-registered in
+> `docs/prereg-spatial-veto-ablation.md` **before** any ablated arm ran. Ablating the
+> veto **costs** hits on CreiLOV (−2.04, t=−2.33) and GB1 (−4.27, t=−3.22): on both it
+> was *helping*, by raising the candidate pool's hit density 2.8× and 1.8×. On
+> eqFP611-red it fully explains the **zero** — the ceiling is 0 of 82 and the arm scored
+> exactly 0.0000 on all 48 seeds, which is arithmetic, not a measurement — but ablated it
+> reaches only 4.21 against ridge's 15.35, so **73% of that loss is not the veto**. Every
+> figure in the table above reproduced bit-for-bit, paired statistics included. **The
+> CreiLOV and GB1 losses are therefore unexplained.** See
+> `docs/spatial-veto-ablation-results.md`.
+>
+> Two cautions carried from that campaign: the veto helped CreiLOV *while reading a
+> different protein's geometry* (`8QI9` maps 11 of 15 positions and all 11 disagree with
+> the library's parent residue), so the benefit is **pool density, not biophysics** — a
+> random filter enriching density 2.8× would have scored the same. And on GB1 the
+> cohesion rule contributes **zero** rejections at any depth (the library fits in an
+> ~8.2 Å sphere); all 118,766 GB1 rejections are single-site buried-core/steric calls
+> firing at depth 1. **No landscape measured so far tests the cohesion veto on correct
+> geometry.** TrpB is the only one that could, and it was not in scope.
+
+> **THE CREILOV LOSS IS ROOT-CAUSED, AND IT IS A FABRICATED TRAINING ROW.** Measured
+> 2026-11-01, branch `worktree-agent-a83565bcde59a81f3` (`bb925c9`), **12 paired seeds**
+> with `configuration.seeding.seed_block_sha256` verified identical across arms and ridge
+> held constant at 59.167. `select_next_micro_batch` injects one row per round for the
+> wild type carrying the literal label `y = 0.0` whatever the assay's scale, at variance
+> `1e-4` against a real measurement's `1e-2`. CreiLOV's real labels occupy
+> **2.793–4.196**, so that row sits **11.6 units below the minimum — 8.3× the entire
+> label range, 15.68 label SDs from centre** — and every round's surrogate is fitted
+> through it.
+>
+> | arm | engine | Δ vs default | t | B/W/T |
+> | --- | --- | --- | --- | --- |
+> | default | 9.083 | — | — | — |
+> | `prior` | 13.333 | +4.250 | 2.30 | 11/1/0 |
+> | `physchem_features` | 9.250 | +0.167 | 0.19 (**p=0.74**) | 4/5/3 |
+> | `prior,physchem_features` | 17.000 | +7.917 | 3.75 | 10/0/2 |
+> | **`wt_anchor`** | **38.833** | **+29.750** | **12.17** | **12/0/0** |
+> | `wt_anchor,prior` | 43.083 | +34.000 | 12.44 | 12/0/0 |
+> | **`wt_anchor,prior,physchem_features`** | **50.167** | **+41.083** | **19.48** | **12/0/0** |
+>
+> −50.08 closes to **−9.00**, and best fitness reaches **4.1880 ± 0.0001 against ridge's
+> 4.1851 ± 0.0043** — above it. **TrpB (0.35 label SDs) and GB1 (0.20) are the only
+> landscapes genuinely centred near zero, i.e. the only two where this defect is
+> invisible — and they are exactly the two every quotable engine figure here came from.**
+> CR9114 violates the scale by 14.14 SDs and the engine *wins* there, so this is not a
+> complete theory of the result set.
+>
+> **Not a default change, deliberately.** `wt_anchor` is an ablatable component; dropping
+> or correcting the row moves TrpB and GB1 and would re-base every submitted number.
+> **Next:** `--ablate-components wt_anchor` on CreiLOV at **48** paired seeds, then
+> cross-landscape, where the scale-violation ordering predicts TrpB/GB1 unaffected as a
+> built-in negative control.
+>
+> **The candidate-pool depth hypothesis is also FALSIFIED, on all nine landscapes.**
+> `max_mutation_depth` does not cap the pool — `recombine_lead_variants` carries it past
+> the declared depth from round 1. The pre-veto ballot spans depths **1–12** on CreiLOV
+> and reaches **99.9%** of its hit set; the depth ceiling costs **1 hit of 1,655** there
+> and **0** on the other eight. CreiLOV binds at **acquisition**: `ceil_post` is 70
+> against ridge's 69, so the ballot sufficed, and stage-wise Spearman rho degrades
+> monotonically (GP residual **+0.148** → composite µ(x) **−0.032** → post-acquisition
+> **−0.104** → post-Pareto **−0.121**) with the prior at **−0.249, negative in 48 of 48
+> campaigns**. The committed batch scores **0.81×** its own ballot's base rate — worse
+> than drawing uniformly from the ballot it built. See
+> `scripts/analysis/pool_hit_reachability.py` and `ranking_decomposition.py`.
+>
+> Two instrument defects found alongside, **not fixed**: `GenerationCollapseWarning`'s
+> `depth_reach` divides by `max_library_depth`, and CreiLOV's depth 15 holds 10 variants
+> and **zero hits**, so it demands proposals into an empty region, fires on every
+> landscape including the winning `ridge` arm, and **would have corroborated the depth
+> hypothesis that is now falsified**. And `generation_coverage.json`'s depth histograms
+> are **post-veto** (`record_round` runs after the veto has replaced `novel_candidates`),
+> so that artifact cannot distinguish a narrow ballot from a filtered one.
+
+> **`threshold.<lib>` FAILS the pre-flight gate on the three runs this table is quoted
+> from** — `run_20261101_024225_8fa1d86d`, `…_024544_e82e6214`, `…_025014_5e79e3ae` —
+> because `qualification.quantile` and `qualification.source` are not recorded in the
+> manifest. Nobody had seen it because `scripts/analysis/generality_sweep.ps1` invokes
+> the gate **without** `--run-dir`, which makes both `threshold` and `budget` report
+> NOT-APPLICABLE. The bar it concerns is consumed only by the
+> `qualify_then_optimize`/`conditional_probe` arms and the failure is symmetric across
+> arms, so it **cannot bias any paired contrast above**. It is nonetheless an un-passed
+> gate check that the published figures carry, and it must be stated wherever they are.
+> Run the gate with `--run-dir` from now on. Not fixed.
+
 **Every previously reported figure reproduced exactly** — CR9114 +3.167 against the
 reported 5.000−1.833, eqFP611-blue +0.729 against 9.500−8.792, red's ridge 15.354 to three
 decimals. The measurements were sound. Two **verdicts** were wrong:
