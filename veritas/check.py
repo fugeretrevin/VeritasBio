@@ -26,7 +26,8 @@ the veto runs on every candidate inside `select_next_micro_batch`. **REACH does 
 declared depth from round 1. Measured 2026-11-01 over the real selection path on all
 nine landscapes: the pre-veto ballot spans depths 1-12 on CreiLOV and reaches 99.9% of
 its hit set, and the depth ceiling costs **1 hit of 1,655** there and **0** on the other
-eight (`scripts/analysis/pool_hit_reachability.py`).
+eight (`scripts/analysis/pool_hit_reachability.py`, on branch
+`worktree-agent-a83565bcde59a81f3` @ `bb925c9`; not on `main` at the time of writing).
 
 So a REACH refusal says "a proposer that honours this depth cannot succeed", which is
 the right question to ask of a plan and of any system that enforces a depth bound - a
@@ -464,7 +465,8 @@ def check_reach(plan: Plan, landscape) -> CheckOutcome:
             "about this engine's yield. It is the right question to ask of any proposer "
             "that enforces a depth bound - a schema validator capping depth at 4 was "
             "binding here historically - and it is the wrong question to ask of this "
-            "one. See `scripts/analysis/pool_hit_reachability.py`.")
+            "one. Measured by `scripts/analysis/pool_hit_reachability.py` on branch "
+            "`worktree-agent-a83565bcde59a81f3`.")
     return CheckOutcome("reach", verdict, headline, detail,
                         {"depth": plan.depth, "n_hits": n_hits,
                          "n_reachable": reachable, "pct_reachable": round(pct, 2)})

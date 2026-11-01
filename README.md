@@ -124,10 +124,23 @@ Gate check 2. It takes the `max_mutation_depth` the model asked for and asks, pe
 landscape, what fraction of the top-tier variants sit at or below that depth — using the
 landscape's own depth and hit arrays from `veritas/calibration/landscapes.py`, not a second
 implementation. One model call, one plan, seven libraries: sound on some, **unable to
-succeed** on others. This is the check that would have refused the 757,829-proposal
-campaign above before a single measurement was spent. It is also the check the model cannot
-make for itself: where a library's good variants sit in mutation depth is a property of the
-measured landscape, not of the sequence, the structure or the annotation.
+succeed** on others. It is the check the model cannot make for itself: where a library's
+good variants sit in mutation depth is a property of the measured landscape, not of the
+sequence, the structure or the annotation.
+
+> **Be precise about what this check binds on, because we were not.** A reach refusal says
+> *a proposer that honours this depth cannot succeed.* That is a statement about the plan,
+> and about any system that enforces a depth bound — the `le=4` pydantic bound did enforce
+> one, which is how it put 647 of CR9114's 651 hits out of reach. It is **not** a
+> prediction about this engine's yield today: `recombine_lead_variants` stacks measured
+> leads and carries the candidate pool *past* the declared depth from round 1. Measured
+> 2026-11-01 over the real selection path on all nine landscapes, the pre-veto ballot
+> spans depths 1–12 on CreiLOV and reaches **99.9%** of its hit set, and the depth ceiling
+> costs **1 hit of 1,655** there and **0** on the other eight — instrumentation in
+> `scripts/analysis/pool_hit_reachability.py` on branch
+> `worktree-agent-a83565bcde59a81f3` (`bb925c9`), not yet merged. An earlier version of
+> `veritas/check.py` asserted the stronger reading. It was wrong, the tool now prints the
+> distinction itself, and a test pins the specific wrong sentence so it cannot return.
 
 **3. Budget — did the arm actually spend its budget, and if not, why?**
 `veritas/preflight.py::check_budget`, reading a run's `round_metrics.csv` and
@@ -160,6 +173,49 @@ best-fitness). Nothing in the gate is a bare boolean: `bool(result)` raises `Typ
 .venv\Scripts\python.exe -X utf8 -m veritas.preflight --library her2 --arms alde,ridge
 .venv\Scripts\python.exe -X utf8 -m veritas.preflight --library trpb --arms panoptes_default --run-dir <run>
 ```
+
+## `veritas check` — the gate as a command
+
+`veritas.preflight` grades a campaign that has already run. `veritas check` grades a
+**plan**, before anything is spent. Three ceilings, each reported separately and then
+composed, because collapsing them would hide which stage binds:
+
+```powershell
+# the live Meta planner proposes; the gate decides
+.venv\Scripts\python.exe -X utf8 -m veritas.check --library trpb --from-model
+
+# a plan you have on disk, or one typed by hand
+.venv\Scripts\python.exe -X utf8 -m veritas.check --library creilov --plan plan.json
+.venv\Scripts\python.exe -X utf8 -m veritas.check --library creilov --depth 3 --all-landscapes
+```
+
+Exit **0** the plan can succeed · **1** it cannot, *or a ceiling could not be measured* ·
+**2** the check itself could not run. An unmeasured ceiling is not an open one, so
+`UNKNOWN` never composes to `PASS` and `--skip-viability` cannot clear a plan. A gate that
+exits 0 on "I don't know" is not a gate.
+
+`--from-model` makes a real Meta Model API call and has **no mock path**, on purpose: a
+mock would prove nothing about what a model proposes. With the assayable scope withheld by
+default, because supplying it lets `restrict_strategy_to_assayable` clip the plan before
+anything downstream sees it — correct for a scored run, and it makes the catch invisible.
+
+**It audits its own input.** A 100% spatial-veto pass rate has two unrelated meanings:
+the veto rejected nothing, or no assayed position mapped and
+`filter_spatially_viable_variants` returned its input unchanged. Worse, a structure can
+load and be the *wrong* structure, and production validates neither, because
+`reference_sequence` is never passed at the call site so `SpatialContactMap`'s identity
+guard never fires. So `grade_structure` has three bands rather than two, and they are not
+interchangeable:
+
+| library | structure | mapped positions disagreeing with the library's own parent | grade |
+|---|---|---|---|
+| TrpB | `8EH0` | 1 of 4 (`184: P` vs `F`) — right protein, right numbering, one substitution | **CAVEAT** |
+| HER2 | `1N8Z` | 9 of 10 — chain A is the trastuzumab *light* chain; the library's positions are CDR-H3 on the *heavy* chain | **UNTRUSTED** |
+| CreiLOV | `8QI9` | 11 of 11 — phototropin / CrPhotLOV1, a non-aligning homolog | **UNTRUSTED** |
+
+Grading TrpB as badly compromised as the other two would be its own kind of dishonesty.
+The audit can only ever **downgrade** a verdict, so a bad input can never manufacture a
+pass.
 
 ## Measured results
 
@@ -262,6 +318,48 @@ and it was not softened afterwards. Two earlier verdicts of ours did not survive
 test and are withdrawn in place: eqFP611-blue was published as a win and is a coin flip,
 and GB1 was described as "parity at every budget" and is a decisive loss.
 
+### What we then falsified about ourselves
+
+Three explanations for those losses were pre-registered and **measured false**, in one day.
+Each had been plausible enough to act on, and two of them were ours.
+
+1. **"The spatial viability veto caused them."** Ablating the veto at 48 paired seeds
+   *costs* hits: CreiLOV −2.04 (t=−2.33), GB1 −4.27 (t=−3.22). On both landscapes it was
+   **helping**, by raising the candidate pool's hit density 2.8× and 1.8×. On eqFP611-red it
+   does fully explain the **zero** — the achievable ceiling there is 0 of 82 hits and the arm
+   scored exactly 0.0000 on all 48 seeds, which is arithmetic rather than a measurement —
+   but ablated it reaches only 4.21 against ridge's 15.35, so **73% of that loss is not the
+   veto**. Pre-registration and results on branch `worktree-agent-a038e3b42e920227a`
+   (`3804237`), not yet merged.
+2. **"The candidate pool was too shallow."** False on all nine landscapes; see the
+   blockquote under check 2 above. The depth ceiling costs 1 hit of 1,655 on CreiLOV and 0
+   elsewhere.
+3. **"The biophysical featurisation was the problem."** `physchem_features` against one-hot
+   is a **null** on CreiLOV standalone: +0.167, p=0.74, better on 4 of 12 seeds.
+
+What CreiLOV binds on is **ranking**, and the dominant cause is a defect in our own training
+data: `select_next_micro_batch` injects one row per round for the wild type carrying the
+literal label `y = 0.0` *whatever the assay's scale*, at variance `1e-4` against a real
+measurement's `1e-2`. CreiLOV's real labels occupy 2.793–4.196, so that row sits 11.6 units
+below the minimum — **15.68 label SDs from centre** — and every round's surrogate is fitted
+through it. Ablating it is worth **+29.75 hits (t=12.17, 12 of 12 seeds)**; with the prior
+and one-hot features as well, **+41.08**, closing −50.08 to −9.00, and best fitness reaches
+4.1880 ± 0.0001 against ridge's 4.1851 ± 0.0043.
+
+**TrpB (0.35 label SDs) and GB1 (0.20) are the only landscapes whose assays are genuinely
+centred near zero — the only two where this defect is invisible — and they are exactly the
+two every quotable engine figure in this repository came from.** They are also the only two
+of the candidate generator's native shape, which is a second, independent reason the same
+pair flatters this engine. CR9114 violates the scale by 14.14 SDs and the engine *wins*
+there, so this is not a complete theory of the result set.
+
+> **Provisional, and marked as such: 12 paired seeds, not 48.** A 48-seed confirmation is
+> running, with TrpB and GB1 as built-in negative controls — the theory predicts the
+> ablation is a no-op on both, and if it moves TrpB materially then the theory is wrong
+> *and* every TrpB figure above changes meaning. The fix is deliberately an **ablatable
+> component, not a default**: correcting or dropping that row re-bases every number on this
+> page. Do not quote the −9.00 as a result until the confirmation lands.
+
 ## Limitations
 
 Read these before quoting anything above.
@@ -280,6 +378,21 @@ Read these before quoting anything above.
   contaminated universe makes the comparison between methods unbiased — imputed values sit
   where sequencing coverage was poorest, which is not uniform over the landscape, so the
   bias is differential, not common-mode. Nothing in these runs bounds it.
+* **The `threshold` gate check FAILS on the three runs the sweep table is quoted from.**
+  `qualification.quantile` and `qualification.source` are not recorded in those manifests.
+  Nobody had seen it because `scripts/analysis/generality_sweep.ps1` invokes the gate
+  *without* `--run-dir`, which makes both `threshold` and `budget` report NOT-APPLICABLE.
+  The bar it concerns is consumed only by the `qualify_then_optimize`/`conditional_probe`
+  arms and the failure is symmetric across arms, so it **cannot bias any paired contrast
+  above** — but it is an un-passed check that those figures carry, and it is stated
+  wherever they are. Not fixed.
+* **No landscape measured so far tests the spatial cohesion veto on correct geometry.** On
+  GB1 the cohesion rule contributes **zero** rejections at any depth — the library fits in
+  an ~8.2 Å sphere — and all 118,766 GB1 rejections are single-site buried-core/steric calls
+  firing at depth 1. On CreiLOV the structure is a non-aligning homolog. TrpB is the only
+  landscape that could test it, and it has not been ablated. So the veto's measured benefit
+  on CreiLOV is **pool density, not biophysics**: a random filter enriching density 2.8×
+  would have scored the same.
 * **`panoptes_default` changed meaning on 2026-10-31.** k-DPP diversity and the two-stage
   GP now default **off**, because both were measured to hurt top-1% yield. Always carry the
   flag state with the number; every run's `manifest.json` records components enabled *and*

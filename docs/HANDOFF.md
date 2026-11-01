@@ -61,7 +61,7 @@ advance and so cannot be re-narrated now.
 > reaches only 4.21 against ridge's 15.35, so **73% of that loss is not the veto**. Every
 > figure in the table above reproduced bit-for-bit, paired statistics included. **The
 > CreiLOV and GB1 losses are therefore unexplained.** See
-> `docs/spatial-veto-ablation-results.md`.
+> `docs/spatial-veto-ablation-results.md` **on that branch** — neither doc is on `main`.
 >
 > Two cautions carried from that campaign: the veto helped CreiLOV *while reading a
 > different protein's geometry* (`8QI9` maps 11 of 15 positions and all 11 disagree with
@@ -115,7 +115,8 @@ advance and so cannot be re-narrated now.
 > **−0.104** → post-Pareto **−0.121**) with the prior at **−0.249, negative in 48 of 48
 > campaigns**. The committed batch scores **0.81×** its own ballot's base rate — worse
 > than drawing uniformly from the ballot it built. See
-> `scripts/analysis/pool_hit_reachability.py` and `ranking_decomposition.py`.
+> `scripts/analysis/pool_hit_reachability.py` and `ranking_decomposition.py`, both on
+> branch `worktree-agent-a83565bcde59a81f3` (`bb925c9`) and **not on `main`**.
 >
 > Two instrument defects found alongside, **not fixed**: `GenerationCollapseWarning`'s
 > `depth_reach` divides by `max_library_depth`, and CreiLOV's depth 15 holds 10 variants
