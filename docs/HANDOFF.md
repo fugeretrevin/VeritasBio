@@ -363,6 +363,59 @@ corrected qualification bar accepts the identical variant set, so none of the
   for the measured phenotype → shallow enrichment above 1×; parent not functional →
   near zero. This needs no labels, unlike shell enrichment itself.
 
+> **A new selectable arm, and it is NOT a new default.** The GP surrogate's feature
+> space is now ablatable: `--ablate-components biophysical_features` removes
+> `featurize_variant_on_positions` from the GP's fit and predict inputs, which fall back
+> to one-hot over the library's declared per-site alphabets — the same encoder
+> `_one_hot_matrix` hands the baselines. To run it *beside* the default rather than in
+> place of it, name the registered method **`panoptes_onehot_surrogate`** in `--methods`:
+> both arms then share one starting sample per seed and pair within seed.
+>
+> **With the component absent nothing changes.** The engine default stays
+> `engine_biophysical`, `workers.math_worker.effective_surrogate_features` is the single
+> gate, and on the default path the GP is handed the *same array object* the biophysical
+> path always built (no one-hot column is even constructed). So every figure in this file
+> keeps its meaning. `panoptes_onehot_surrogate` is a **different arm on every landscape
+> including TrpB** and must never be reported as a correction to a TrpB figure.
+>
+> The motivation is offline and retrospective: over a *fixed* design matrix one-hot beats
+> the biophysical encoding on surrogate Spearman rho on 8 of 9 landscapes, because the
+> encoding's 6-dimensional global block is a deterministic linear function of the rest yet
+> carries ~50% of feature variance, and `build_gp_model`'s Matern is **isotropic**. That is
+> a statement about a fixed matrix, not about a campaign. Read
+> `configuration.model.surrogate_features.per_arm` for which arm a run folder actually
+> measured (rule 2.12).
+>
+> **Measured at 48 paired seeds** — pre-registered in
+> [`prereg-onehot-featurisation-arm.md`](prereg-onehot-featurisation-arm.md), results and
+> caveats in [`results-onehot-featurisation-arm.md`](results-onehot-featurisation-arm.md).
+> Δ is `onehot_surrogate − panoptes_default` on top-1% hits, paired within seed in one run
+> folder. **TrpB +7.71 (p=2.6e-08, 41/3/4); GB1 +4.31 (p=0.0031, 34/12/2); CreiLOV +0.79
+> (p=0.33, 25/16/7, not separable).** The CreiLOV gap to ridge stays at **−49.50 on 0 of 48
+> seeds**, so the featurisation is **not** what loses CreiLOV. Two warnings that travel with
+> those numbers: the pre-flight gate **FAILS** `threshold.<library>` on all three (a gate
+> reader/schema mismatch that also fails the published runs — see §0 of the results doc), so
+> they are provisional; and the GFlowNet's reward scores candidates through this same GP, so
+> on GB1 the candidate pool moved too (7,833 distinct at 0.801 deep-enrichment against 8,832
+> at 0.690) and **+4.31 is confounded with pool composition.** CreiLOV's pool did not move,
+> which is what makes its null a clean one.
+>
+> **The CreiLOV figures above were measured THROUGH the fabricated `y = 0.0` wild-type
+> training row** (`wt_anchor`, which is `worktree-agent-a83565bcde59a81f3`'s component and
+> is not in this branch's vocabulary). That row is 15.68 label SDs from CreiLOV's centre and
+> is worth +29.75 hits on its own, which is the dominant cause and must not be attributed to
+> featurisation. **Ablating the prior replicates at 48 seeds (+4.00 against their +4.25), but
+> the claimed one-hot/prior interaction does not: with the prior ablated this component gives
+> −0.19 (p=0.547, CI [−1.04, +0.65]), an interval that excludes their +3.67.** The prime
+> suspect is the scope difference — their arm also moves `AssayAdaptedHead`, which becomes the
+> dominant non-GP ranking term once the prior is zero. So on CreiLOV the GP's column basis is
+> ruled out in *both* regimes, and that is also why the arm works on TrpB and GB1, the only
+> two landscapes where the fabricated row is nearly true (0.35 and 0.20 SDs). There are **two independent
+> implementations** of this arm, `biophysical_features` here and `physchem_features` on
+> `bb925c9`; they agree on the CreiLOV answer and differ in scope (this one moves the GP's
+> columns only; that one also moves `AssayAdaptedHead`, the linear readout where the
+> biophysical features win on GB1). §4b of the results doc compares them line by line.
+
 ### What is void — do not quote these
 
 - **Every** `frontier` / `panoptes_qualify_then_optimize` number on every landscape

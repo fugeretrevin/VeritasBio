@@ -984,35 +984,36 @@ def _one_hot_matrix(combos: Sequence[str], library: LibrarySpec) -> np.ndarray:
     columns of which 288 were identically zero at every row, because each site admits
     exactly two residues - so the baselines were handed ten times the features the
     library can express, and the width disagreed with `one_hot_width`.
-    """
-    offsets: List[int] = []
-    width = 0
-    for slot in range(library.n_sites):
-        offsets.append(width)
-        width += len(library.alphabet_for(slot))
 
-    matrix = np.zeros((len(combos), width), dtype=np.float32)
+    The encoding itself lives in `workers.math_worker.one_hot_encode_genotypes`, because
+    the production selector's GP surrogate can now be fitted on it too
+    (`--ablate-components biophysical_features`). One implementation, so the features
+    that arm is handed cannot drift from the features the baselines were measured on.
+    This function keeps the benchmark's refuse-the-row policy: a residue outside the
+    declared alphabet means the data and the spec disagree about the library, and
+    silently dropping or remapping it would put that disagreement into the features.
+    """
+    from workers.math_worker import one_hot_encode_genotypes
+
+    alphabets = [library.alphabet_for(slot) for slot in range(library.n_sites)]
     for row, combo in enumerate(combos):
         if len(combo) != library.n_sites:
             raise BenchmarkError(
                 f"genotype {combo!r} at row {row} has {len(combo)} site(s) but library "
                 f"{library.key!r} declares {library.n_sites}"
             )
-        for slot, residue in enumerate(combo):
-            alphabet = library.alphabet_for(slot)
-            index = alphabet.find(residue)
-            if index < 0:
-                # Refused rather than encoded: a residue outside the declared alphabet
-                # means the data and the spec disagree about the library, and silently
-                # dropping or remapping it would put that disagreement into the features.
-                raise BenchmarkError(
-                    f"genotype {combo!r} at row {row} has residue {residue!r} at site "
-                    f"{slot} (position {library.positions[slot]}), which library "
-                    f"{library.key!r} does not declare: its alleles there are "
-                    f"{alphabet!r}"
-                )
-            matrix[row, offsets[slot] + index] = 1.0
-    return matrix
+
+    def _refuse(row: int, slot: int, residue: str, alphabet: str) -> None:
+        raise BenchmarkError(
+            f"genotype {combos[row]!r} at row {row} has residue {residue!r} at site "
+            f"{slot} (position {library.positions[slot]}), which library "
+            f"{library.key!r} does not declare: its alleles there are "
+            f"{alphabet!r}"
+        )
+
+    return one_hot_encode_genotypes(
+        combos, alphabets, on_undeclared=_refuse, dtype=np.float32
+    )
 
 
 def _load_imputed_ids(
@@ -2818,6 +2819,25 @@ def parse_ablate_components(spec: Optional[str]) -> Tuple[str, ...]:
     return tuple(sorted(set(names)))
 
 
+def _engine_surrogate_features(disabled: Sequence[str]) -> str:
+    """The feature space the engine's GP surrogate would be fitted on, ASKED OF THE ENGINE.
+
+    Calls `workers.math_worker.effective_surrogate_features`, which is the same function
+    `select_next_micro_batch` calls to decide. Not a reimplementation and not a reading of
+    the CLI flag: rule 2.12 is that a behaviour gated in one place and recorded from
+    another produced manifests claiming `dpp` and `dkl` were enabled when they were off,
+    and cost a real attribution. One function decides, the same function is recorded.
+
+    Returns "UNRESOLVED: ..." rather than a mode name when the engine cannot be imported.
+    An unresolved setting must not be readable as a particular setting.
+    """
+    try:
+        from workers.math_worker import effective_surrogate_features
+    except Exception as exc:  # pragma: no cover - only when the engine cannot be imported
+        return f"UNRESOLVED: {type(exc).__name__}: {exc}"
+    return str(effective_surrogate_features(disabled))
+
+
 def component_states(disabled: Sequence[str]) -> Dict[str, bool]:
     """Maps every ablatable component to whether it was EFFECTIVELY enabled in this run.
 
@@ -3066,6 +3086,7 @@ class PanoptesSelector(Selector):
         acquisition_mode: Optional[str] = None,
         exploration_xi: Optional[float] = None,
         candidate_source: str = "generate",
+        arm_name: Optional[str] = None,
     ) -> None:
         super().__init__(seed)
         # Ablation arm. 'none' is the shipped configuration; the others restore one
@@ -3107,7 +3128,35 @@ class PanoptesSelector(Selector):
             self.notes.append(
                 f"ABLATED_COMPONENTS={','.join(sorted(self.ablate_components))}"
             )
-        if qualify_threshold is not None and probe_after_qualify:
+        # Read back from the engine's own resolver rather than restated from the flag,
+        # so this note cannot say one thing while the GP does another (rule 2.12).
+        import workers.math_worker as _mw_features
+
+        self.surrogate_features = _mw_features.effective_surrogate_features(
+            self.ablate_components
+        )
+        if self.surrogate_features != "engine_biophysical":
+            self.notes.append(
+                f"SURROGATE_FEATURES={self.surrogate_features}: the GP surrogate was "
+                f"fitted on one-hot columns over the library's declared per-site "
+                f"alphabets instead of the biophysical encoding. This is a DIFFERENT "
+                f"ARM, not a corrected version of panoptes_default: every figure in "
+                f"docs/HANDOFF.md was measured on engine_biophysical. The prior, the "
+                f"assay-adapted head and the k-DPP kernel are unchanged."
+            )
+        if arm_name is not None:
+            # A named arm that differs from `panoptes_default` only in a selector
+            # component. It gets its OWN method key on purpose, so both arms run inside
+            # one run folder on one shared starting sample per seed and
+            # scripts/analysis/paired_stats.py can pair them WITHIN seed. The note
+            # below records which component made it a separate arm.
+            #
+            # The comment further down - "the ablation is NOT folded into self.name" -
+            # still holds for `--ablate-components`, which modifies the default arm in
+            # place and must keep its key. This is the other case: a registered method
+            # the --methods filter can select by name.
+            self.name = arm_name
+        elif qualify_threshold is not None and probe_after_qualify:
             self.name = "panoptes_conditional_probe"
         elif qualify_threshold is not None:
             self.name = "panoptes_qualify_then_optimize"
@@ -4305,6 +4354,15 @@ MANIFEST_REQUIRED_PATHS: Tuple[str, ...] = (
     "configuration.components.states",
     "configuration.components.requested_spec",
     "configuration.model.surrogate",
+    # Required, because the feature space the surrogate is fitted on is a first-class arm
+    # distinction: the same engine on one-hot and on the biophysical encoding are two
+    # different methods on every landscape. A manifest that does not state which one ran
+    # cannot identify the arm - and `configuration.model.surrogate` was wrong about
+    # exactly this for the whole life of the previous key, claiming one-hot features the
+    # engine never used.
+    "configuration.model.surrogate_features",
+    "configuration.model.surrogate_features.effective",
+    "configuration.model.surrogate_features.per_arm",
     "configuration.model.hyperparameters",
     "configuration.dataset.name",
     "configuration.dataset.source",
@@ -4749,6 +4807,7 @@ def _production_selection_identity(
     components_disabled: Sequence[str],
     ablation_arm: str,
     prior_spread: Optional[float],
+    methods: Sequence[str] = (),
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Reads the production selector's effective acquisition policy and hyperparameters.
@@ -4758,6 +4817,15 @@ def _production_selection_identity(
     used instead of what this file once believed. The benchmark's own overrides are listed
     separately, because 'the default, except for these three arguments' is the only honest
     description of the call.
+
+    `model.surrogate_features` records which feature space the GP surrogate was fitted
+    on, resolved by calling the engine's own `effective_surrogate_features` - the same
+    function `select_next_micro_batch` calls to decide. A run may now contain two panoptes
+    arms whose ONLY difference is that feature space, so a single run-level value would be
+    wrong for one of them: `per_arm` therefore carries one entry per panoptes method
+    present, each resolved from that arm's own component list. Rule 2.12 is precisely
+    this failure - a record that reads a different gate from the behaviour - and it cost a
+    real attribution when two manifests both claimed `dpp` and `dkl` were enabled.
     """
     policy: Dict[str, Any] = {
         "policy_id": "hybrid_thompson",
@@ -4773,9 +4841,30 @@ def _production_selection_identity(
         "parameters": {},
         "engine": {},
     }
+    # The panoptes arms in this run, and the component list each one actually runs with.
+    # `panoptes_onehot_surrogate` is `panoptes_default` plus one ablated component, so its
+    # entry is derived the same way the factory derives it - from
+    # PANOPTES_ONEHOT_SURROGATE_COMPONENT - rather than written out again here.
+    panoptes_arms: Dict[str, Tuple[str, ...]] = {}
+    for name in methods:
+        if not str(name).startswith("panoptes"):
+            continue
+        if name == PANOPTES_ONEHOT_SURROGATE:
+            panoptes_arms[name] = tuple(sorted(
+                set(components_disabled) | {PANOPTES_ONEHOT_SURROGATE_COMPONENT}))
+        else:
+            panoptes_arms[name] = tuple(components_disabled)
+
     model: Dict[str, Any] = {
-        "surrogate": "workers.math_worker deep-kernel/GP on epistatic one-hot features with a "
-                     "residual biophysical prior mean",
+        # No literal description of the surrogate here on purpose. This key used to read
+        # "deep-kernel/GP on epistatic one-hot features with a residual biophysical prior
+        # mean" in every manifest this project ever wrote, and there was no one-hot
+        # anywhere in the engine path - the GP was fitted on
+        # `featurize_variant_on_positions`, a continuous biophysical delta encoding. That
+        # sentence is believed to have misdirected an entire investigation into why the
+        # engine's surrogate underperformed a one-hot ridge.
+        "surrogate": None,
+        "surrogate_features": None,
         "hyperparameters": {},
         "baselines": "per-method hyperparameters are recorded under configuration.methods",
     }
@@ -4784,6 +4873,15 @@ def _production_selection_identity(
         import workers.math_worker as _mw
     except Exception as exc:  # pragma: no cover - only when the engine cannot be imported
         policy["engine"] = {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+        unresolved = f"UNRESOLVED: workers.math_worker could not be imported ({type(exc).__name__}: {exc})"
+        model["surrogate"] = unresolved
+        # Structurally complete and honest about what could not be read: an unresolved
+        # setting must not be readable as a particular setting.
+        model["surrogate_features"] = {
+            "effective": None,
+            "per_arm": {name: None for name in panoptes_arms},
+            "unresolved_reason": f"{type(exc).__name__}: {exc}",
+        }
         model["hyperparameters"] = {"available": False}
         return policy, model
 
@@ -4804,9 +4902,85 @@ def _production_selection_identity(
     if engine_file.is_file():
         engine_sha = _sha256_file(engine_file)[0]
 
+    # The feature space the GP is fitted on, for the arm `--ablate-components` describes
+    # (that is, every panoptes arm except the one-hot one), asked of the engine.
+    effective_features = _engine_surrogate_features(components_disabled)
+    two_stage_enabled = bool(getattr(_mw, "TWO_STAGE_GP_ENABLED", False))
+    surrogate_kind = (
+        "two-stage MLP-feature GP (workers.math_worker.TwoStageDeepFeatureGP)"
+        if two_stage_enabled and "dkl" not in set(components_disabled)
+        else "plain isotropic Matern(nu=2.5) GP (workers.math_worker.build_gp_model)"
+    )
+    feature_descriptions = {
+        "engine_biophysical": (
+            "continuous biophysical property deltas per active site plus a 6-dimensional "
+            "global block and 4 pairwise cross-terms "
+            "(workers.math_worker.featurize_variant_on_positions); NOT one-hot"
+        ),
+        "one_hot": (
+            "one-hot over the library's declared per-site alphabets "
+            "(workers.math_worker.one_hot_encode_genotypes, the same encoder the one-hot "
+            "baselines use), width = LibrarySpec.one_hot_width"
+        ),
+    }
+    # The one symbol that produces the GP's columns, as a field rather than only inside
+    # prose, so a consumer can check it without parsing a sentence.
+    feature_encoders = {
+        "engine_biophysical": "workers.math_worker.featurize_variant_on_positions",
+        "one_hot": "workers.math_worker.one_hot_encode_genotypes",
+    }
+    model["surrogate"] = (
+        f"{surrogate_kind} fitted on assay residuals y - m(x), where m(x) is the "
+        f"calibrated biophysical prior; surrogate features: "
+        f"{feature_descriptions.get(effective_features, f'unrecognised ({effective_features})')}. "
+        "The assay-adapted head and the k-DPP similarity kernel always use "
+        "featurize_variant_on_positions regardless of this setting."
+    )
+    model["surrogate_features"] = {
+        "effective": effective_features,
+        "encoder": feature_encoders.get(effective_features),
+        "resolver": "workers.math_worker.effective_surrogate_features",
+        "gate": (
+            f"the {PANOPTES_ONEHOT_SURROGATE_COMPONENT!r} ablation component; absent, "
+            f"the GP keeps featurize_variant_on_positions, which is what every figure "
+            f"in docs/HANDOFF.md was measured on"
+        ),
+        "engine_default": _engine_surrogate_features(()),
+        "available_modes": list(getattr(_mw, "SURROGATE_FEATURE_MODES", ())),
+        "applies_to": "the GP surrogate's fit and predict inputs only",
+        # Measured, not assumed. The switch changes only the GP's columns, but the
+        # GFlowNet's reward function CALLS the GP, so the candidate pool is downstream of
+        # it and does move: on GB1 the one-hot arm proposed 7,833 distinct candidates
+        # against the default arm's 8,832, at 0.801 deep-enrichment against 0.690. Any
+        # paired difference on a landscape where the GFlowNet runs is therefore confounded
+        # with candidate-pool composition and must not be attributed to the surrogate
+        # alone. On CreiLOV the pool barely moved (5,154 -> 5,091 distinct, mean proposed
+        # depth 5.573 -> 5.588), so the null there is a clean ranking null.
+        "reaches_candidate_generation_indirectly": (
+            "the GFlowNet reward scores candidates through this same GP, so the proposal "
+            "distribution is downstream of the feature space; compare "
+            "generation_coverage.csv per arm before attributing a difference to ranking"
+        ),
+        "unchanged_consumers": [
+            "compute_biological_prior / structural surrogate",
+            "AssayAdaptedHead",
+            "greedy_dpp_sample similarity kernel (dpp)",
+        ],
+        # Per arm, because a run can hold two panoptes arms differing ONLY here and a
+        # single run-level value would be wrong for one of them.
+        "per_arm": {
+            name: {
+                "effective": _engine_surrogate_features(disabled_for_arm),
+                "components_disabled": list(disabled_for_arm),
+            }
+            for name, disabled_for_arm in panoptes_arms.items()
+        },
+    }
+
     policy["policy_id"] = str(defaults.get("acquisition_mode") or "hybrid_thompson")
     policy["parameters"] = {
         "acquisition_mode": defaults.get("acquisition_mode"),
+        "surrogate_features": effective_features,
         "exploration_xi": defaults.get("exploration_xi"),
         "thompson_weight": 0.3,
         "fantasy_variance": defaults.get("fantasy_variance"),
@@ -4831,6 +5005,7 @@ def _production_selection_identity(
             "pdb_path": "workers/data/8EH0.pdb when present",
             "apply_auxiliary_objective_weights": ablation_arm in ("aux-weighted", "legacy"),
             "ablate": list(components_disabled),
+            "ablate_per_arm": {name: list(d) for name, d in panoptes_arms.items()},
         },
     }
     model["hyperparameters"] = dict(policy["parameters"])
@@ -5013,6 +5188,7 @@ def build_manifest(
         components_disabled=disabled,
         ablation_arm=str(getattr(args, "ablation", "none")),
         prior_spread=getattr(args, "prior_spread", None),
+        methods=methods,
     )
     states = component_states(disabled)
     provenance = _label_provenance_block(universe)
@@ -5858,14 +6034,31 @@ def repository_state(ignore_prefixes: Sequence[str] = ()) -> Dict[str, Any]:
 # ==============================================================================================
 # Orchestration
 # ==============================================================================================
+# `panoptes_onehot_surrogate` is `panoptes_default` with `biophysical_features` ablated:
+# the GP surrogate is fitted on one-hot columns over the library's declared per-site
+# alphabets instead of `featurize_variant_on_positions`. A SEPARATE METHOD KEY, not a new
+# default, so (a) every existing number keeps its meaning and (b) both arms run in one
+# folder on one shared starting sample per seed and can be paired within seed. Not in
+# DEFAULT_METHODS: it has to be asked for.
+PANOPTES_ONEHOT_SURROGATE = "panoptes_onehot_surrogate"
+#: The component whose ablation defines that arm. One name, used by the factory and by
+#: the manifest, so the two cannot disagree about what the arm is.
+PANOPTES_ONEHOT_SURROGATE_COMPONENT = "biophysical_features"
+
+# MERGE RESOLUTION 2026-11-01: the union of the two branches' registries. The baseline
+# panel (a8325f2a02fbcdc90) added gbm_onehot/knn_hamming/gp_onehot/greedy_measured; the
+# surrogate arm (a14c69a80e0afa44a) added panoptes_onehot_surrogate. Both are additive
+# method keys and neither touches the default path, so the union is the whole resolution.
 ALL_METHODS = ("random", "ridge", "random_forest", "gbm_onehot", "knn_hamming", "gp_onehot",
                "greedy_measured", "alde", "panoptes_default", "panoptes_muse",
-               "panoptes_qualify_then_optimize", "panoptes_conditional_probe")
-#: DELIBERATELY UNCHANGED. The four panel arms added on 2026-11-01 (gbm_onehot,
-#: knn_hamming, gp_onehot, greedy_measured) are opt-in via --methods and are NOT defaults.
-#: `ridge` is the registered reference baseline and stays the reference: docs/HANDOFF.md 5.4
-#: makes promoting another model to reference status an amendment to a frozen hypothesis,
-#: and an amendment needs an explicit dated record, not a tuple edit.
+               "panoptes_qualify_then_optimize", "panoptes_conditional_probe",
+               PANOPTES_ONEHOT_SURROGATE)
+#: DELIBERATELY UNCHANGED, on both branches and after the merge. The four panel arms
+#: (gbm_onehot, knn_hamming, gp_onehot, greedy_measured) and panoptes_onehot_surrogate are
+#: opt-in via --methods and are NOT defaults. `ridge` is the registered reference baseline
+#: and stays the reference: docs/HANDOFF.md 5.4 makes promoting another model to reference
+#: status an amendment to a frozen hypothesis, and an amendment needs an explicit dated
+#: record, not a tuple edit. Pinned by tests/test_baseline_panel_arms.py.
 DEFAULT_METHODS = ("random", "ridge", "random_forest", "panoptes_default")
 #: The pre-registered baseline panel of docs/prereg-baseline-panel.md, in panel order.
 #: Named here so a sweep cannot quietly run a subset of it: a panel missing `random`
@@ -6142,7 +6335,8 @@ def build_selector_factories(
             status[method]["probe"] = json.dumps(probe)
             status[method]["compatibility"] = json.dumps(compatibility)
         elif method in ("panoptes_default", "panoptes_muse",
-                        "panoptes_qualify_then_optimize", "panoptes_conditional_probe"):
+                        "panoptes_qualify_then_optimize", "panoptes_conditional_probe",
+                        PANOPTES_ONEHOT_SURROGATE):
             live = method == "panoptes_muse"
             # The ABSOLUTE the Evaluator resolved from the eligible universe - not
             # args.qualify_threshold, which is now an optional override and is None on a
@@ -6184,9 +6378,17 @@ def build_selector_factories(
             # Parsed once, up front: an invalid --ablate-components value must not be
             # discovered inside the first round of the first seed.
             components = resolve_ablate_components(args)
+            # The one-hot-surrogate arm is defined BY this component, so it is added on
+            # top of whatever --ablate-components asked for rather than replacing it:
+            # the two arms in a run then differ in exactly this one stage, which is the
+            # only way the paired difference attributes to the feature space.
+            arm_name = method if method == PANOPTES_ONEHOT_SURROGATE else None
+            if method == PANOPTES_ONEHOT_SURROGATE:
+                components = tuple(sorted(
+                    set(components) | {PANOPTES_ONEHOT_SURROGATE_COMPONENT}))
             factories[method] = (
                 lambda seed, m=metadata, s=sequence, p=pdb_path, l=live, q=qualify, pr=probe,
-                lib=library, c=components:
+                lib=library, c=components, an=arm_name:
                 PanoptesSelector(seed, s, m, l, p, lib, call_budget=args.max_model_calls,
                                  ablation=args.ablation,
                                  prior_spread=args.prior_spread,
@@ -6194,7 +6396,8 @@ def build_selector_factories(
                                  acquisition_mode=args.acquisition_mode,
                                  exploration_xi=args.exploration_xi,
                                  candidate_source=args.production_candidate_source,
-                                 qualify_threshold=q, probe_after_qualify=pr)
+                                 qualify_threshold=q, probe_after_qualify=pr,
+                                 arm_name=an)
             )
             detail = (
                 "production path: fetch_protein_metadata -> "
@@ -6209,6 +6412,9 @@ def build_selector_factories(
                 + f"; prior ablation arm '{args.ablation}'"
                 + (f"; components disabled: {', '.join(components)}" if components
                    else "; all selector components enabled")
+                # Read from the engine's resolver, never restated from the flag.
+                + "; GP surrogate features: "
+                + _engine_surrogate_features(components)
             )
             status[method] = {"status": "available", "detail": detail}
         else:
@@ -6514,6 +6720,13 @@ def _execute_run(
         "returned no usage block, never that the figure was not collected.",
         "Top-1% membership is defined over the eligible set in this run; a different eligibility "
         "filter changes the threshold.",
+        f"{PANOPTES_ONEHOT_SURROGATE} is a SEPARATE ARM, not a correction to "
+        f"panoptes_default: it is the same engine with "
+        f"{PANOPTES_ONEHOT_SURROGATE_COMPONENT!r} ablated, so its GP surrogate is fitted "
+        "on one-hot columns over the declared per-site alphabets. Every figure in "
+        "docs/HANDOFF.md was measured on the biophysical encoding and is non-comparable "
+        "to this arm's. Read which arm ran from "
+        "configuration.model.surrogate_features.per_arm, never from the arm name alone.",
     ]
     if universe.synthetic:
         limitations.insert(0, "SYNTHETIC RUN: values are generated, not measured. These results say "
@@ -6689,7 +6902,14 @@ examples:
             "disables none. A value that names no component (',' or whitespace), an "
             "empty entry ('dpp,,prior') or an unrecognised name is rejected before the "
             "run starts, because each of those used to produce an unablated run in a "
-            "folder labelled as an ablation arm."
+            "folder labelled as an ablation arm. "
+            f"'{PANOPTES_ONEHOT_SURROGATE_COMPONENT}' removes the biophysical encoding "
+            "from the GP SURROGATE's inputs, which then fall back to one-hot over the "
+            "library's declared per-site alphabets; the prior, the assay-adapted head "
+            "and the k-DPP kernel keep the biophysical encoding either way. To run that "
+            f"as a paired arm beside the default rather than in place of it, add "
+            f"'{PANOPTES_ONEHOT_SURROGATE}' to --methods instead - both then share one "
+            "starting sample per seed and can be paired within seed."
         ),
     )
     parser.add_argument(
