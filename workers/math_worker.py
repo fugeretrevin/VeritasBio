@@ -1656,6 +1656,10 @@ TWO_STAGE_GP_ENABLED: bool = False
 ABLATABLE_COMPONENTS: Set[str] = {
     "dpp", "gflownet", "pareto", "dkl", "prior",
     "acquisition", "spatial", "generator",
+    # `spatial` clears the 3D cross-term from the FEATURES. `spatial_filter` disables the
+    # viability VETO, which is a different stage and was previously unreachable by any
+    # flag - see the note at its call site in select_next_micro_batch for what it removes.
+    "spatial_filter",
 }
 
 
@@ -2211,21 +2215,41 @@ def select_next_micro_batch(
     if not novel_candidates:
         novel_candidates = candidates  # Fallback if all covered
 
-    # Filter candidates with 3D biomechanical spatial & steric clash filter
-    try:
-        from workers.spatial_filter import filter_spatially_viable_variants
-        cand_notations = [c.notation for c in novel_candidates]
-        viable_notations, _ = filter_spatially_viable_variants(
-            cand_notations,
-            pdb_path=pdb_path,
-            catalytic_invariants=invariants_set,
+    # Filter candidates with 3D biomechanical spatial & steric clash filter.
+    #
+    # This veto removes a depth-MONOTONE fraction of every library: any multi-mutant whose
+    # mutated positions have mean pairwise C-alpha distance > 16 A or max > 24 A is
+    # rejected, and the more sites you mutate the likelier that is. Measured over all nine
+    # libraries' full universes by scripts/analysis/spatial_veto_profile.py, the fraction
+    # of each landscape's top-1% hits that can pass it AT ALL is: eqFP611-red 0 of 82,
+    # HER2 10 of 113, CR9114 64 of 651, eqFP611-blue 12 of 82, CreiLOV 250 of 1,655,
+    # GB1 545 of 1,494, TrpB 1,002 of 1,600. That is a ceiling on achievable recall
+    # before any ranking happens, and on eqFP611-red it is zero - which fully explains an
+    # arm that scored 0 hits there and was reported as a performance loss.
+    #
+    # `spatial_filter` is therefore ablatable, separately from `spatial`: that one clears
+    # the feature cross-term and leaves this veto running, which is why no existing flag
+    # could tell "the candidate pool was the constraint" from "the filter was".
+    if "spatial_filter" in ablated:
+        logger.info(
+            "spatial viability filter ABLATED: %d candidates pass through unfiltered",
+            len(novel_candidates),
         )
-        viable_set = set(viable_notations)
-        filtered_candidates = [c for c in novel_candidates if c.notation in viable_set]
-        if filtered_candidates:
-            novel_candidates = filtered_candidates
-    except Exception as spatial_err:
-        logger.debug("Spatial filtering in candidate pool skipped: %s", spatial_err)
+    else:
+        try:
+            from workers.spatial_filter import filter_spatially_viable_variants
+            cand_notations = [c.notation for c in novel_candidates]
+            viable_notations, _ = filter_spatially_viable_variants(
+                cand_notations,
+                pdb_path=pdb_path,
+                catalytic_invariants=invariants_set,
+            )
+            viable_set = set(viable_notations)
+            filtered_candidates = [c for c in novel_candidates if c.notation in viable_set]
+            if filtered_candidates:
+                novel_candidates = filtered_candidates
+        except Exception as spatial_err:
+            logger.debug("Spatial filtering in candidate pool skipped: %s", spatial_err)
 
     # Step 4: Featurize candidate pool and predict GP residual mean + uncertainty
     X_cand = np.array(
