@@ -27,10 +27,27 @@ under rule 2.4. A judge who reads the repo finds that in ten minutes, and a vide
 claimed otherwise would be over at that moment.
 
 So the video claims the thing that is true and is *harder*: **we built the instrument
-that tells you a campaign cannot succeed before you pay for it, and we found that out by
-pointing it at ourselves.** Three of those five results are explained by ceilings this
-tool measures. That is a stronger story than a win, and it cannot be falsified by the
-repo, because it *is* the repo.
+that tells you a campaign cannot succeed before you pay for it, and we pointed it at
+ourselves.**
+
+Be precise about how much that instrument explained, because we pre-registered a
+prediction here and it was **falsified**. The hypothesis was "the spatial viability veto
+is the cause of the three losses." Measured at 48 paired seeds with the veto ablated:
+
+* **eqFP611-red** — the veto fully explains the **zero** (ceiling 0 of 82; the arm scored
+  exactly 0.0000 on all 48 seeds, which is arithmetic, not a measurement). Ablated it
+  scores 4.21, better on 28 seeds and worse on **none**. But ridge gets 15.35, so
+  **73% of that loss is not the veto.**
+* **CreiLOV** — not the cause. Ablating the veto *costs* 2.04 hits (t=−2.33) and widens
+  the gap to −52.33.
+* **GB1** — not the cause. Ablating costs 4.27 hits (t=−3.22).
+
+On two of three landscapes **the veto was helping**, by raising the candidate pool's hit
+density 2.8× and 1.8×. That is the opposite of what we expected.
+
+That is the story: a gate that refuses plans, turned on its own authors, killing our
+favourite explanation for our own bad results. It is stronger than a win, and it cannot
+be falsified by the repo, because it *is* the repo.
 
 ---
 
@@ -124,9 +141,12 @@ command once *without* the redirect first to confirm it succeeded.
 > co-mutations too far apart in 3D. Reasonable rule. On eqFP611-red it removes every
 > single one of the eighty-two hits. Zero are attainable — before any ranking happens.
 >
-> Our engine scored zero on that landscape. We had it written down as a loss. It was not
-> a loss. There was nothing it was permitted to select. Until last week no flag could
-> even turn that filter off."
+> Our engine scored exactly zero on that landscape, on all forty-eight seeds. We had it
+> written down as a performance loss. So we turned the filter off and measured it. The
+> zero was the filter — it went to four point two one, and not one seed got worse. But
+> the baseline gets fifteen point three five, so it is still a loss; the filter was about
+> a quarter of it. Our first guess was that the filter explained the whole thing. It
+> didn't, and we only know that because we checked."
 
 *Then, the integrity beat — scroll to a `CAVEAT` or `UNTRUSTED` structure line:*
 
@@ -161,6 +181,12 @@ command once *without* the redirect first to confirm it succeeded.
 ## Lines to avoid
 
 - "Our engine outperforms…" — it does not, on three of six landscapes. Measured.
+- **"eqFP611-red was not a loss, it was the filter."** Half true and the half that is
+  false is the important half. The *zero* was the filter; the *loss* was not — ablated,
+  the arm still trails ridge by 11.15 at t=−5.76. An earlier draft of this script said
+  "it was not a loss" and that was wrong.
+- "The spatial filter was holding the engine back." On CreiLOV and GB1 it was **helping**,
+  measurably. Do not generalise eqFP611-red to the other landscapes.
 - "State of the art", "revolutionary", "breakthrough" — nothing here needs them, and one
   unearned superlative makes a judge re-read everything else sceptically.
 - Any claim about the deployed ESM-2 path that is not additive-verified. The deployed

@@ -50,6 +50,39 @@ This is close to what §8 of this document pre-registered ("that we lose… acro
 regression against ridge"), which is the one good thing about it: it was written down in
 advance and so cannot be re-narrated now.
 
+> **The veto hypothesis for these losses is FALSIFIED.** Measured 2026-11-01 at 48
+> paired seeds with `--ablate-components spatial_filter`, branch
+> `worktree-agent-a038e3b42e920227a` (`3804237`), pre-registered in
+> `docs/prereg-spatial-veto-ablation.md` **before** any ablated arm ran. Ablating the
+> veto **costs** hits on CreiLOV (−2.04, t=−2.33) and GB1 (−4.27, t=−3.22): on both it
+> was *helping*, by raising the candidate pool's hit density 2.8× and 1.8×. On
+> eqFP611-red it fully explains the **zero** — the ceiling is 0 of 82 and the arm scored
+> exactly 0.0000 on all 48 seeds, which is arithmetic, not a measurement — but ablated it
+> reaches only 4.21 against ridge's 15.35, so **73% of that loss is not the veto**. Every
+> figure in the table above reproduced bit-for-bit, paired statistics included. **The
+> CreiLOV and GB1 losses are therefore unexplained.** See
+> `docs/spatial-veto-ablation-results.md`.
+>
+> Two cautions carried from that campaign: the veto helped CreiLOV *while reading a
+> different protein's geometry* (`8QI9` maps 11 of 15 positions and all 11 disagree with
+> the library's parent residue), so the benefit is **pool density, not biophysics** — a
+> random filter enriching density 2.8× would have scored the same. And on GB1 the
+> cohesion rule contributes **zero** rejections at any depth (the library fits in an
+> ~8.2 Å sphere); all 118,766 GB1 rejections are single-site buried-core/steric calls
+> firing at depth 1. **No landscape measured so far tests the cohesion veto on correct
+> geometry.** TrpB is the only one that could, and it was not in scope.
+
+> **`threshold.<lib>` FAILS the pre-flight gate on the three runs this table is quoted
+> from** — `run_20261101_024225_8fa1d86d`, `…_024544_e82e6214`, `…_025014_5e79e3ae` —
+> because `qualification.quantile` and `qualification.source` are not recorded in the
+> manifest. Nobody had seen it because `scripts/analysis/generality_sweep.ps1` invokes
+> the gate **without** `--run-dir`, which makes both `threshold` and `budget` report
+> NOT-APPLICABLE. The bar it concerns is consumed only by the
+> `qualify_then_optimize`/`conditional_probe` arms and the failure is symmetric across
+> arms, so it **cannot bias any paired contrast above**. It is nonetheless an un-passed
+> gate check that the published figures carry, and it must be stated wherever they are.
+> Run the gate with `--run-dir` from now on. Not fixed.
+
 **Every previously reported figure reproduced exactly** — CR9114 +3.167 against the
 reported 5.000−1.833, eqFP611-blue +0.729 against 9.500−8.792, red's ridge 15.354 to three
 decimals. The measurements were sound. Two **verdicts** were wrong:
