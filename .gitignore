@@ -252,3 +252,9 @@ benchmark_e2e_results/
 
 # Claude Code agent worktrees - transient, one per background agent
 .claude/worktrees/
+
+# Vendored third-party agent-skill binary: 19.5 MB, unsigned, no upstream provenance
+# recorded. Untracked rather than shipped in a public repo - it is not project code and
+# it trips supply-chain scanners. Still in git history; see docs/archive if it is ever
+# worth a filter-repo pass.
+.agents/skills/**/bin/**

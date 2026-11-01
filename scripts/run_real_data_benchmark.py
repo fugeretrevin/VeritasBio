@@ -202,12 +202,36 @@ def run_real_active_learning(
             round_num, best_in_round[0], best_in_round[1],
         )
 
-    # Evaluate Final Performance
-    all_eval_feats = np.array(train_x)
-    pred_means = gp_model.predict(all_eval_feats)
-    truth_arr = np.array(ground_truth_values)
-    spearman_rho, rho_p = stats.spearmanr(pred_means, truth_arr)
-    pearson_r, r_p = stats.pearsonr(pred_means, truth_arr)
+    # Evaluate Final Performance, on variants the model never trained on.
+    #
+    # This previously read `all_eval_feats = np.array(train_x)` and correlated the GP's
+    # predictions against the ground truth of THE SAME POINTS IT WAS FITTED ON. That is a
+    # training-set fit, not a performance measure, and it is why this script reported a
+    # Spearman of ~0.9996 - a number that says only that a GP can interpolate its own
+    # training data. Anyone running the script got it, and it meant nothing.
+    held_out = [c for c in candidate_pool if c[0] not in evaluated_mutants]
+    if len(held_out) < 50:
+        logger.warning(
+            "Only %d unmeasured variants remain; a held-out correlation on so few points "
+            "is not meaningful, so none is reported. Raise the library size or lower the "
+            "budget.", len(held_out),
+        )
+        spearman_rho = rho_p = pearson_r = r_p = float("nan")
+        n_held_out = len(held_out)
+    else:
+        # Cap the evaluation set: the correlation is an estimate, not a census, and
+        # featurising 50k variants to three decimal places of precision is not worth it.
+        rng_eval = random.Random(0)
+        sample = held_out if len(held_out) <= 3000 else rng_eval.sample(held_out, 3000)
+        n_held_out = len(sample)
+        eval_feats = np.array([
+            featurize_variant_on_positions(c[2], hotspot_positions, wt_seq)
+            for c in sample
+        ])
+        pred_means = gp_model.predict(eval_feats)
+        truth_arr = np.array([c[1] for c in sample])
+        spearman_rho, rho_p = stats.spearmanr(pred_means, truth_arr)
+        pearson_r, r_p = stats.pearsonr(pred_means, truth_arr)
 
     # Cost of screening all 51,714 variants on Modal A10G
     bruteforce_eval_cost = 51714 * 0.000306 * 0.02 + 0.006
@@ -218,8 +242,11 @@ def run_real_active_learning(
     logger.info("==================================================")
     logger.info("Total Real Variants Screened:    %d / 51,714 (%.2f%%)", len(evaluated_mutants), (len(evaluated_mutants)/51714)*100)
     logger.info("Top 1%% Hits Discovered:          %d variants", top_1_pct_hits)
-    logger.info("Empirical Spearman Correlation:  +%.4f (p = %.2e)", spearman_rho, rho_p)
-    logger.info("Empirical Pearson Correlation:   +%.4f (p = %.2e)", pearson_r, r_p)
+    logger.info("Held-out Spearman Correlation:   %+.4f (p = %.2e, n = %d unmeasured)",
+                spearman_rho, rho_p, n_held_out)
+    logger.info("Held-out Pearson Correlation:    %+.4f (p = %.2e)", pearson_r, r_p)
+    logger.info("  (held-out: variants the GP never trained on. An earlier version of this")
+    logger.info("   script scored the GP on its own training set and reported ~0.9996.)")
     logger.info("Total Real Run Spend:            $%.6f", total_spent)
     logger.info("Exhaustive Brute-Force Cost:     $%.4f", bruteforce_eval_cost)
     logger.info("Cloud Capital Saved:             %.1f%% (%.1fx cheaper)", cost_savings_pct, bruteforce_eval_cost / max(1e-6, total_spent))
