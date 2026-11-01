@@ -180,6 +180,10 @@ Write-Host "panel log: $sweepLog"
 # Landscapes whose gate failed. Collected rather than aborting: a failed gate means that
 # landscape must not be quoted (rule 2.7), not that the rest of the panel is worthless.
 $failed = @()
+#: Landscapes whose POST-RUN gate failed, reported separately. The pre-run gate and the
+#: post-run gate answer different questions - the pre-run one cannot see the run at all -
+#: so collapsing them into one list would hide which checks actually ran.
+$postFailed = @()
 
 function Invoke-Captured {
     <#
@@ -267,6 +271,41 @@ foreach ($p in $plan) {
     $done = "## $($p.Key) done $(Get-Date -Format HH:mm:ss) exit=$code run_dir=$dir"
     Write-Host $done
     Add-Content $sweepLog $done
+
+    # SECOND GATE PASS, WITH --run-dir. generality_sweep.ps1 invokes the gate without it,
+    # which makes `threshold` and `budget` report NOT-APPLICABLE - they are not static
+    # checks: distinct measurements per (method, seed) live in round_metrics.csv and the
+    # qualification bar lives in the manifest. Four of the gate's six checks therefore never
+    # ran in the 2026-11-01 sweep, and a NOT-APPLICABLE is not a pass. Running the gate
+    # again against the run it just produced is the only way those two checks are exercised
+    # at all, and `budget` is precisely the check that would catch an arm of this panel
+    # failing to fill its budget - the thing the paired test depends on.
+    if ($dir -ne '(none reported)') {
+        $postArgs = @('-X','utf8','-m','veritas.preflight','--library',$p.Key,
+                      '--budget',$budget,'--initial-size',$p.Initial,
+                      '--corpus-dir',$corpusDir,
+                      '--run-dir',(Join-Path $logDir $dir),
+                      '--arms',$methods) + $ack
+        $postRes = Invoke-Captured -Exe $py -Arguments $postArgs -Tag "gate_post_$($p.Key)"
+        $postRes.Lines | Out-File (Join-Path $logDir "panel_gate_postrun_$($p.Key).txt") -Encoding utf8
+        $head = "   POST-RUN GATE (with --run-dir) exit=$($postRes.ExitCode)"
+        Write-Host $head -ForegroundColor Cyan
+        Add-Content $sweepLog $head
+        ($postRes.Lines | Select-String -Pattern '^(PASS|FAIL|SKIP|NOT-APPLICABLE)|passed,' ) |
+            ForEach-Object { Write-Host "   $_"; Add-Content $sweepLog "   $_" }
+        if ($postRes.ExitCode -ne 0) {
+            $msg = ("!! POST-RUN GATE FAILED for $($p.Key) (exit $($postRes.ExitCode)). An " +
+                    "un-passed check must NOT be reported as a pass; see " +
+                    "panel_gate_postrun_$($p.Key).txt")
+            Write-Host $msg -ForegroundColor Yellow
+            Add-Content $sweepLog $msg
+            $postFailed += $p.Key
+        }
+    } else {
+        $msg = "!! no run directory reported for $($p.Key); the post-run gate could not run"
+        Write-Host $msg -ForegroundColor Yellow
+        Add-Content $sweepLog $msg
+    }
 }
 
 Write-Host ''
@@ -277,9 +316,15 @@ Write-Host "log: $sweepLog"
 # Explicit, because without it the script's exit status is whatever $LASTEXITCODE happened
 # to hold - which was 255 on a clean dry run. A sweep's exit code gets read by whatever
 # launched it, so it must mean something.
+if ($postFailed.Count -gt 0) {
+    Write-Host ("landscapes whose POST-RUN gate FAILED: $($postFailed -join ', ') - report the " +
+                "failing check alongside the table; do not call it a pass") -ForegroundColor Yellow
+    Add-Content $sweepLog "FAILED POST-RUN GATE: $($postFailed -join ', ')"
+}
 if ($failed.Count -gt 0) {
     Write-Host "landscapes whose preflight FAILED: $($failed -join ', ')" -ForegroundColor Red
     Add-Content $sweepLog "FAILED PREFLIGHT: $($failed -join ', ')"
     exit 1
 }
+if ($postFailed.Count -gt 0) { exit 3 }
 exit 0
