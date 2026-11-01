@@ -328,6 +328,59 @@ corrected qualification bar accepts the identical variant set, so none of the
 > t and sign test, and the d≥2 contrast — or be stated as *"advantage over ridge,
 > comparator strength unmeasured"*, never as an advantage over "the baselines".
 
+> **SETTLED 2026-11-01 on ONE seed block — nine arms, one run folder per landscape.**
+> Branch `worktree-agent-aa53d65b7e6a10b8f` (`9158f6a`), TrpB on the designated held-out
+> seeds 48–95 and GB1 on 0–47, every arm spending all 125 measurements on all 48 seeds.
+> Pre-registered at `fd9361a` before any arm ran. **Every premise figure below reproduces
+> exactly** on this single run.
+>
+> **TrpB — the engine beats all seven baselines on all three endpoints, every contrast
+> separable. This is the strongest positive result in the project.**
+>
+> | endpoint | strongest baseline | it scores | engine + one-hot | Δ | t | b/w/t |
+> | --- | --- | --- | --- | --- | --- | --- |
+> | raw | `gp_onehot` | 38.54 | **56.42** | **+17.88** | +5.08 | 37/11/0 |
+> | **d≥2** | `ridge` | 6.40 | **14.25** | **+7.85** | **+15.41** | **48/0/0** |
+> | d≥3 | `ridge` | 2.06 | 4.79 | **+2.73** | +10.75 | 43/2/3 |
+>
+> The strongest baseline is a **different arm under each endpoint** — `gp_onehot` on raw,
+> `ridge` at d≥2 and d≥3 — and `gp_onehot` buys its raw lead with redundancy (7.06 raw hits
+> per distinct hit against ridge's 4.54). `panoptes_default` for comparison: raw +12.88,
+> d≥2 +7.75, d≥3 +2.44.
+>
+> **THE ONE-HOT SURROGATE'S TRPB GAIN IS ENTIRELY REDUNDANT HITS.** +5.00 raw at t=+5.33
+> (40/6/2) and **+0.10 at d≥2 at t=+0.29, 22/19/7 — not separable**; redundancy rises
+> 3.63× → 3.96× and the diversity-adjusted count is flat, 14.15 → 14.25. **Any claim that
+> the one-hot surrogate improves the engine must be scoped to the raw count.** This could
+> not have been obtained from the two separate runs and is the sharpest result of the day.
+>
+> **The splice was worth 2.7 hits.** Naive: 51.42 + 7.71 − 38.54 = +20.59. Measured:
+> **+17.88** — inside the pre-registered ±6 band. Right sign, right order of magnitude,
+> wrong number. The two premises also disagree with each other about the headline arm
+> (57.35 on seeds 0–47 against 56.42 on 48–95) and about the one-hot effect itself (+7.71
+> against +5.00), so **the seed block moves that effect size by 2.7 hits.**
+>
+> **GB1: `ridge` WAS NEVER THE STRONGEST RAW BASELINE. `gp_onehot` is, at 46.02 against
+> ridge's 33.29.** The panel never ran GB1, so **every GB1 contrast in this document is
+> against the project's third-strongest raw arm and the loss is worse than recorded**:
+> engine+one-hot −21.31 against `gp_onehot` (t=−9.10, 7/41/0). At d≥2 it is +0.79 (not
+> separable) and at d≥3 **+0.75** (t=+4.23, 28/7/13) — GB1 is a decisive **raw** loss and a
+> shallow **diversity-adjusted** win, and the endpoint decides the verdict. One-hot closes
+> **33.4%** of the ridge gap against a pre-registered 33% [10%, 60%].
+>
+> **So GB1's loss has now had three mechanisms eliminated and remains unexplained**: not
+> the surrogate's feature space (above), not the spatial veto (ablating it *costs* 4.27
+> hits and cohesion contributes zero GB1 rejections at any depth), not the fabricated WT
+> row (0.20 label SDs from centre; 48-seed ablation +0.542 at t=+0.41).
+>
+> Validity, demonstrated not asserted: after merging two branches, **21,120 cells across
+> all 22 behavioural columns** agree exactly against `main` while `source_tree_sha256`
+> differs — code changed, behaviour did not. `_one_hot_matrix`'s refactor was checked
+> against `main`'s inline loop as an independent oracle over the full universes:
+> **12,799,920 TrpB and 11,948,800 GB1 cells bitwise identical.** Every arm's
+> implementation was hashed at AST level against the branch its published figures came
+> from.
+
 > **Measured 2026-11-01 — the GP's feature space as an arm, 48 paired seeds.** Branch
 > `worktree-agent-a14c69a80e0afa44a` (`a779422`), component `biophysical_features`, with
 > the default path proven untouched rather than asserted: against the parent commit,

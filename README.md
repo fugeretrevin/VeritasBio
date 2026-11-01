@@ -413,6 +413,54 @@ sample. Reproduce with `scripts/analysis/generality_sweep.ps1`.
 > evidence the method works on a 4-site saturated library with a zero-centred assay: the
 > single configuration in which nothing known to be broken is exercised.
 >
+> **Settled 2026-11-01 on ONE seed block, all nine arms in one run folder** (branch
+> `worktree-agent-aa53d65b7e6a10b8f`, `9158f6a`; TrpB on the designated held-out seeds
+> 48–95, GB1 on 0–47; every arm spent all 125 measurements on all 48 seeds, gate-verified).
+> The two results above lived on *different* seed blocks and could not be combined. Here
+> they are measured together, and every premise figure reproduces **exactly** — TrpB's
+> +12.875/t=+3.57/31-16-1, the d≥2 +7.750/t=+13.40, GB1's −12.896/t=−5.63/6-41-1, the
+> redundancy ratios 7.06×/4.54×.
+>
+> **On TrpB the engine beats all seven baselines on all three endpoints, every contrast
+> separable:**
+>
+> | endpoint | strongest baseline | it scores | engine + one-hot | Δ | t | b/w/t |
+> |---|---|---|---|---|---|---|
+> | raw | `gp_onehot` | 38.54 | **56.42** | **+17.88** | +5.08 | 37/11/0 |
+> | **d≥2** | `ridge` | 6.40 | **14.25** | **+7.85** | **+15.41** | **48/0/0** |
+> | d≥3 | `ridge` | 2.06 | 4.79 | **+2.73** | +10.75 | 43/2/3 |
+>
+> The strongest baseline is a *different arm under each endpoint* — `gp_onehot` on raw,
+> `ridge` at d≥2 and d≥3 — and `gp_onehot` buys its raw lead with redundancy, 7.06 raw hits
+> per distinct one against ridge's 4.54. Pre-registered as F5 and confirmed.
+>
+> **The splice was worth 2.7 hits.** Naively combining the two earlier runs gives
+> 51.42 + 7.71 − 38.54 = **+20.59**; measured on one block it is **+17.88** — inside the
+> ±6 band the pre-registration declared in advance. The splice got the sign and the order
+> of magnitude right and the number wrong, which is precisely what cannot be known without
+> measuring, and is why the withdrawn 6.3× claim is not rehabilitated by this.
+>
+> **On GB1, `ridge` was never the strongest raw baseline. `gp_onehot` is, at 46.02 against
+> ridge's 33.29.** The panel never ran GB1, so **every GB1 contrast in this README and in
+> HANDOFF §1 is against the project's third-strongest raw arm, and the loss is worse than
+> recorded**: engine+one-hot is **−21.31** against `gp_onehot` (t=−9.10, 7/41/0). At d≥2 it
+> is +0.79 (not separable) and at d≥3 **+0.75** (t=+4.23) — so GB1 is a decisive *raw* loss
+> and a shallow *diversity-adjusted* win, and the endpoint decides the verdict.
+>
+> One-hot closes **33.4%** of GB1's ridge gap, against a pre-registered 33% with an 80%
+> interval of [10%, 60%]. So **GB1's loss is not a feature-space defect** — and together
+> with the two earlier campaigns it is not the spatial veto (ablating it *costs* GB1 4.27
+> hits, and the cohesion rule contributes **zero** GB1 rejections at any depth) and not the
+> fabricated WT row (GB1 sits 0.20 label SDs from centre and its 48-seed ablation is +0.542
+> at t=+0.41). **Three mechanisms eliminated; GB1 remains unexplained.**
+>
+> Validity, demonstrated rather than asserted: after merging two branches, **21,120 cells
+> across all 22 behavioural columns** agree exactly against `main` while
+> `source_tree_sha256` differs — the code changed and the behaviour did not. The
+> `_one_hot_matrix` refactor was checked against `main`'s inline loop as an independent
+> oracle over the **full** universes: **12,799,920 TrpB and 11,948,800 GB1 cells bitwise
+> identical.**
+>
 > Also re-measured on the same held-out block: `panoptes_default` on TrpB is **51.42**, not
 > the 45.21 recorded earlier, and the d≥2 figure is **+7.75 (t=+13.4)**, not +7.93
 > (t=+17.1) — different arms under one name, since `DPP_DIVERSITY_ENABLED` and
@@ -455,13 +503,19 @@ Each had been plausible enough to act on, and two of them were ours.
    agree exactly** against the parent commit over 3 arms × 48 seeds × 5 rounds, the only
    differences being wall clock. Branch `worktree-agent-a14c69a80e0afa44a` (`a779422`).
 
-   **It is not a null everywhere, and that is a product result rather than a
-   falsification.** On **TrpB** the one-hot GP is worth **+7.71 (p=2.6e−08, 41/3/4)**,
-   taking the engine from 49.65 to **57.35**; on GB1 **+4.31** (p=0.0031), though GB1's is
-   confounded because the GFlowNet reward scores candidates *through* this GP and
-   deep-enrichment moved 0.690 → 0.801. TrpB's is not pool-explained. The
-   pre-registration predicted a **null on TrpB** and was falsified there, and the bars were
-   not moved.
+   **It is not a null everywhere — but the gain is REDUNDANT, and that correction is the
+   sharpest result of the day.** On **TrpB** the one-hot GP adds **+5.00 raw top-1% hits
+   at t=+5.33** (40/6/2) — and **+0.10 at d≥2, t=+0.29, 22/19/7: NOT SEPARABLE.** The
+   engine's redundancy rises 3.63× → 3.96× and the diversity-adjusted count is flat at
+   14.15 → 14.25. So it finds five more hits per campaign and **nothing at all** once hits
+   within Hamming 1 of an already-counted hit are removed. **Any claim that the one-hot
+   surrogate improves the engine must be scoped to the raw count.** On GB1 it is +4.31 raw
+   but confounded, because the GFlowNet reward scores candidates *through* this GP and
+   deep-enrichment moved 0.690 → 0.801.
+
+   This is a finding that could not be obtained from the earlier, separate measurements —
+   it needed all arms in one run folder on one seed block, and it is why the splice below
+   was not trusted.
 
    **Better surrogate rho does not predict a better campaign.** Rho gain ran GB1 (+0.107) >
    CreiLOV (+0.077) > TrpB (+0.025); campaign gain runs the other way round — TrpB > GB1 >
