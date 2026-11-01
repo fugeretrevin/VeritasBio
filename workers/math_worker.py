@@ -1855,7 +1855,14 @@ ABLATABLE_COMPONENTS: Set[str] = {
     # Every other consumer of the biophysical encoding is deliberately untouched by
     # this name: the structural prior, `AssayAdaptedHead` and the k-DPP similarity
     # kernel all keep it, because under a LINEAR readout those features are not worse
-    # than one-hot and on GB1 are better by +0.103 rho. Only the GP's columns move.
+    # than one-hot and on GB1 are better by +0.103 rho.
+    #
+    # NOT a purely downstream change, though, and this was measured rather than assumed:
+    # the GFlowNet's reward scores each candidate through this same GP, so the PROPOSAL
+    # DISTRIBUTION is downstream of the feature space. On GB1 this arm proposed 7,833
+    # distinct candidates against 8,832 at a deep-enrichment of 0.801 against 0.690. A
+    # paired difference on a landscape where the GFlowNet runs is therefore confounded
+    # with candidate-pool composition. On CreiLOV the pool barely moved (5,154 -> 5,091).
     "biophysical_features",
 }
 

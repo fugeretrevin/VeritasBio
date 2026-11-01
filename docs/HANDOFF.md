@@ -175,10 +175,23 @@ corrected qualification bar accepts the identical variant set, so none of the
 > the biophysical encoding on surrogate Spearman rho on 8 of 9 landscapes, because the
 > encoding's 6-dimensional global block is a deterministic linear function of the rest yet
 > carries ~50% of feature variance, and `build_gp_model`'s Matern is **isotropic**. That is
-> a statement about a fixed matrix, not about a campaign — see
-> [`prereg-onehot-featurisation-arm.md`](prereg-onehot-featurisation-arm.md) for why the
-> two can disagree, and `configuration.model.surrogate_features.per_arm` for which arm a
-> run folder actually measured (rule 2.12).
+> a statement about a fixed matrix, not about a campaign. Read
+> `configuration.model.surrogate_features.per_arm` for which arm a run folder actually
+> measured (rule 2.12).
+>
+> **Measured at 48 paired seeds** — pre-registered in
+> [`prereg-onehot-featurisation-arm.md`](prereg-onehot-featurisation-arm.md), results and
+> caveats in [`results-onehot-featurisation-arm.md`](results-onehot-featurisation-arm.md).
+> Δ is `onehot_surrogate − panoptes_default` on top-1% hits, paired within seed in one run
+> folder. **TrpB +7.71 (p=2.6e-08, 41/3/4); GB1 +4.31 (p=0.0031, 34/12/2); CreiLOV +0.79
+> (p=0.33, 25/16/7, not separable).** The CreiLOV gap to ridge stays at **−49.50 on 0 of 48
+> seeds**, so the featurisation is **not** what loses CreiLOV. Two warnings that travel with
+> those numbers: the pre-flight gate **FAILS** `threshold.<library>` on all three (a gate
+> reader/schema mismatch that also fails the published runs — see §0 of the results doc), so
+> they are provisional; and the GFlowNet's reward scores candidates through this same GP, so
+> on GB1 the candidate pool moved too (7,833 distinct at 0.801 deep-enrichment against 8,832
+> at 0.690) and **+4.31 is confounded with pool composition.** CreiLOV's pool did not move,
+> which is what makes its null a clean one.
 
 ### What is void — do not quote these
 

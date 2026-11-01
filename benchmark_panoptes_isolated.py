@@ -4645,6 +4645,19 @@ def _production_selection_identity(
         "engine_default": _engine_surrogate_features(()),
         "available_modes": list(getattr(_mw, "SURROGATE_FEATURE_MODES", ())),
         "applies_to": "the GP surrogate's fit and predict inputs only",
+        # Measured, not assumed. The switch changes only the GP's columns, but the
+        # GFlowNet's reward function CALLS the GP, so the candidate pool is downstream of
+        # it and does move: on GB1 the one-hot arm proposed 7,833 distinct candidates
+        # against the default arm's 8,832, at 0.801 deep-enrichment against 0.690. Any
+        # paired difference on a landscape where the GFlowNet runs is therefore confounded
+        # with candidate-pool composition and must not be attributed to the surrogate
+        # alone. On CreiLOV the pool barely moved (5,154 -> 5,091 distinct, mean proposed
+        # depth 5.573 -> 5.588), so the null there is a clean ranking null.
+        "reaches_candidate_generation_indirectly": (
+            "the GFlowNet reward scores candidates through this same GP, so the proposal "
+            "distribution is downstream of the feature space; compare "
+            "generation_coverage.csv per arm before attributing a difference to ranking"
+        ),
         "unchanged_consumers": [
             "compute_biological_prior / structural surrogate",
             "AssayAdaptedHead",
