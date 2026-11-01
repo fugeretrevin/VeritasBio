@@ -604,6 +604,107 @@ class TestManifestIsAuthoritative(unittest.TestCase):
         self.assertIn("hyperparameters", manifest["configuration"]["model"])
 
 
+class TestSurrogateDescriptionMatchesTheEngine(unittest.TestCase):
+    """
+    `configuration.model.surrogate` read "deep-kernel/GP on epistatic one-hot features
+    with a residual biophysical prior mean" in every manifest this project ever wrote.
+    There was no one-hot anywhere in the engine path: the GP was fitted on
+    `featurize_variant_on_positions`, a continuous biophysical delta encoding. That
+    sentence is believed to have misdirected an entire investigation into why the
+    engine's surrogate underperformed a one-hot ridge.
+
+    So the test is not "the string says one-hot". It is that the recorded feature space
+    is read from the engine and names the function that actually produces it, in both
+    settings - a hard-coded sentence cannot satisfy both halves at once.
+    """
+
+    def _feature_source_symbol(self, mode: str) -> str:
+        return {
+            "one_hot": "one_hot_encode_genotypes",
+            "engine_biophysical": "featurize_variant_on_positions",
+        }[mode]
+
+    def test_the_recorded_default_is_read_from_the_engines_live_signature(self) -> None:
+        import inspect
+
+        import workers.math_worker as mw
+
+        live_default = inspect.signature(mw.select_next_micro_batch).parameters[
+            "surrogate_features"].default
+        recorded = _build_manifest()["configuration"]["model"]["surrogate_features"]
+        self.assertEqual(recorded["engine_default"], live_default)
+        self.assertIsNone(recorded["benchmark_override"])
+        self.assertEqual(recorded["effective"], live_default)
+        self.assertIn(live_default, recorded["available_modes"])
+
+    def test_the_surrogate_sentence_names_the_encoder_that_actually_runs(self) -> None:
+        import workers.math_worker as mw
+
+        for mode in mw.SURROGATE_FEATURE_MODES:
+            with self.subTest(mode=mode):
+                manifest = _build_manifest(
+                    args=_args(["--production-surrogate-features", mode]))
+                model = manifest["configuration"]["model"]
+                self.assertEqual(model["surrogate_features"]["effective"], mode)
+                self.assertEqual(model["surrogate_features"]["benchmark_override"], mode)
+                self.assertIn(self._feature_source_symbol(mode), model["surrogate"])
+                # The machine-readable field names exactly one encoder, and it is this
+                # mode's - not the other mode's.
+                encoder = model["surrogate_features"]["encoder"]
+                self.assertIn(self._feature_source_symbol(mode), encoder)
+                other = next(m for m in mw.SURROGATE_FEATURE_MODES if m != mode)
+                self.assertNotIn(self._feature_source_symbol(other), encoder)
+
+    def test_the_consumers_that_keep_the_biophysical_encoding_are_named(self) -> None:
+        """The switch moves the GP's inputs and nothing else; the record has to say so,
+        because 'the engine now uses one-hot' unqualified is the next version of the
+        sentence this class exists to prevent."""
+        recorded = _build_manifest(
+            args=_args(["--production-surrogate-features", "one_hot"]),
+        )["configuration"]["model"]["surrogate_features"]
+        joined = " ".join(recorded["unchanged_consumers"]) + " " + recorded["applies_to"]
+        self.assertIn("AssayAdaptedHead", joined)
+        self.assertIn("dpp", joined.lower())
+        self.assertIn("prior", joined.lower())
+
+    def test_two_runs_differing_only_in_the_feature_space_do_not_share_a_fingerprint(self) -> None:
+        """Rule 2.12: a behaviour gated in one place and recorded from another produced a
+        dpp-on and a dpp-off run of one library that hashed identically, and cost a real
+        attribution. The feature space is the same kind of gate."""
+        identical_outcomes = [_completed_outcome(best=0.5)]
+        one_hot = _build_manifest(
+            args=_args(["--production-surrogate-features", "one_hot"]),
+            outcomes=identical_outcomes)
+        biophysical = _build_manifest(
+            args=_args(["--production-surrogate-features", "engine_biophysical"]),
+            outcomes=identical_outcomes)
+
+        self.assertNotEqual(
+            one_hot["configuration_fingerprint"],
+            biophysical["configuration_fingerprint"],
+        )
+        # And the fingerprint is still recomputable from the manifest alone.
+        for manifest in (one_hot, biophysical):
+            reloaded = json.loads(json.dumps(manifest))
+            self.assertEqual(
+                bench.configuration_fingerprint(reloaded["configuration"]),
+                reloaded["configuration_fingerprint"],
+            )
+
+    def test_the_setting_is_inside_the_hashed_configuration_subtree(self) -> None:
+        """Not merely present somewhere in the manifest: inside `configuration`, which is
+        the whole of what `configuration_fingerprint` hashes."""
+        manifest = _build_manifest(
+            args=_args(["--production-surrogate-features", "engine_biophysical"]))
+        configuration = manifest["configuration"]
+        self.assertEqual(
+            configuration["model"]["surrogate_features"]["effective"], "engine_biophysical")
+        self.assertEqual(
+            configuration["acquisition_policy"]["parameters"]["surrogate_features"],
+            "engine_biophysical")
+        bench.validate_manifest(manifest)  # must not raise
+
+
 class TestManifestIdentifiesConfiguration(unittest.TestCase):
     """
     The 62-arm reconstruction incident: a manifest must identify its configuration without

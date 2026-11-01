@@ -869,6 +869,21 @@ class Orchestrator:
                 catalytic_invariants=set(metadata.catalytic_positions),
                 pdb_path=pdb_path,
                 random_seed=(self.config.random_seed or 42) + round_num * 1000,
+                # Pinned to the biophysical encoding ON PURPOSE, against the engine's
+                # new "one_hot" default.
+                #
+                # The evidence for one-hot is nine retrospective benchmark landscapes,
+                # each with a DECLARED per-site alphabet, scored against measured
+                # fitness. This loop has neither property: it optimises ESM
+                # pseudo-likelihoods over an annotation-derived position set with no
+                # library specification, so one-hot here would be 20 indicator columns
+                # per active site and nothing has measured whether that helps. Flipping
+                # it silently would also change this loop's EI scale, and its regret
+                # stopping rule is an absolute EI threshold.
+                #
+                # This is a scoping decision, not a verdict: measure it on this
+                # objective before changing it.
+                surrogate_features="engine_biophysical",
             )
 
             # -----------------------------------------------------------------

@@ -969,35 +969,36 @@ def _one_hot_matrix(combos: Sequence[str], library: LibrarySpec) -> np.ndarray:
     columns of which 288 were identically zero at every row, because each site admits
     exactly two residues - so the baselines were handed ten times the features the
     library can express, and the width disagreed with `one_hot_width`.
-    """
-    offsets: List[int] = []
-    width = 0
-    for slot in range(library.n_sites):
-        offsets.append(width)
-        width += len(library.alphabet_for(slot))
 
-    matrix = np.zeros((len(combos), width), dtype=np.float32)
+    The encoding itself lives in `workers.math_worker.one_hot_encode_genotypes`, because
+    the production selector's GP surrogate is now fitted on it too. One implementation,
+    so the features the engine is handed cannot drift from the features the baselines
+    were measured on. This function keeps the benchmark's refuse-the-row policy: a
+    residue outside the declared alphabet means the data and the spec disagree about the
+    library, and silently dropping or remapping it would put that disagreement into the
+    features.
+    """
+    from workers.math_worker import one_hot_encode_genotypes
+
+    alphabets = [library.alphabet_for(slot) for slot in range(library.n_sites)]
     for row, combo in enumerate(combos):
         if len(combo) != library.n_sites:
             raise BenchmarkError(
                 f"genotype {combo!r} at row {row} has {len(combo)} site(s) but library "
                 f"{library.key!r} declares {library.n_sites}"
             )
-        for slot, residue in enumerate(combo):
-            alphabet = library.alphabet_for(slot)
-            index = alphabet.find(residue)
-            if index < 0:
-                # Refused rather than encoded: a residue outside the declared alphabet
-                # means the data and the spec disagree about the library, and silently
-                # dropping or remapping it would put that disagreement into the features.
-                raise BenchmarkError(
-                    f"genotype {combo!r} at row {row} has residue {residue!r} at site "
-                    f"{slot} (position {library.positions[slot]}), which library "
-                    f"{library.key!r} does not declare: its alleles there are "
-                    f"{alphabet!r}"
-                )
-            matrix[row, offsets[slot] + index] = 1.0
-    return matrix
+
+    def _refuse(row: int, slot: int, residue: str, alphabet: str) -> None:
+        raise BenchmarkError(
+            f"genotype {combos[row]!r} at row {row} has residue {residue!r} at site "
+            f"{slot} (position {library.positions[slot]}), which library "
+            f"{library.key!r} does not declare: its alleles there are "
+            f"{alphabet!r}"
+        )
+
+    return one_hot_encode_genotypes(
+        combos, alphabets, on_undeclared=_refuse, dtype=np.float32
+    )
 
 
 def _load_imputed_ids(
@@ -2763,6 +2764,7 @@ class PanoptesSelector(Selector):
         acquisition_mode: Optional[str] = None,
         exploration_xi: Optional[float] = None,
         candidate_source: str = "generate",
+        surrogate_features: Optional[str] = None,
     ) -> None:
         super().__init__(seed)
         # Ablation arm. 'none' is the shipped configuration; the others restore one
@@ -2787,6 +2789,21 @@ class PanoptesSelector(Selector):
                 f"{candidate_source!r}"
             )
         self.candidate_source = candidate_source
+        # Which feature space the engine's GP surrogate is fitted on. None leaves the
+        # engine default, so an unset flag changes nothing; the manifest records the
+        # EFFECTIVE value either way, read back from the engine's own signature.
+        if surrogate_features is not None:
+            import workers.math_worker as _mw_features
+
+            if surrogate_features not in _mw_features.SURROGATE_FEATURE_MODES:
+                raise BenchmarkError(
+                    f"surrogate_features must be one of "
+                    f"{list(_mw_features.SURROGATE_FEATURE_MODES)}, got "
+                    f"{surrogate_features!r}"
+                )
+        self.surrogate_features = surrogate_features
+        if surrogate_features is not None:
+            self.notes.append(f"SURROGATE_FEATURES={surrogate_features}")
         if candidate_source == "enumerate":
             self.notes.append(
                 "CANDIDATE SOURCE=enumerate: this arm ranked the enumerated untested "
@@ -3437,6 +3454,10 @@ class PanoptesSelector(Selector):
                else {"exploration_xi": float(self.exploration_xi)}),
             candidate_pool=candidate_pool,
             allowed_residues=allowed_residues,
+            # Omitted when unset, so the engine default is what runs and the manifest
+            # does not have to distinguish "passed the default" from "took the default".
+            **({} if self.surrogate_features is None
+               else {"surrogate_features": self.surrogate_features}),
             # Write-only diagnostics sink, attached by the harness. This is what
             # captures the engine's REAL ballot: the selection trace holds committed
             # picks plus harness rejections only, which cannot separate a narrow
@@ -4002,6 +4023,13 @@ MANIFEST_REQUIRED_PATHS: Tuple[str, ...] = (
     "configuration.components.states",
     "configuration.components.requested_spec",
     "configuration.model.surrogate",
+    # Required, because the feature space the surrogate is fitted on is a first-class
+    # arm distinction: the same engine on one-hot and on the biophysical encoding are
+    # two different methods on every landscape. A manifest that does not state which
+    # one ran cannot identify the arm, and `configuration.model.surrogate` was wrong
+    # about exactly this for the whole life of the previous key.
+    "configuration.model.surrogate_features",
+    "configuration.model.surrogate_features.effective",
     "configuration.model.hyperparameters",
     "configuration.dataset.name",
     "configuration.dataset.source",
@@ -4446,6 +4474,7 @@ def _production_selection_identity(
     components_disabled: Sequence[str],
     ablation_arm: str,
     prior_spread: Optional[float],
+    surrogate_features: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Reads the production selector's effective acquisition policy and hyperparameters.
@@ -4455,6 +4484,14 @@ def _production_selection_identity(
     used instead of what this file once believed. The benchmark's own overrides are listed
     separately, because 'the default, except for these three arguments' is the only honest
     description of the call.
+
+    `surrogate_features` is the benchmark's override, or None when the run took the
+    engine default. The EFFECTIVE value is what is recorded, under
+    `model.surrogate_features` and `acquisition_policy.parameters`, so two runs that
+    differ only in it get different `configuration_fingerprint`s - both subtrees are
+    inside `configuration`, which is the whole of what the fingerprint hashes. Rule
+    2.12: a record that reads one of two gates is worse than no record, because it
+    will be trusted.
     """
     policy: Dict[str, Any] = {
         "policy_id": "hybrid_thompson",
@@ -4470,9 +4507,18 @@ def _production_selection_identity(
         "parameters": {},
         "engine": {},
     }
+    # Filled in below from the engine's live signature. There is no literal description
+    # of the surrogate here on purpose.
+    #
+    # This key used to read "deep-kernel/GP on epistatic one-hot features with a
+    # residual biophysical prior mean". There was no one-hot anywhere in the engine
+    # path: the GP was fitted on `featurize_variant_on_positions`, a continuous
+    # biophysical delta encoding. That sentence is believed to have misdirected an
+    # entire investigation into why the engine's surrogate underperformed a one-hot
+    # ridge - the answer being that the engine had never been using one-hot at all.
     model: Dict[str, Any] = {
-        "surrogate": "workers.math_worker deep-kernel/GP on epistatic one-hot features with a "
-                     "residual biophysical prior mean",
+        "surrogate": None,
+        "surrogate_features": None,
         "hyperparameters": {},
         "baselines": "per-method hyperparameters are recorded under configuration.methods",
     }
@@ -4481,13 +4527,26 @@ def _production_selection_identity(
         import workers.math_worker as _mw
     except Exception as exc:  # pragma: no cover - only when the engine cannot be imported
         policy["engine"] = {"available": False, "error": f"{type(exc).__name__}: {exc}"}
+        model["surrogate"] = (
+            f"UNRESOLVED: workers.math_worker could not be imported "
+            f"({type(exc).__name__}: {exc})"
+        )
+        # Still structurally complete, and honest about what could not be read: an
+        # unresolved setting must not be readable as a particular setting.
+        model["surrogate_features"] = {
+            "effective": None,
+            "engine_default": None,
+            "benchmark_override": surrogate_features,
+            "unresolved_reason": f"{type(exc).__name__}: {exc}",
+        }
         model["hyperparameters"] = {"available": False}
         return policy, model
 
     signature = inspect.signature(_mw.select_next_micro_batch)
     defaults: Dict[str, Any] = {}
     for name in ("exploration_xi", "acquisition_mode", "fantasy_variance",
-                 "apply_auxiliary_objective_weights", "pareto_weights_config"):
+                 "apply_auxiliary_objective_weights", "pareto_weights_config",
+                 "surrogate_features"):
         parameter = signature.parameters.get(name)
         if parameter is not None and parameter.default is not inspect.Parameter.empty:
             defaults[name] = _json_safe(parameter.default)
@@ -4501,9 +4560,62 @@ def _production_selection_identity(
     if engine_file.is_file():
         engine_sha = _sha256_file(engine_file)[0]
 
+    # The feature space the GP is actually fitted on this run: the benchmark's override
+    # when it passed one, otherwise the engine's live default.
+    effective_surrogate_features = str(
+        surrogate_features
+        if surrogate_features is not None
+        else defaults.get("surrogate_features")
+    )
+    two_stage_enabled = bool(getattr(_mw, "TWO_STAGE_GP_ENABLED", False))
+    surrogate_kind = (
+        "two-stage MLP-feature GP (workers.math_worker.TwoStageDeepFeatureGP)"
+        if two_stage_enabled and "dkl" not in set(components_disabled)
+        else "plain isotropic Matern(nu=2.5) GP (workers.math_worker.build_gp_model)"
+    )
+    feature_description = {
+        "one_hot": (
+            "one-hot over the library's declared per-site alphabets "
+            "(workers.math_worker.one_hot_encode_genotypes, the same encoder the "
+            "one-hot baselines use), width = LibrarySpec.one_hot_width"
+        ),
+        "engine_biophysical": (
+            "continuous biophysical property deltas per active site plus a 6-dimensional "
+            "global block and 4 pairwise cross-terms "
+            "(workers.math_worker.featurize_variant_on_positions); NOT one-hot"
+        ),
+    }.get(effective_surrogate_features, f"unrecognised ({effective_surrogate_features})")
+    # The one symbol that produces the GP's columns, recorded as a field rather than only
+    # inside prose, so a consumer can check it without parsing a sentence.
+    feature_encoder = {
+        "one_hot": "workers.math_worker.one_hot_encode_genotypes",
+        "engine_biophysical": "workers.math_worker.featurize_variant_on_positions",
+    }.get(effective_surrogate_features)
+
+    model["surrogate"] = (
+        f"{surrogate_kind} fitted on assay residuals y - m(x), where m(x) is the "
+        f"calibrated biophysical prior; surrogate features: {feature_description}. "
+        "The assay-adapted head and the k-DPP similarity kernel always use "
+        "featurize_variant_on_positions regardless of this setting."
+    )
+    model["surrogate_features"] = {
+        "effective": effective_surrogate_features,
+        "encoder": feature_encoder,
+        "engine_default": defaults.get("surrogate_features"),
+        "benchmark_override": surrogate_features,
+        "available_modes": list(getattr(_mw, "SURROGATE_FEATURE_MODES", ())),
+        "applies_to": "the GP surrogate's fit and predict inputs only",
+        "unchanged_consumers": [
+            "compute_biological_prior / structural surrogate",
+            "AssayAdaptedHead",
+            "greedy_dpp_sample similarity kernel",
+        ],
+    }
+
     policy["policy_id"] = str(defaults.get("acquisition_mode") or "hybrid_thompson")
     policy["parameters"] = {
         "acquisition_mode": defaults.get("acquisition_mode"),
+        "surrogate_features": effective_surrogate_features,
         "exploration_xi": defaults.get("exploration_xi"),
         "thompson_weight": 0.3,
         "fantasy_variance": defaults.get("fantasy_variance"),
@@ -4528,6 +4640,10 @@ def _production_selection_identity(
             "pdb_path": "workers/data/8EH0.pdb when present",
             "apply_auxiliary_objective_weights": ablation_arm in ("aux-weighted", "legacy"),
             "ablate": list(components_disabled),
+            "surrogate_features": (
+                "--production-surrogate-features" if surrogate_features is not None
+                else "not passed; the engine default above is what ran"
+            ),
         },
     }
     model["hyperparameters"] = dict(policy["parameters"])
@@ -4710,6 +4826,7 @@ def build_manifest(
         components_disabled=disabled,
         ablation_arm=str(getattr(args, "ablation", "none")),
         prior_spread=getattr(args, "prior_spread", None),
+        surrogate_features=getattr(args, "production_surrogate_features", None),
     )
     states = component_states(disabled)
     provenance = _label_provenance_block(universe)
@@ -5837,6 +5954,7 @@ def build_selector_factories(
                                  acquisition_mode=args.acquisition_mode,
                                  exploration_xi=args.exploration_xi,
                                  candidate_source=args.production_candidate_source,
+                                 surrogate_features=args.production_surrogate_features,
                                  qualify_threshold=q, probe_after_qualify=pr)
             )
             detail = (
@@ -6358,6 +6476,25 @@ examples:
             "on constrained generation; 'enumerate' is the only setting under which the "
             "three are compared on the same task. Ranking an enumerated pool is "
             "strictly easier, so a result obtained with it does not validate generation."
+        ),
+    )
+    parser.add_argument(
+        "--production-surrogate-features",
+        choices=("one_hot", "engine_biophysical"), default=None,
+        help=(
+            "Which feature space the production arm's GP surrogate is fitted on. "
+            "Unset leaves the engine default, which is 'one_hot': one-hot over the "
+            "library's declared per-site alphabets, the same encoder the one-hot "
+            "baselines use. 'engine_biophysical' restores the previous behaviour, the "
+            "continuous encoding from featurize_variant_on_positions - whose "
+            "6-dimensional global block carries ~50%% of total feature variance on all "
+            "nine landscapes while adding no information, which under an ISOTROPIC "
+            "Matern kernel made the GP worse than one-hot on 8 of 9 landscapes "
+            "(|t|>2 on 7). The two are paired arms, not a fix and a bug: with a "
+            "LINEAR readout the biophysical features are better on GB1 by +0.103 rho. "
+            "Whichever runs, the effective setting is recorded in the manifest under "
+            "configuration.model.surrogate_features and so enters the "
+            "configuration_fingerprint."
         ),
     )
     parser.add_argument(

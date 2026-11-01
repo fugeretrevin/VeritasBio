@@ -158,6 +158,20 @@ corrected qualification bar accepts the identical variant set, so none of the
 
 ### What is void — do not quote these
 
+> **Pending on a branch, not yet merged:** the GP surrogate's feature space is now a
+> switch (`select_next_micro_batch(surrogate_features=...)`) defaulting to one-hot over
+> the library's declared per-site alphabets, because the biophysical encoding's
+> 6-dimensional global block carries ~50% of total feature variance on all nine
+> landscapes while being a deterministic linear function of the rest, and
+> `build_gp_model`'s Matern is isotropic. **This makes the engine a NEW ARM on every
+> landscape, including TrpB**, in the same sense as §5.2's `v2`: every number in this
+> file was measured with `engine_biophysical` and is non-comparable to anything measured
+> after the switch. `featurize_variant_on_positions` is unchanged - it is BETTER under a
+> linear readout, +0.103 rho on GB1 - and `controller/orchestrator.py` pins itself to
+> `engine_biophysical` because its objective is ESM pseudo-likelihoods, which nothing
+> has measured. The manifest records the effective setting under
+> `configuration.model.surrogate_features` and it enters the fingerprint (rule 2.12).
+
 - **Every** `frontier` / `panoptes_qualify_then_optimize` number on every landscape
   except TrpB. The qualification bar was an absolute 0.70 that gated nothing.
 - Every engine arm mean on GB1 and TrpB computed at 117–124 measurements against

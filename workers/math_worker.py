@@ -196,6 +196,169 @@ def featurize_variant_on_positions(
 
 
 # -----------------------------------------------------------------------------
+# One-hot site encoding — the GP surrogate's feature space
+# -----------------------------------------------------------------------------
+# `featurize_variant_on_positions` above is NOT changed and must not be: with a
+# linear readout its features are not worse than one-hot (equal on 5 of 9 benchmark
+# landscapes and better on GB1 by +0.103 rho, t=+6.6, 10 of 10 repeats), and it has
+# seven other consumers - the structural prior, `AssayAdaptedHead`, the k-DPP
+# similarity kernel, `ui/landscape_plot.py` and four benchmark scripts.
+#
+# Under THIS module's GP it is worse, and the reason is variance allocation rather
+# than information. The 6-dimensional global block it appends (`n_mut / 3.0` plus the
+# five column sums of the per-site deltas) is a deterministic linear function of the
+# per-site block plus the mutation count - it adds nothing - yet it carries ~50% of
+# total feature variance on every one of the nine landscapes, roughly 8.2% per
+# dimension against 0.6-2.5% for a per-site dimension. `build_gp_model` uses an
+# ISOTROPIC Matern (one scalar length scale for every column), so Euclidean distance
+# is the kernel's only input and half of the GP's notion of "nearby sequence" becomes
+# "similar mutation burden" rather than "same residues at the same sites".
+#
+# Measured paired over 10 shared splits with the model held fixed: engine features
+# are worse than one-hot on 8 of 9 landscapes, |t| > 2 on 7 of them, from -0.023
+# (eqFP611-blue) to -0.309 (CR6261-H1), and one-hot is never significantly worse.
+#
+# This encoder is the single implementation of that encoding in the project:
+# `benchmark_panoptes_isolated._one_hot_matrix` delegates to it, so the features the
+# surrogate is handed cannot drift from the features the baselines were measured on.
+
+#: Feature spaces `select_next_micro_batch` can hand its GP surrogate.
+SURROGATE_FEATURE_MODES: Tuple[str, ...] = ("one_hot", "engine_biophysical")
+
+#: A deterministic column order for the 20 canonical residues. `CANONICAL_AMINO_ACIDS`
+#: is a `set`, so iterating it would make column order depend on interpreter state.
+CANONICAL_AA_ORDER: str = "".join(sorted(CANONICAL_AMINO_ACIDS))
+
+
+def one_hot_site_offsets(alphabets: Sequence[str]) -> Tuple[List[int], int]:
+    """Start column of each site's block, and the total width, for `alphabets`.
+
+    Width is the SUM of the declared alphabet sizes, never `n_sites * 20`. On a
+    16-site binary library the latter is 320 columns of which 288 are identically
+    zero at every row.
+    """
+    offsets: List[int] = []
+    width = 0
+    for alphabet in alphabets:
+        offsets.append(width)
+        width += len(alphabet)
+    return offsets, width
+
+
+def one_hot_encode_genotypes(
+    genotypes: Sequence[Sequence[str]],
+    alphabets: Sequence[str],
+    on_undeclared: Optional[Callable[[int, int, str, str], None]] = None,
+    dtype: Any = np.float64,
+) -> np.ndarray:
+    """One-hot encodes fixed-length genotypes against each site's DECLARED alphabet.
+
+    `genotypes` are full-length: one residue per site, in `alphabets` order, with the
+    parent residue present wherever the genotype is unmutated. Mutation notation omits
+    wild-type positions, so a caller holding notation must expand it first
+    (`genotype_on_positions`) — never zip a short notation against the site list.
+
+    `on_undeclared(row, slot, residue, alphabet)` is called when a residue is outside
+    its site's declared alphabet, which means the data and the library spec disagree.
+    The default warns once per (residue, site) and leaves that site's block all-zero;
+    a caller that would rather refuse the row raises from the callback.
+    """
+    offsets, width = one_hot_site_offsets(alphabets)
+    n_sites = len(alphabets)
+    matrix = np.zeros((len(genotypes), width), dtype=dtype)
+    for row, genotype in enumerate(genotypes):
+        # Asserted, not zipped: a short genotype silently truncated against the site
+        # list understates every distance computed from these columns.
+        if len(genotype) != n_sites:
+            raise ValueError(
+                f"genotype {genotype!r} at row {row} has {len(genotype)} site(s) but "
+                f"{n_sites} alphabet(s) were declared; expand wild-type positions "
+                f"before encoding"
+            )
+        for slot, residue in enumerate(genotype):
+            alphabet = alphabets[slot]
+            index = alphabet.find(residue)
+            if index < 0:
+                if on_undeclared is not None:
+                    on_undeclared(row, slot, residue, alphabet)
+                else:
+                    _warn_once(
+                        f"one_hot_undeclared:{slot}:{residue}",
+                        "residue %r at site %d is not in that site's declared alphabet "
+                        "%r; its one-hot block is left empty for this and every later "
+                        "occurrence",
+                        residue, slot, alphabet,
+                    )
+                continue
+            matrix[row, offsets[slot] + index] = 1.0
+    return matrix
+
+
+def resolve_site_alphabets(
+    positions: Sequence[int],
+    allowed_residues: Optional[Dict[int, Sequence[str]]] = None,
+) -> List[str]:
+    """The declared alphabet for each position, in `positions` order.
+
+    A position the caller declared nothing for falls back to the full canonical 20,
+    which is what a saturated library declares implicitly.
+    """
+    alphabets: List[str] = []
+    for pos in positions:
+        declared = None if allowed_residues is None else allowed_residues.get(pos)
+        if declared:
+            alphabets.append("".join(str(residue).upper() for residue in declared))
+        else:
+            alphabets.append(CANONICAL_AA_ORDER)
+    return alphabets
+
+
+def genotype_on_positions(
+    variant: Variant,
+    positions: Sequence[int],
+    wt_sequence: str,
+) -> str:
+    """The variant's residue at each of `positions`, wild type where it is silent.
+
+    Mutation notation omits wild-type positions (`V183A:F184A:V227A` over four sites
+    is a four-site genotype whose fourth site is WT), so this fills them in and
+    returns a string of exactly `len(positions)` characters.
+    """
+    variant.validate_against_wt(wt_sequence)
+    mut_dict: Dict[int, SingleMutation] = {m.position: m for m in variant.mutations}
+    residues = [
+        mut_dict[pos].mut_aa if pos in mut_dict else wt_sequence[pos - 1].upper()
+        for pos in positions
+    ]
+    outside = sorted(set(mut_dict) - set(positions))
+    if outside:
+        _warn_once(
+            f"genotype_outside_sites:{outside}",
+            "variant mutations at position(s) %s are outside the encoded site list "
+            "and are therefore invisible to the surrogate",
+            outside,
+        )
+    genotype = "".join(residues)
+    if len(genotype) != len(positions):
+        raise ValueError(
+            f"expanded genotype {genotype!r} has {len(genotype)} site(s) for "
+            f"{len(positions)} position(s)"
+        )
+    return genotype
+
+
+def one_hot_variant_on_positions(
+    variant: Variant,
+    positions: Sequence[int],
+    wt_sequence: str,
+    alphabets: Sequence[str],
+) -> np.ndarray:
+    """One row of `one_hot_encode_genotypes` for a single `Variant`."""
+    genotype = genotype_on_positions(variant, positions, wt_sequence)
+    return one_hot_encode_genotypes([genotype], alphabets)[0]
+
+
+# -----------------------------------------------------------------------------
 # Bayesian Optimization & Expected Improvement
 # -----------------------------------------------------------------------------
 class SelectedBatch(BaseModel):
@@ -1891,6 +2054,7 @@ def select_next_micro_batch(
     candidate_pool: Optional[Sequence[Variant]] = None,
     candidate_trace: Optional[Any] = None,
     allowed_residues: Optional[Dict[int, Sequence[str]]] = None,
+    surrogate_features: str = "one_hot",
 ) -> SelectedBatch:
     """
     Executes the Gaussian Process active learning selection (Phases 1-4):
@@ -1909,7 +2073,28 @@ def select_next_micro_batch(
     Pareto multiplier, the pre-diversity quality score and which indices the batch
     stage committed to - and the sink decides what it keeps. Passing None changes
     nothing about selection.
+
+    `surrogate_features` chooses the feature space the GP surrogate is fitted and
+    predicted on, and nothing else:
+
+      * `"one_hot"` (default) - one-hot over the library's declared per-site
+        alphabets (`allowed_residues`, falling back to the canonical 20 where a
+        position declares nothing). This is the encoding the benchmark's baselines
+        were always measured on, and the same code builds both.
+      * `"engine_biophysical"` - `featurize_variant_on_positions`, the previous and
+        only behaviour. Kept selectable so the two can be run as paired arms.
+
+    Both modes leave every OTHER consumer of `featurize_variant_on_positions` on the
+    biophysical encoding: the structural prior, `AssayAdaptedHead` (a linear readout,
+    under which the biophysical features are not worse and on GB1 are better) and the
+    k-DPP similarity kernel. Only the GP's inputs move.
     """
+    if surrogate_features not in SURROGATE_FEATURE_MODES:
+        raise ValueError(
+            f"unknown surrogate_features {surrogate_features!r}; "
+            f"recognised: {list(SURROGATE_FEATURE_MODES)}"
+        )
+    surrogate_on_engine_features = surrogate_features == "engine_biophysical"
     invariants_set: Set[int] = set(catalytic_invariants) if catalytic_invariants is not None else set(strategy.forbidden_positions)
 
     # Component ablation, for attributing the selector's advantage. Each name
@@ -1967,8 +2152,43 @@ def select_next_micro_batch(
         # for its structural cross-term, which is its documented no-structure path.
         spatial_map = None
 
+    # The sites the one-hot surrogate encoding spans, and the alphabet at each.
+    #
+    # The union of the declared library sites and the strategy's active sites, so the
+    # width is the library's `one_hot_width` whenever the caller declared the library
+    # - 80 for a saturated four-site library, 200 for an 11-site HER2, 32 for the
+    # 16-site binary CR9114 - and a caller that declares nothing still gets every
+    # active site at the canonical 20. Sorted, so column order is a property of the
+    # library rather than of dictionary insertion order.
+    surrogate_positions: List[int] = sorted(set(active_positions) | set(allowed_residues or ()))
+    surrogate_alphabets: List[str] = resolve_site_alphabets(surrogate_positions, allowed_residues)
+    logger.info(
+        "Surrogate feature space: %s (%d site(s), %d one-hot column(s); the prior, the "
+        "assay-adapted head and the k-DPP kernel stay on the biophysical encoding)",
+        surrogate_features,
+        len(surrogate_positions),
+        one_hot_site_offsets(surrogate_alphabets)[1],
+    )
+
+    def _engine_features(variant: Variant) -> np.ndarray:
+        """The biophysical encoding, unchanged, for the prior / head / DPP consumers."""
+        return featurize_variant_on_positions(
+            variant, active_positions, wt_sequence, spatial_map=spatial_map
+        )
+
+    def _surrogate_features(
+        variant: Variant, engine_vector: Optional[np.ndarray] = None
+    ) -> np.ndarray:
+        """Whatever the GP is configured to see. `engine_vector` avoids recomputation."""
+        if surrogate_on_engine_features:
+            return engine_vector if engine_vector is not None else _engine_features(variant)
+        return one_hot_variant_on_positions(
+            variant, surrogate_positions, wt_sequence, surrogate_alphabets
+        )
+
     # Step 1: Featurize training evidence if present (with residual prior mean subtraction)
     X_train_list: List[np.ndarray] = []
+    X_surrogate_train_list: List[np.ndarray] = []
     y_train_list: List[float] = []
     y_train_direct_list: List[float] = []
     train_priors_list: List[float] = []
@@ -1976,8 +2196,9 @@ def select_next_micro_batch(
 
     # Include WT sequence baseline as score 0.0 (reference)
     wt_var = Variant(notation="WT", mutations=[])
-    wt_features = featurize_variant_on_positions(wt_var, active_positions, wt_sequence, spatial_map=spatial_map)
+    wt_features = _engine_features(wt_var)
     X_train_list.append(wt_features)
+    X_surrogate_train_list.append(_surrogate_features(wt_var, wt_features))
     y_train_list.append(0.0)
     y_train_direct_list.append(0.0)
     train_priors_list.append(0.0)
@@ -1995,8 +2216,9 @@ def select_next_micro_batch(
                         notation=":".join(m.to_string() for m in muts) if muts else "WT",
                         mutations=muts,
                     )
-                    feat = featurize_variant_on_positions(var_obj, active_positions, wt_sequence, spatial_map=spatial_map)
+                    feat = _engine_features(var_obj)
                     X_train_list.append(feat)
+                    X_surrogate_train_list.append(_surrogate_features(var_obj, feat))
 
                     # Subtract prior mean to train on functional assay residuals
                     prior_val = prior_mean_fn(var_obj) if prior_mean_fn else 0.0
@@ -2032,8 +2254,9 @@ def select_next_micro_batch(
                         notation=":".join(m.to_string() for m in muts) if muts else "WT",
                         mutations=muts,
                     )
-                    feat = featurize_variant_on_positions(var_obj, active_positions, wt_sequence, spatial_map=spatial_map)
+                    feat = _engine_features(var_obj)
                     X_train_list.append(feat)
+                    X_surrogate_train_list.append(_surrogate_features(var_obj, feat))
                     prior_val = prior_mean_fn(var_obj) if prior_mean_fn else 0.0
                     y_train_list.append(float(f_score) - prior_val)
                     y_train_direct_list.append(float(f_score))
@@ -2043,10 +2266,17 @@ def select_next_micro_batch(
                     logger.debug("Skipping unparseable speculative sequence: %s", spec_exc)
 
     X_train = np.array(X_train_list, dtype=np.float64)
+    # What the GP is fitted on. Identical to X_train under "engine_biophysical".
+    X_surrogate_train = np.array(X_surrogate_train_list, dtype=np.float64)
     y_train = np.array(y_train_list, dtype=np.float64)
     sample_variances_arr = np.array(sample_variances_list, dtype=np.float64) if len(sample_variances_list) == len(X_train) else None
 
-    # Improvement 1: Fit Assay-Adapted Head on accumulated evidence
+    # Improvement 1: Fit Assay-Adapted Head on accumulated evidence.
+    # Deliberately on the BIOPHYSICAL features regardless of `surrogate_features`:
+    # this head is a linear readout, and with a linear readout those features are not
+    # worse than one-hot - equal on 5 of 9 landscapes and better on GB1 by +0.103 rho
+    # (t=+6.6, 10 of 10 repeats). The GP's loss is specific to the GP's isotropic
+    # Euclidean kernel, so moving this head too would be a regression.
     assay_adapter = AssayAdaptedHead(feature_dim=X_train.shape[1], random_state=42)
     if evidence and len(evidence) >= 5:
         try:
@@ -2065,15 +2295,15 @@ def select_next_micro_batch(
         # does not accept that keyword, so passing it would land in the except branch
         # below and the arm would be measuring an error path rather than an ablation.
         surrogate = build_gp_model()
-        surrogate.fit(X_train, y_train)
+        surrogate.fit(X_surrogate_train, y_train)
     else:
-        surrogate = DeepKernelLearner(input_dim=X_train.shape[1], random_state=42)
+        surrogate = DeepKernelLearner(input_dim=X_surrogate_train.shape[1], random_state=42)
         try:
-            surrogate.fit(X_train, y_train, sample_variance=sample_variances_arr)
+            surrogate.fit(X_surrogate_train, y_train, sample_variance=sample_variances_arr)
         except Exception as exc:
             logger.warning("DKL fit failed (%s). Retrying with base GP...", exc)
             surrogate = build_gp_model()
-            surrogate.fit(X_train, y_train)
+            surrogate.fit(X_surrogate_train, y_train)
 
     # Step 3: Generate candidate variants (combinatorial exploration + lead recombination)
     #
@@ -2153,7 +2383,7 @@ def select_next_micro_batch(
 
             if evidence and len(evidence) >= 5:
                 try:
-                    feat = featurize_variant_on_positions(v, active_positions, wt_sequence, spatial_map=spatial_map)
+                    feat = _surrogate_features(v)
                     mu_res, std_res = surrogate.predict(feat.reshape(1, -1), return_std=True)
                     return float(base_prior + mu_res[0] + 0.6 * std_res[0])
                 except Exception:
@@ -2228,12 +2458,30 @@ def select_next_micro_batch(
         logger.debug("Spatial filtering in candidate pool skipped: %s", spatial_err)
 
     # Step 4: Featurize candidate pool and predict GP residual mean + uncertainty
+    #
+    # Two matrices over the same candidates. `X_cand` is the biophysical encoding and
+    # keeps feeding the assay-adapted head and the k-DPP similarity kernel exactly as
+    # before; `X_cand_surrogate` is whatever `surrogate_features` selected and is the
+    # only thing the GP sees. They are the same array under "engine_biophysical".
     X_cand = np.array(
-        [featurize_variant_on_positions(c, active_positions, wt_sequence, spatial_map=spatial_map) for c in novel_candidates],
+        [_engine_features(c) for c in novel_candidates],
         dtype=np.float64,
     )
+    X_cand_surrogate = (
+        X_cand
+        if surrogate_on_engine_features
+        else np.array(
+            [
+                one_hot_variant_on_positions(
+                    c, surrogate_positions, wt_sequence, surrogate_alphabets
+                )
+                for c in novel_candidates
+            ],
+            dtype=np.float64,
+        )
+    )
 
-    res_means, stds = surrogate.predict(X_cand, return_std=True)
+    res_means, stds = surrogate.predict(X_cand_surrogate, return_std=True)
 
     # Reconstruct full predicted fitness: mu(x) = m(x) + mu_res(x)
     #
