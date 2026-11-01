@@ -101,9 +101,23 @@ if (-not $py) { throw ("no interpreter found. Checked: " + ($pyCandidates -join 
 $logDir = Join-Path $realRoot 'benchmark_comparison_results'
 if (-not (Test-Path $logDir)) { throw ("results root absent. Checked: $logDir") }
 
+# The pinned CombinGym corpus the preflight gate's corpus.lock check verifies against. It
+# lives in the gitignored downloads/ at the REAL root, so from a worktree the bare gate
+# reports "FAILED: corpus.lock - 29 of 29 file(s) absent" and all three landscapes look
+# un-quotable when in fact the corpus verifies 29/29. That is rule 2.8 in its purest form:
+# a bare "absent" is what let our strongest baseline get silently dropped from a 48-seed
+# run, so the path is passed explicitly and every candidate is named on failure.
+$corpusCandidates = @(
+    (Join-Path $repo 'downloads\combingym'),
+    (Join-Path $realRoot 'downloads\combingym')
+)
+$corpusDir = $corpusCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $corpusDir) { throw ("pinned CombinGym corpus absent. Checked: " + ($corpusCandidates -join '; ')) }
+
 Write-Host "source tree : $repo"
 Write-Host "interpreter : $py"
 Write-Host "results root: $logDir"
+Write-Host "corpus      : $corpusDir"
 
 # --- the panel ---------------------------------------------------------------------------
 # BASELINE_PANEL_METHODS in benchmark_panoptes_isolated.py, in panel order. `random` is NOT
@@ -215,7 +229,8 @@ foreach ($p in $plan) {
 
     # Rule 2.7: the gate runs before any scored run, at the budget actually about to run.
     $gateArgs = @('-X','utf8','-m','veritas.preflight','--library',$p.Key,
-                  '--budget',$budget,'--initial-size',$p.Initial) + $ack
+                  '--budget',$budget,'--initial-size',$p.Initial,
+                  '--corpus-dir',$corpusDir) + $ack
     $gateRes = Invoke-Captured -Exe $py -Arguments $gateArgs -Tag "gate_$($p.Key)"
     $gate = $gateRes.ExitCode
     $gateRes.Lines | Out-File (Join-Path $logDir "panel_gate_$($p.Key).txt") -Encoding utf8
