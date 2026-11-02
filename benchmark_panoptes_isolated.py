@@ -48,6 +48,17 @@ Methods compared:
                          (non-Muse) strategy.
     F. panoptes_muse   - the same production path with live Muse planning and reflection feedback.
                          Requires explicit --enable-live-muse opt-in.
+    G. panoptes_random_from_ballot
+                       - the same production path up to and including the spatial viability
+                         veto, with the RANKING STACK replaced by a coin: the batch is drawn
+                         uniformly from the surviving ballot and none of mu(x), sigma(x), the
+                         prior, the acquisition value, the Pareto multiplier or the quality
+                         score reaches the decision. It is the engine's candidate pipeline
+                         scored against the engine's own ranking, and it answers "does the
+                         ranking stack beat a coin on the ballot it built". The surrogate
+                         still shapes the BALLOT, through the GFlowNet reward, so this arm
+                         isolates ranking and not the surrogate.
+                         See docs/prereg-random-from-ballot.md.
 
 Protocol (shared by every method):
     - One evaluator owns the complete measured fitness table. Selectors never see it.
@@ -3201,6 +3212,7 @@ class PanoptesSelector(Selector):
         candidate_source: str = "generate",
         arm_name: Optional[str] = None,
         wt_anchor_mode: Optional[str] = None,
+        selection_rule: str = "ranked",
     ) -> None:
         super().__init__(seed)
         # Ablation arm. 'none' is the shipped configuration; the others restore one
@@ -3311,6 +3323,38 @@ class PanoptesSelector(Selector):
             self.notes.append(
                 "WT_ANCHOR=zero (the literal y=0.0 at variance 1e-4, today's default)"
             )
+        # How the batch is built from the engine's ballot. 'ranked' is the shipped stack
+        # and the only setting any published figure was measured on; 'random_from_ballot'
+        # replaces that stack with a uniform draw over the post-veto ballot, which is the
+        # ranking stack's isolation arm (docs/prereg-random-from-ballot.md).
+        from workers.math_worker import SELECTION_RULES as _SELECTION_RULES
+        if selection_rule not in _SELECTION_RULES:
+            raise ConfigurationError(
+                f"selection_rule must be one of {list(_SELECTION_RULES)}, got "
+                f"{selection_rule!r}"
+            )
+        self.selection_rule = selection_rule
+        #: The rule the ENGINE reported applying, read back off the first SelectedBatch.
+        #: None until a round has run. Never defaulted to `self.selection_rule`: the whole
+        #: point is that the two are separate facts (HANDOFF rule 2.12).
+        self.selection_rule_observed: Optional[str] = None
+
+        # MERGE CONSEQUENCE, refused rather than left latent. `arm_name` and
+        # `selection_rule` arrived from two different branches and both decide `self.name`.
+        # Together the `arm_name` branch below wins, so the run would be FILED under the
+        # named arm while the coin actually chose every batch - a folder mislabelled in
+        # exactly the way rule 2.12 exists to prevent. The method registry never produces
+        # this pair (arm_name is set only for the one-hot surrogate key, selection_rule
+        # only for the coin key), but a direct constructor call can, so it raises here for
+        # the same reason the coin refuses the qualification policies and live Muse: a
+        # named arm plus the coin is neither arm.
+        if arm_name is not None and selection_rule == "random_from_ballot":
+            raise ConfigurationError(
+                f"arm_name={arm_name!r} and selection_rule='random_from_ballot' are both "
+                "set. Each defines a separate arm with its own method key and its own "
+                "name, and the combination has never been pre-registered or measured. "
+                "Run them as two arms."
+            )
         if arm_name is not None:
             # A named arm that differs from `panoptes_default` only in a selector
             # component. It gets its OWN method key on purpose, so both arms run inside
@@ -3327,8 +3371,32 @@ class PanoptesSelector(Selector):
             self.name = "panoptes_conditional_probe"
         elif qualify_threshold is not None:
             self.name = "panoptes_qualify_then_optimize"
+        elif selection_rule == "random_from_ballot":
+            # A distinct arm NAME, not a note: the method registry and the --methods
+            # filter both key on `name`, and two arms sharing a name cannot be paired or
+            # tabulated apart. Refused in combination with the qualification policies and
+            # with live Muse, because those arms have their own second-phase selectors and
+            # the coin would silently apply to only part of the campaign.
+            if use_live_muse:
+                raise ConfigurationError(
+                    "selection_rule='random_from_ballot' cannot be combined with live "
+                    "Muse planning: the live arm's reflection stage conditions on the "
+                    "batch it proposed, so the combination is neither arm."
+                )
+            self.name = "panoptes_random_from_ballot"
         else:
             self.name = "panoptes_muse" if use_live_muse else "panoptes_default"
+        if selection_rule == "random_from_ballot":
+            self.notes.append(
+                "SELECTION_RULE=random_from_ballot: the engine's full candidate pipeline "
+                "ran (planning, combinatorial generation, lead recombination, GFlowNet "
+                "sampling, novelty filter, spatial viability veto) and the batch was then "
+                "drawn UNIFORMLY from the surviving ballot. mu(x), sigma(x), the prior, "
+                "the acquisition value, the Pareto multiplier and the quality score were "
+                "computed and NOT consulted. The surrogate still shapes the BALLOT, "
+                "because the GFlowNet sampler's reward scores through it, so this arm "
+                "isolates the RANKING STACK and not the surrogate."
+            )
         # Which policy runs after qualification: deterministic conditional enumeration
         # (True) or greedy local frontier search (False).
         self.probe_after_qualify = bool(probe_after_qualify)
@@ -3388,7 +3456,15 @@ class PanoptesSelector(Selector):
                 else "annotation-driven planner (metadata.binding_positions; no scripted per-target literals)"
             ),
             "selection": "workers.math_worker.select_next_micro_batch",
-            "acquisition": "hybrid_thompson (production default)",
+            # REQUESTED, not observed. `results.notes` carries the engine's own report of
+            # the rule it applied; this block is part of `configuration`, which must not
+            # depend on anything a run produced.
+            "selection_rule_requested": selection_rule,
+            "acquisition": (
+                "NOT CONSULTED: batch drawn uniformly from the post-veto ballot"
+                if selection_rule == "random_from_ballot"
+                else "hybrid_thompson (production default)"
+            ),
             "reflection_feedback": bool(use_live_muse),
             "stages_exercised": ["1_init", "2_strategy", "3_selection"] + (["6b_reflection"] if use_live_muse else []),
             "stages_skipped": ["4_authorization", "5_esm_execution"],
@@ -3956,6 +4032,7 @@ class PanoptesSelector(Selector):
                else {"exploration_xi": float(self.exploration_xi)}),
             candidate_pool=candidate_pool,
             allowed_residues=allowed_residues,
+            selection_rule=self.selection_rule,
             # Write-only diagnostics sink, attached by the harness. This is what
             # captures the engine's REAL ballot: the selection trace holds committed
             # picks plus harness rejections only, which cannot separate a narrow
@@ -3992,6 +4069,47 @@ class PanoptesSelector(Selector):
             )
         self.wt_anchor_effective.add(str(observed_mode))
         self.wt_anchor_observed.append({"round": round_index, **observed})
+
+        # WHAT THE ENGINE DID, read off the engine's own return value.
+        #
+        # HANDOFF rule 2.12: `component_states()` once derived the manifest's component
+        # record from `--ablate-components` alone, so `dpp` and `dkl` - gated by module
+        # globals - were recorded as ENABLED in every run where they were in fact off, and
+        # the HER2 null control's t=-8.29 movement could not be attributed from the
+        # artifacts. A record that reads the request is worse than no record, because it
+        # will be trusted.
+        #
+        # So the rule is stamped inside the branch of `select_next_micro_batch` that chose
+        # the indices, and read back here. A disagreement means the switch did not reach
+        # the call site, which is precisely the defect that rule exists for, and it fails
+        # the round rather than producing a folder labelled as the coin arm that ran the
+        # ranking stack. It is checked on EVERY round, not only the first: a rule that is
+        # honoured in round 1 and silently dropped in round 4 is the same defect.
+        applied = getattr(batch, "selection_rule_applied", None)
+        expected = (
+            "random_from_ballot" if self.selection_rule == "random_from_ballot"
+            # 'ranked' is the shipped stack, which is two branches: k-DPP when
+            # DPP_DIVERSITY_ENABLED and no `dpp` ablation, top-n by quality otherwise.
+            # Both are the ranking stack, so both satisfy 'ranked'.
+            else ("kdpp", "top_n_quality")
+        )
+        permitted = (expected,) if isinstance(expected, str) else expected
+        if applied not in permitted:
+            raise BenchmarkError(
+                f"{self.name} asked the engine for selection_rule="
+                f"{self.selection_rule!r} and the engine reports it applied "
+                f"{applied!r}. One of the two is wrong, and an arm whose selection rule "
+                f"cannot be verified against the code path must not produce a scored "
+                f"round (HANDOFF rule 2.12)."
+            )
+        if self.selection_rule_observed is None:
+            self.selection_rule_observed = applied
+            self.notes.append(
+                f"SELECTION_RULE_APPLIED={applied} (reported by "
+                f"select_next_micro_batch at the branch that chose the batch, not read "
+                f"back from the flag that requested it)"
+            )
+
         self.last_batch_predictions = {}
         proposals: List[str] = []
         for variant, mean in zip(batch.variants, batch.predicted_means or [0.0] * len(batch.variants)):
@@ -5102,7 +5220,11 @@ def _production_selection_identity(
     signature = inspect.signature(_mw.select_next_micro_batch)
     defaults: Dict[str, Any] = {}
     for name in ("exploration_xi", "acquisition_mode", "fantasy_variance",
-                 "apply_auxiliary_objective_weights", "pareto_weights_config"):
+                 "apply_auxiliary_objective_weights", "pareto_weights_config",
+                 # The engine's DEFAULT batch-construction rule. Per-arm overrides live in
+                 # configuration.methods.<arm>.config.selection_rule_requested, and what
+                 # the engine reports having applied is in results.notes.
+                 "selection_rule"):
         parameter = signature.parameters.get(name)
         if parameter is not None and parameter.default is not inspect.Parameter.empty:
             defaults[name] = _json_safe(parameter.default)
@@ -6356,20 +6478,27 @@ PANOPTES_ONEHOT_SURROGATE = "panoptes_onehot_surrogate"
 #: the manifest, so the two cannot disagree about what the arm is.
 PANOPTES_ONEHOT_SURROGATE_COMPONENT = "biophysical_features"
 
-# MERGE RESOLUTION 2026-11-01: the union of the two branches' registries. The baseline
+# MERGE RESOLUTION 2026-11-01: the union of THREE branches' registries. The baseline
 # panel (a8325f2a02fbcdc90) added gbm_onehot/knn_hamming/gp_onehot/greedy_measured; the
-# surrogate arm (a14c69a80e0afa44a) added panoptes_onehot_surrogate. Both are additive
-# method keys and neither touches the default path, so the union is the whole resolution.
+# surrogate arm (a14c69a80e0afa44a) added panoptes_onehot_surrogate; random-from-ballot
+# (aaefbfccd52f7bce2) added panoptes_random_from_ballot. All are additive method keys and
+# none touches the default path, so the union is the whole resolution.
 ALL_METHODS = ("random", "ridge", "random_forest", "gbm_onehot", "knn_hamming", "gp_onehot",
                "greedy_measured", "alde", "panoptes_default", "panoptes_muse",
                "panoptes_qualify_then_optimize", "panoptes_conditional_probe",
-               PANOPTES_ONEHOT_SURROGATE)
+               PANOPTES_ONEHOT_SURROGATE,
+               # The engine's own candidate pipeline with its ranking stack replaced by a
+               # uniform draw over the surviving ballot. In ALL_METHODS so it can be
+               # requested alongside the other arms in ONE run folder on ONE shared
+               # starting sample per seed, which is what makes the contrast paired.
+               "panoptes_random_from_ballot")
 #: DELIBERATELY UNCHANGED, on both branches and after the merge. The four panel arms
 #: (gbm_onehot, knn_hamming, gp_onehot, greedy_measured) and panoptes_onehot_surrogate are
 #: opt-in via --methods and are NOT defaults. `ridge` is the registered reference baseline
 #: and stays the reference: docs/HANDOFF.md 5.4 makes promoting another model to reference
 #: status an amendment to a frozen hypothesis, and an amendment needs an explicit dated
-#: record, not a tuple edit. Pinned by tests/test_baseline_panel_arms.py.
+#: record, not a tuple edit. Pinned by tests/test_baseline_panel_arms.py. The four panel
+#: arms, panoptes_onehot_surrogate and panoptes_random_from_ballot are all opt-in.
 DEFAULT_METHODS = ("random", "ridge", "random_forest", "panoptes_default")
 #: The pre-registered baseline panel of docs/prereg-baseline-panel.md, in panel order.
 #: Named here so a sweep cannot quietly run a subset of it: a panel missing `random`
@@ -6657,8 +6786,13 @@ def build_selector_factories(
             status[method]["compatibility"] = json.dumps(compatibility)
         elif method in ("panoptes_default", "panoptes_muse",
                         "panoptes_qualify_then_optimize", "panoptes_conditional_probe",
-                        PANOPTES_ONEHOT_SURROGATE):
+                        PANOPTES_ONEHOT_SURROGATE,
+                        "panoptes_random_from_ballot"):
             live = method == "panoptes_muse"
+            selection_rule = (
+                "random_from_ballot" if method == "panoptes_random_from_ballot"
+                else "ranked"
+            )
             # The ABSOLUTE the Evaluator resolved from the eligible universe - not
             # args.qualify_threshold, which is now an optional override and is None on a
             # default run. Reading the raw arg here is what let the bar never transfer.
@@ -6709,7 +6843,7 @@ def build_selector_factories(
                     set(components) | {PANOPTES_ONEHOT_SURROGATE_COMPONENT}))
             factories[method] = (
                 lambda seed, m=metadata, s=sequence, p=pdb_path, l=live, q=qualify, pr=probe,
-                lib=library, c=components, an=arm_name:
+                lib=library, c=components, an=arm_name, sr=selection_rule:
                 PanoptesSelector(seed, s, m, l, p, lib, call_budget=args.max_model_calls,
                                  ablation=args.ablation,
                                  prior_spread=args.prior_spread,
@@ -6718,6 +6852,7 @@ def build_selector_factories(
                                  exploration_xi=args.exploration_xi,
                                  candidate_source=args.production_candidate_source,
                                  wt_anchor_mode=getattr(args, "wt_anchor_mode", None),
+                                 selection_rule=sr,
                                  qualify_threshold=q, probe_after_qualify=pr,
                                  arm_name=an)
             )
@@ -6731,6 +6866,13 @@ def build_selector_factories(
                   "run_stream() offers no interface to substitute the experimental assay for ESM scoring"
                 # The arm's identity, so a report row cannot be confused with another arm's.
                 # manifest.json remains the authoritative, machine-readable version.
+                + (
+                    "; BATCH DRAWN UNIFORMLY from the post-veto ballot - the ranking "
+                    "stack (surrogate mu/sigma, acquisition, Pareto, k-DPP/top-n) is "
+                    "computed and not consulted; the surrogate still shapes the ballot "
+                    "through the GFlowNet reward"
+                    if selection_rule == "random_from_ballot" else ""
+                )
                 + f"; prior ablation arm '{args.ablation}'"
                 + (f"; components disabled: {', '.join(components)}" if components
                    else "; all selector components enabled")
