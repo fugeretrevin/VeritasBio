@@ -1,4 +1,4 @@
-"""The three wild-type anchor modes, paired per landscape, on BOTH endpoints.
+﻿"""The three wild-type anchor modes, paired per landscape, on BOTH endpoints.
 
 Validity FIRST, by construction rather than by judgement. A run folder is admitted only
 when every one of these holds; otherwise it is discarded and the reason is printed:
@@ -34,7 +34,13 @@ Rule 2.1 is honoured by construction: genotypes go through
 position. Nothing is zipped, no string is compared positionally, and no sixth genotype
 implementation is written.
 
-Usage: anchor_readout_abf.py <out_root> [landscape ...]
+Usage: scripts/analysis/wt_anchor_readout.py <out_root> [landscape ...]
+
+Not to be confused with `wt_anchor_confirmation_readout.py`, which collided with this
+file add/add at the integration merge on 2026-11-01 and was renamed. That one reports the
+two-arm ablation confirmation and resolves its runs by name from a campaign log; this one
+reports all THREE anchor modes on both endpoints from a results root. Separate tools for
+separate campaigns, each the provenance for its own results document.
 """
 from __future__ import annotations
 
