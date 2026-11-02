@@ -67,7 +67,11 @@ distribution, and every round's surrogate is fitted through it. (An earlier draf
 | default | 9.083 | — | — |
 | `wt_anchor` | **38.833** | **+29.75** | **12.17**, 12/12 seeds |
 | `wt_anchor,prior` | 43.083 | +34.00 | 12.44 |
-| `wt_anchor,prior,physchem_features` | **50.167** | **+41.08** | **19.48** |
+
+> **The 50.167 three-way row was here and is now VOID — do not say it on camera.** Its
+> third component, `physchem_features`, was deleted from the engine at the integration
+> merge on 2026-11-01 in favour of the narrower `biophysical_features`, so the figure
+> cannot be reproduced on `main`. The two rows above are unaffected: neither uses it.
 
 **Confirmed at 48 paired seeds** on two independent branches with two different drivers:
 **+31.771 raw** (t=+35.88, 48/0/0) and **+16.04 at d≥2** (t=+24.29, 48/0/0), accounting for

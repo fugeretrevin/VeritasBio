@@ -195,6 +195,20 @@ def featurize_variant_on_positions(
     return np.concatenate([linear_vec, global_vec, interaction_vec])
 
 
+# `featurize_variant_one_hot` and `ONE_HOT_FALLBACK_ALPHABET` were HERE, removed at the
+# integration merge on 2026-11-01 (bb925c9 -> main). They were the encoder for the
+# `physchem_features` ablation component, a parallel implementation of the one-hot
+# surrogate arm developed at the same time as `biophysical_features` below. Only one
+# survives, and it is the narrower one; see the note beside `physchem_features` in
+# ABLATABLE_COMPONENTS for why. Nothing is lost by the deletion:
+# `one_hot_encode_genotypes` handles an off-alphabet residue the same way (an all-zero
+# site block) but WARNS instead of passing silently, and it asserts genotype length,
+# which rule 2.1 requires and the deleted encoder did not.
+#
+# Every figure measured through `physchem_features` is therefore unreproducible on main
+# and is marked VOID in docs/HANDOFF.md rather than restated.
+
+
 # -----------------------------------------------------------------------------
 # One-hot site encoding - the GP surrogate's ALTERNATE feature space
 # -----------------------------------------------------------------------------
@@ -393,6 +407,11 @@ class SelectedBatch(BaseModel):
     predicted_uncertainties: List[float] = Field(..., description="GP predicted standard deviation")
     pareto_ranks: Optional[List[int]] = Field(default=None, description="Multi-objective Pareto rank per variant (0 = non-dominated)")
     max_pool_ei: Optional[float] = Field(default=None, description="Maximum Expected Improvement across entire candidate pool")
+    #: What the wild-type anchor ACTUALLY did this round: mode, label, variance, how many
+    #: rows it contributed, and why. Produced by the branch that ran, not by reading the
+    #: caller's request back - so a recorder downstream cannot claim a mode the engine
+    #: did not take. This is the rule-2.12 fix applied in advance rather than afterwards.
+    wt_anchor_state: Optional[Dict[str, Any]] = Field(default=None, description="Resolved wild-type anchor row state for this fit")
 
 
 def compute_expected_improvement(
@@ -1864,7 +1883,52 @@ ABLATABLE_COMPONENTS: Set[str] = {
     # paired difference on a landscape where the GFlowNet runs is therefore confounded
     # with candidate-pool composition. On CreiLOV the pool barely moved (5,154 -> 5,091).
     "biophysical_features",
+    #
+    # NOT a second name for the same thing: `physchem_features` was a parallel
+    # implementation of this switch, developed on the wt_anchor branch before either
+    # side knew of the other, and it is deliberately absent. It bound ONE `_featurize`
+    # for all five featurisation call sites, so ablating it also moved the prior, the
+    # k-DPP kernel and `AssayAdaptedHead` onto one-hot. That is a wider arm than the
+    # name suggests, and it would have made "one-hot helps the surrogate" and "one-hot
+    # helps the assay-adapted head" indistinguishable - the exact confound the figures
+    # on this branch were being read as. `biophysical_features` is the narrower arm and
+    # the tests at tests/test_surrogate_feature_arm.py pin the three consumers it must
+    # not touch. If the wider arm is ever wanted it needs its own name, its own
+    # pre-registration and its own seed block, not this one.
+    #
+    # `wt_anchor` omits the SYNTHETIC wild-type training row that
+    # select_next_micro_batch injects into every fit with the literal label y = 0.0,
+    # regardless of the assay's scale. See its call site for the per-landscape distance
+    # between that label and the real ones; on CreiLOV it is 15.68 label standard
+    # deviations and on TrpB and GB1 it is 0.35 and 0.20, which is why the row is
+    # invisible on the two landscapes every quotable engine figure comes from.
+    "wt_anchor",
 }
+
+
+#: How the wild-type anchor row is labelled. Three MUTUALLY EXCLUSIVE behaviours, so one
+#: run folder can hold all three and they pair within seed:
+#:
+#:   "zero"     - today's default and the defect: the literal `y = 0.0` at variance 1e-4,
+#:                whatever the assay's scale is.
+#:   "ablated"  - no anchor row at all. Reached through `--ablate-components wt_anchor`,
+#:                NOT through this setting, because it is a component ablation.
+#:   "measured" - the repair: the wild type's measured label, supplied by the caller, at
+#:                a real measurement's variance.
+#:
+#: `None` from a caller means "whatever the default is", which is and must remain "zero".
+#: A default flip here re-bases every number in this repository and is not this module's
+#: decision to make - see docs/prereg-wt-anchor-fix.md §6.
+WT_ANCHOR_MODES: Tuple[str, ...] = ("zero", "ablated", "measured")
+DEFAULT_WT_ANCHOR_MODE: str = "zero"
+
+#: The variance the MEASURED anchor carries when the caller names none.
+#:
+#: Not a tuning knob - a parity statement. `1e-4` (the `zero` path) asserts the
+#: fabricated row is 100x more certain than a real assay reading, which this module puts
+#: at `1e-2` for an unreplicated measurement. A row carrying a real measurement is
+#: entitled to a real measurement's precision and no more.
+WT_ANCHOR_MEASURED_VARIANCE: float = 1e-2
 
 
 class _AblationSkip(Exception):
@@ -2099,6 +2163,9 @@ def select_next_micro_batch(
     candidate_pool: Optional[Sequence[Variant]] = None,
     candidate_trace: Optional[Any] = None,
     allowed_residues: Optional[Dict[int, Sequence[str]]] = None,
+    wt_anchor_mode: Optional[str] = None,
+    wt_anchor_label: Optional[float] = None,
+    wt_anchor_variance: Optional[float] = None,
 ) -> SelectedBatch:
     """
     Executes the Gaussian Process active learning selection (Phases 1-4):
@@ -2117,6 +2184,14 @@ def select_next_micro_batch(
     Pareto multiplier, the pre-diversity quality score and which indices the batch
     stage committed to - and the sink decides what it keeps. Passing None changes
     nothing about selection.
+
+    `wt_anchor_mode` / `wt_anchor_label` / `wt_anchor_variance` select how the wild-type
+    anchor row is labelled; see `WT_ANCHOR_MODES`. Leaving all three None is today's
+    default and is byte-identical to the behaviour before they existed. The mode that
+    actually ran is returned on `SelectedBatch.wt_anchor_state`, because a manifest that
+    records the CLI flag instead of the code path is what rule 2.12 of docs/HANDOFF.md
+    was written about: `dpp` and `dkl` were recorded as enabled in every run where module
+    globals had them off.
     """
     invariants_set: Set[int] = set(catalytic_invariants) if catalytic_invariants is not None else set(strategy.forbidden_positions)
 
@@ -2225,16 +2300,127 @@ def select_next_micro_batch(
     y_train_list: List[float] = []
     y_train_direct_list: List[float] = []
     train_priors_list: List[float] = []
-    sample_variances_list: List[float] = [1e-4]  # WT sequence reference variance
+    sample_variances_list: List[float] = []
 
     # Include WT sequence baseline as score 0.0 (reference)
-    wt_var = Variant(notation="WT", mutations=[])
-    wt_features = featurize_variant_on_positions(wt_var, active_positions, wt_sequence, spatial_map=spatial_map)
-    X_train_list.append(wt_features)
-    X_surrogate_train_list.append(_surrogate_features(wt_var, wt_features))
-    y_train_list.append(0.0)
-    y_train_direct_list.append(0.0)
-    train_priors_list.append(0.0)
+    #
+    # This row is SYNTHETIC: no assay produced it, and the label is the literal 0.0
+    # whatever the assay's scale is. Measured distance from 0.0 to the centre of each
+    # landscape's real labels, in label standard deviations:
+    #
+    #   creilov 15.68 | cr9114_h1 14.14 | cr6261_h1 11.00 | cr6261_h9 8.35
+    #   eqfp611_blue 1.19 | eqfp611_red 0.80 | her2 0.56 | trpb 0.35 | gb1 0.20
+    #
+    # On CreiLOV the real labels occupy 2.793..4.196, so this row sits **2.793 raw units**
+    # below the minimum, which is **11.62 label standard deviations** and **1.99x** the
+    # entire label range - asserted at variance 1e-4 while a real measurement defaults to
+    # 1e-2. Every round's surrogate is fitted through it.
+    #
+    # ARITHMETIC CORRECTION, 2026-11-01. This comment previously read "11.6 units below
+    # the minimum: 8.3x the entire label range". That mixed units - 11.6 is the figure in
+    # STANDARD DEVIATIONS and was printed as raw units, and 8.3x followed from it - and
+    # both numbers are wrong. The figure the argument actually rests on is the 15.68
+    # standard deviations from the label distribution's CENTRE, above.
+    #
+    # And the ordering above does NOT predict the effect. Measured at 48 paired seeds
+    # (docs/wt-anchor-fix-results.md): removing this row is worth +31.77 top-1% hits on
+    # CreiLOV and NOTHING anywhere else, while CR9114 - which violates the scale by 14.14
+    # standard deviations, second only to CreiLOV - is a tight null at +0.04 against a
+    # minimum detectable effect of 1.29. The label-scale theory of this defect is
+    # FALSIFIED: distance from zero does not predict the damage. Do not restate it.
+    #
+    # `wt_anchor` makes it omittable so the arm can be measured instead of argued about,
+    # and `wt_anchor_mode="measured"` REPAIRS it instead of deleting it. Nothing here
+    # changes by default: with neither the component ablated nor a mode requested, the
+    # row is added exactly as before, variance included.
+    #
+    # The three behaviours are mutually exclusive and resolved ONCE, into
+    # `wt_anchor_resolved`, which is what the caller and the manifest read. A mode
+    # requested together with the ablation is a configuration contradiction and raises -
+    # rule 2.12: an arm must not be able to be two things at once and record one of them.
+    if "wt_anchor" in ablated and wt_anchor_mode not in (None, "zero"):
+        raise ValueError(
+            f"wt_anchor is ablated AND wt_anchor_mode={wt_anchor_mode!r} was requested. "
+            "Ablation removes the row the mode would set; pick one."
+        )
+    requested_mode = "ablated" if "wt_anchor" in ablated else (wt_anchor_mode or "zero")
+    if requested_mode not in WT_ANCHOR_MODES:
+        raise ValueError(
+            f"unknown wt_anchor_mode {requested_mode!r}; "
+            f"recognised: {sorted(WT_ANCHOR_MODES)}"
+        )
+
+    if requested_mode == "ablated":
+        wt_anchor_resolved: Dict[str, Any] = {
+            "mode": "ablated", "label": None, "variance": None, "rows": 0,
+            "reason": "component wt_anchor ablated",
+        }
+        logger.info(
+            "wt_anchor ABLATED: the synthetic wild-type training row (y=0.0, variance "
+            "1e-4) is omitted; the surrogate sees only measured labels"
+        )
+    elif requested_mode == "zero":
+        # BYTE-IDENTICAL to the pre-fix default path. Order of appends included.
+        sample_variances_list.append(1e-4)  # WT sequence reference variance
+        wt_var = Variant(notation="WT", mutations=[])
+        wt_features = featurize_variant_on_positions(wt_var, active_positions, wt_sequence, spatial_map=spatial_map)
+        X_train_list.append(wt_features)
+        X_surrogate_train_list.append(_surrogate_features(wt_var, wt_features))
+        y_train_list.append(0.0)
+        y_train_direct_list.append(0.0)
+        train_priors_list.append(0.0)
+        wt_anchor_resolved = {
+            "mode": "zero", "label": 0.0, "variance": 1e-4, "rows": 1,
+            "reason": "default: the literal 0.0 on whatever scale the assay uses",
+        }
+    else:  # "measured"
+        # The repair. The anchor is the wild type's MEASURED label, supplied by the
+        # caller - never derived here, and never invented. The engine has no landscape
+        # registry and must not acquire one; a caller that cannot supply the label gets
+        # a refusal rather than a silent fallback to 0.0, which would be the same defect
+        # wearing the fix's name.
+        if wt_anchor_label is None or not math.isfinite(float(wt_anchor_label)):
+            raise ValueError(
+                "wt_anchor_mode='measured' requires wt_anchor_label, the wild type's "
+                f"measured label on the assay's own scale; got {wt_anchor_label!r}. "
+                "There is no defensible default: the whole defect being repaired is a "
+                "fabricated label."
+            )
+        anchor_label = float(wt_anchor_label)
+        # Variance. `1e-4` asserts the fabricated row is 100x MORE certain than a real
+        # assay reading, which this module's own default for an unreplicated measurement
+        # puts at `1e-2` (see the `else` branch of the evidence loop below). Once the row
+        # carries a real measurement it is entitled to exactly a real measurement's
+        # precision and no more, so the default here is that same `1e-2`. Replicate-
+        # derived variances for the four landscapes that publish them are all BELOW it
+        # (CreiLOV 1.76e-3 over three log-scale replicates, CR9114 7.67e-3 from its
+        # reported SEM), so `1e-2` is the conservative choice: it never over-trusts the
+        # anchor, and it cannot reintroduce the 1e-4 over-confidence by accident.
+        anchor_variance = (WT_ANCHOR_MEASURED_VARIANCE if wt_anchor_variance is None
+                           else max(float(wt_anchor_variance), 1e-4))
+        sample_variances_list.append(anchor_variance)
+        wt_var = Variant(notation="WT", mutations=[])
+        wt_features = featurize_variant_on_positions(wt_var, active_positions, wt_sequence, spatial_map=spatial_map)
+        X_train_list.append(wt_features)
+        X_surrogate_train_list.append(_surrogate_features(wt_var, wt_features))
+        # Residual space, exactly as every measured row below: y_res = y - m(x). The
+        # `zero` path hardcodes a prior of 0.0 for this row, which is only coincidentally
+        # right; here the prior is EVALUATED at the wild type so the anchor sits in the
+        # same space as the data it is fitted beside.
+        anchor_prior = float(prior_mean_fn(wt_var)) if prior_mean_fn else 0.0
+        y_train_list.append(anchor_label - anchor_prior)
+        y_train_direct_list.append(anchor_label)
+        train_priors_list.append(anchor_prior)
+        wt_anchor_resolved = {
+            "mode": "measured", "label": anchor_label, "variance": anchor_variance,
+            "rows": 1, "prior_at_wt": anchor_prior,
+            "reason": "the wild type's measured label, supplied by the caller",
+        }
+        logger.info(
+            "wt_anchor MEASURED: the wild-type training row carries y=%.9g (prior "
+            "%.9g, residual %.9g) at variance %.3g, in place of the literal 0.0 at 1e-4",
+            anchor_label, anchor_prior, anchor_label - anchor_prior, anchor_variance,
+        )
 
     f_best = 0.0
 
@@ -2298,6 +2484,41 @@ def select_next_micro_batch(
                 except Exception as spec_exc:
                     logger.debug("Skipping unparseable speculative sequence: %s", spec_exc)
 
+    # Four parallel lists, one entry per training row, built across three append sites
+    # (the anchor, the evidence loop, the speculative loop). Each of those sites appends
+    # its feature vector BEFORE its variance, inside a broad `except Exception`, so a
+    # single raise between the two leaves the lists a different length.
+    #
+    # The consequence used to be silent and asymmetric: the line below turned an unequal
+    # `sample_variances_list` into `None`, which `DeepKernelLearner.fit` then ALSO drops
+    # silently (`if sample_variance is not None and len(...) == len(Z)`), so the round
+    # quietly became homoscedastic - while `y_train`, misaligned by the same event,
+    # stayed misaligned and the surrogate was fitted on features paired with the wrong
+    # labels. Nothing in the artifacts would say so.
+    #
+    # It is an assertion rather than a repair because a length mismatch here means one of
+    # the three append sites partially failed, and there is no correct way to guess which
+    # row lost its variance. Voiding the round is the honest outcome.
+    # `X_surrogate_train` is checked alongside them even though it is only READ in one-hot
+    # mode: it is APPENDED at all three sites in both modes, so a partial failure
+    # misaligns it too, and a check that skipped it would make the default mode's
+    # guarantee stronger than the arm's for no reason.
+    _row_counts = {
+        "X_train": len(X_train_list),
+        "X_surrogate_train": len(X_surrogate_train_list),
+        "y_train": len(y_train_list),
+        "y_train_direct": len(y_train_direct_list),
+        "train_priors": len(train_priors_list),
+        "sample_variances": len(sample_variances_list),
+    }
+    if len(set(_row_counts.values())) != 1:
+        raise RuntimeError(
+            "training-row misalignment: the per-row lists disagree on length "
+            f"{_row_counts}. One of the three append sites raised between appending a "
+            "feature vector and appending its label/variance. The surrogate must not be "
+            f"fitted on this state (wt_anchor mode was {wt_anchor_resolved['mode']!r})."
+        )
+
     X_train = np.array(X_train_list, dtype=np.float64)
     y_train = np.array(y_train_list, dtype=np.float64)
     # What the GP is fitted on. In the default mode this IS `X_train` - the same object,
@@ -2306,7 +2527,10 @@ def select_next_micro_batch(
         X_train if surrogate_on_engine_features
         else np.array(X_surrogate_train_list, dtype=np.float64)
     )
-    sample_variances_arr = np.array(sample_variances_list, dtype=np.float64) if len(sample_variances_list) == len(X_train) else None
+    # Unconditional. This used to read `... if len(sample_variances_list) == len(X_train)
+    # else None`, which is the silent degradation the assertion above now refuses - the
+    # lengths are equal by then or nothing reaches this line.
+    sample_variances_arr = np.array(sample_variances_list, dtype=np.float64)
 
     # Improvement 1: Fit Assay-Adapted Head on accumulated evidence.
     # Deliberately on the BIOPHYSICAL features whatever the surrogate's feature space:
@@ -2776,6 +3000,7 @@ def select_next_micro_batch(
         predicted_uncertainties=selected_stds,
         pareto_ranks=selected_pareto_ranks,
         max_pool_ei=max_pool_ei,
+        wt_anchor_state=wt_anchor_resolved,
     )
 
 

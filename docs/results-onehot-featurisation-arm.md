@@ -244,6 +244,17 @@ GP**, so the candidate pool is downstream of it. Measured from `generation_cover
 
 ## 4b. A second, independent implementation — do the two agree?
 
+> **DECIDED 2026-11-01, at the integration merge onto `main`.** The two implementations
+> conflicted in the same lines of the wild-type anchor block and could not both be merged
+> without `main` carrying two overlapping switches whose interaction had never been
+> measured. **`biophysical_features` was kept and `physchem_features` was deleted**, on the
+> scope grounds this section lays out: the narrower arm is the one whose three untouched
+> consumers are pinned by tests. The decisive experiment named in §4c — both components,
+> one branch, one seed block — **was never run**, so every figure measured through
+> `physchem_features` is now unreproducible and is marked void in `docs/HANDOFF.md`.
+> Everything below is kept as the record of how that decision was reached. Read it in the
+> past tense; it is not a description of two live options.
+
 `worktree-agent-a83565bcde59a81f3`, commit `bb925c9`, implements the same idea
 independently as the ablation component **`physchem_features`** plus
 `featurize_variant_one_hot`, with `tests/test_onehot_feature_ablation.py`. It also adds
@@ -340,15 +351,24 @@ prior is gone" an attribution to the wrong stage. The decisive experiment is bot
 on one branch at one seed block: if `physchem_features` reproduces +3.67 at 48 seeds where
 `biophysical_features` gives −0.19, the head is the cause.
 
+> **NOT RUN, and now unrunnable as specified.** `physchem_features` was deleted at the
+> 2026-11-01 integration merge, so this experiment cannot be performed without first
+> rebuilding the wide arm. The `AssayAdaptedHead` explanation above therefore stays a
+> **hypothesis**: it was never tested, and nothing on `main` tests it. What is established
+> is the narrow arm's 48-seed −0.19. What the +3.67 was is unknown and must be stated that
+> way. Rebuilding the wide arm is legitimate and would answer it — under its own name and
+> its own pre-registration, not this one's.
+
 Alternatives not excluded: 12 seeds against 48 (but the interval argues against it); a
 different seed block (their ridge is 59.167 against this run's 57.229); and the possibility
 that the effect needs `wt_anchor` ablated too, which this branch cannot do.
 
 **Therefore: every CreiLOV figure in §2 of this document was measured *through* that
-fabricated row.** `wt_anchor` is not in this branch's `ABLATABLE_COMPONENTS` — it is
-`bb925c9`'s component — so the confound is disclosed here and not removed. The right place
-to confirm the ladder at 48 seeds is that branch, which has all three switches; this branch
-can only vary `prior` and `biophysical_features`.
+fabricated row.** `wt_anchor` was not in this branch's `ABLATABLE_COMPONENTS` — it was
+`bb925c9`'s component — so the confound is disclosed here and not removed. **As of the
+2026-11-01 integration merge, `main` carries `wt_anchor` and `biophysical_features`
+together,** so the two-switch ladder can now be run there; what `main` cannot do is vary
+the wide featurisation arm, which no longer exists.
 
 That reframes §2's CreiLOV null rather than overturning it. The null stands and is now
 **explained**: the GP's column basis cannot matter much while the fit is dragged through a

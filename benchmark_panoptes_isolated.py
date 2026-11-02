@@ -139,6 +139,7 @@ import hashlib
 import inspect
 import json
 import logging
+import math
 import os
 import platform
 import random
@@ -277,6 +278,24 @@ class LibrarySpec:
     # Deterministic duplicate handling for ingestion through veritas.datasets.
     duplicate_policy: str = "reject"
     conflict_tolerance: float = 0.0
+    # The WILD TYPE's own measured label, on this assay's scale, and where it came from.
+    #
+    # Needed only by `--wt-anchor-mode measured`, which replaces the engine's fabricated
+    # `y = 0.0` wild-type training row with a real one. `None` means no measured label is
+    # available, and that arm then REFUSES to run on this library rather than inventing
+    # one - the defect being repaired is a fabricated label, so a fallback would be the
+    # same defect under a better name.
+    #
+    # The repo convention drops the parent from every prepared table ("the parent is not
+    # a library member"), so for seven of the nine landscapes this value is NOT in
+    # `dataset` and comes from the pinned upstream workbook's `n_mut == 0` row or from an
+    # in-repo committed constant. `scripts/analysis/wt_label_availability.py` resolves all
+    # nine from three independent sources, and cross-checks each against the bracket the
+    # prepared table's own `DMS_score_bin` column implies
+    # (`DMS_score_bin = 1 iff DMS_score >= wild-type value`, docs/dataset-inventory.md §7)
+    # so no value here rests on a single source. Run it before changing one of these.
+    parent_measured_fitness: Optional[float] = None
+    parent_fitness_source: Optional[str] = None
 
     # -- derived -----------------------------------------------------------------------
     @property
@@ -383,6 +402,18 @@ class LibrarySpec:
 LIBRARIES: Dict[str, LibrarySpec] = {
     "trpb": LibrarySpec(
         key="trpb",
+        # The parent Tm9D8* is NOT in the prepared CSV (159,999 = 20^4 - 1). It measures
+        # 0.408 on a label sd of 0.0599, so it sits at the 99.32nd percentile and is
+        # itself a top-1% HIT - the engine's `y = 0.0` anchor is wrong about it by 6.81
+        # label sd, even though 0.0 is only 0.35 sd from the label distribution's centre.
+        # TrpB is therefore NOT a negative control for the measured-label repair.
+        parent_measured_fitness=0.408073925,
+        parent_fitness_source=(
+            "workers/data/TRPB_TM9D8.json :: veritasbio_provenance."
+            "parent_measured_fitness, written by scripts/download_trpb_benchmark.py from "
+            "the row spelling VFVS at 183/184/227/228; independently bracketed to "
+            "(0.40785355, 0.408084865] by the prepared CSV's own DMS_score_bin column"
+        ),
         label="TrpB Tm9D8* four-site active site (Johnston et al. 2024)",
         dataset=REPO_ROOT / "scripts" / "data" / "TRPB_THEMA_Johnston_2024.csv",
         accession="TRPB_TM9D8",
@@ -403,6 +434,17 @@ LIBRARIES: Dict[str, LibrarySpec] = {
     ),
     "gb1": LibrarySpec(
         key="gb1",
+        # One of only two prepared tables that KEEP a literal `WT` row; `load_landscape`
+        # drops it from the eligible universe (149,361 -> 149,360). Relative fitness is
+        # defined with the parent at 1.0, so this is an exact, not an estimated, value.
+        # 97.56th percentile; 2.53 label sd from the fabricated 0.0.
+        parent_measured_fitness=1.0,
+        parent_fitness_source=(
+            "scripts/data/GB1_STRSG_Wu_2016.csv, the literal `WT` row (the assay defines "
+            "relative fitness with the parent at 1.0); confirmed by the upstream "
+            "GB1_clean.xlsx n_mut == 0 row and bracketed to (0.999707, 1.000034] by "
+            "DMS_score_bin"
+        ),
         label="GB1 domain four-site library (Wu et al. 2016)",
         dataset=REPO_ROOT / "scripts" / "data" / "GB1_STRSG_Wu_2016.csv",
         accession="SPG1_STRSG",
@@ -428,6 +470,18 @@ LIBRARIES: Dict[str, LibrarySpec] = {
     ),
     "her2": LibrarySpec(
         key="her2",
+        # Present as a literal `WT` row at 0.1 - but 0.1 is the detection floor declared
+        # below, and 5,833 of the 11,277 labelled rows sit exactly on it. So the parent's
+        # row is LEFT-CENSORED, not a resolved measurement, and 0.1 is the universe
+        # minimum (0.00th percentile) for the parent of an affinity-matured therapeutic
+        # antibody, which is not credible. Recorded with that caveat; HER2 is in any case
+        # un-gatable on informativeness (docs/HANDOFF.md §1) and is not run here.
+        parent_measured_fitness=0.1,
+        parent_fitness_source=(
+            "scripts/data/HER2_TRASTUZUMAB_Mason_2021.csv, the literal `WT` row - value "
+            "0.1 is the declared detection floor and the universe minimum, shared with "
+            "5,833 other rows, so it is a CENSORED bound and not a point measurement"
+        ),
         label="Trastuzumab CDR-H3 ten-site library, HER2 binding (Mason et al. 2021)",
         dataset=REPO_ROOT / "scripts" / "data" / "HER2_TRASTUZUMAB_Mason_2021.csv",
         accession="HER2_TRASTUZUMAB",
@@ -462,6 +516,15 @@ LIBRARIES: Dict[str, LibrarySpec] = {
     ),
     "cr6261_h1": LibrarySpec(
         key="cr6261_h1",
+        # The germline precursor does not detectably bind, so its -log10(K_D) sits at the
+        # assay floor 7.0 with all three replicates identical. A FLOOR, i.e. a censored
+        # bound, not a resolved affinity - and 7.0 is also the universe minimum.
+        parent_measured_fitness=7.0,
+        parent_fitness_source=(
+            "downloads/combingym/Data/DMS/Clean/bnAbs_CR6261_H1_clean.xlsx n_mut == 0 "
+            "row, h1_mean = 7.0 with repa=repb=repc=7.0; label-vector join against the "
+            "prepared CSV exact (max abs diff 0.0, n=1,886). CENSORED at the assay floor"
+        ),
         label="CR6261 VH 11-site, H1 antigen (Phillips et al. 2021)",
         dataset=REPO_ROOT / "scripts" / "data" / "CR6261_H1_Phillips_2021.csv",
         # No accession: positions come from this spec and the parent sequence from
@@ -494,6 +557,13 @@ LIBRARIES: Dict[str, LibrarySpec] = {
     ),
     "cr6261_h9": LibrarySpec(
         key="cr6261_h9",
+        # As H1: germline at the 7.0 floor, censored, universe minimum.
+        parent_measured_fitness=7.0,
+        parent_fitness_source=(
+            "downloads/combingym/Data/DMS/Clean/bnAbs_CR6261_H9_clean.xlsx n_mut == 0 "
+            "row, h9_mean = 7.0; label-vector join against the prepared CSV exact "
+            "(max abs diff 0.0, n=1,841). CENSORED at the assay floor"
+        ),
         label="CR6261 VH 11-site, H9 antigen (Phillips et al. 2021)",
         dataset=REPO_ROOT / "scripts" / "data" / "CR6261_H9_Phillips_2021.csv",
         # No accession: positions come from this spec and the parent sequence from
@@ -526,6 +596,15 @@ LIBRARIES: Dict[str, LibrarySpec] = {
     ),
     "cr9114_h1": LibrarySpec(
         key="cr9114_h1",
+        # Already a committed constant in this repository: the germline measures 8.4246,
+        # genuinely off the floor (reps 8.179 / 8.521 / 8.574, SEM 0.0875). 19.18th
+        # percentile, 13.18 label sd above the fabricated 0.0. Not a hit.
+        parent_measured_fitness=8.424622015254,
+        parent_fitness_source=(
+            "scripts/data/prepare_cr9114_h1.py :: CR9114_GERMLINE_SCORE, equal to the "
+            "upstream bnAbs_CR9114_H1_clean.xlsx n_mut == 0 row's h1_mean; bracketed to "
+            "(8.424620131, 8.424667328] by the prepared CSV's DMS_score_bin column"
+        ),
         label="CR9114 VH 16-site, H1 antigen (Phillips et al. 2021)",
         dataset=REPO_ROOT / "scripts" / "data" / "CR9114_H1_Phillips_2021.csv",
         # No accession: positions come from this spec and the parent sequence from
@@ -558,6 +637,20 @@ LIBRARIES: Dict[str, LibrarySpec] = {
     ),
     "creilov": LibrarySpec(
         key="creilov",
+        # The landscape the defect is largest on, and the parent IS measured upstream:
+        # log10 fluorescence 4.0232 (three replicates 4.0583 / 4.0641 / 3.9356). The
+        # prepared CSV dropped the row. Real labels occupy 2.793..4.196, so the engine's
+        # `y = 0.0` anchor is wrong about this parent by 4.023 RAW UNITS, which is 16.74
+        # label standard deviations and 2.87x the entire label range (1.403). 87.99th
+        # percentile; not a hit (threshold 4.1223). Units are named on every figure here
+        # because mixing them is what produced the withdrawn "8.3x the label range".
+        parent_measured_fitness=4.023229753000034,
+        parent_fitness_source=(
+            "downloads/combingym/Data/DMS/Clean/CreiLOV_clean.xlsx, the `wt` row's "
+            "mean_log; label-vector join against the prepared CSV exact (max abs diff "
+            "8.9e-16 over 165,427 mutants) and bracketed to "
+            "(4.023229295, 4.023232897] by the prepared CSV's DMS_score_bin column"
+        ),
         label="CreiLOV 15-site (Chen et al. 2023)",
         dataset=REPO_ROOT / "scripts" / "data" / "CREILOV_CHLRE_Chen_2023.csv",
         # No accession: positions come from this spec and the parent sequence from
@@ -590,6 +683,15 @@ LIBRARIES: Dict[str, LibrarySpec] = {
     ),
     "eqfp611_blue": LibrarySpec(
         key="eqfp611_blue",
+        # The parent is mTagBFP2, so on the BLUE endpoint it is near the top: 1.5746,
+        # 99.84th percentile, and above the 1.5245 top-1% threshold - a HIT. 4.25 label
+        # sd above the fabricated 0.0.
+        parent_measured_fitness=1.57462825546906,
+        parent_fitness_source=(
+            "downloads/combingym/Data/DMS/Clean/eqFP611_clean.xlsx, the n_mut == 0 row's "
+            "`blue` column; label-vector join against the prepared CSV exact (max abs "
+            "diff 0.0, n=8,191) and bracketed by DMS_score_bin"
+        ),
         label="eqFP611/mTagBFP2 13-site, blue endpoint (Poelwijk et al. 2019)",
         dataset=REPO_ROOT / "scripts" / "data" / "EQFP611_BLUE_Poelwijk_2019.csv",
         # No accession: positions come from this spec and the parent sequence from
@@ -622,6 +724,17 @@ LIBRARIES: Dict[str, LibrarySpec] = {
     ),
     "eqfp611_red": LibrarySpec(
         key="eqfp611_red",
+        # The same parent on the RED endpoint, where mTagBFP2 is nearly dark: 0.0853,
+        # 23.62nd percentile, only 0.29 label sd from the fabricated 0.0. Together with
+        # HER2 (0.19) this is the one genuine NEGATIVE CONTROL for the measured-label
+        # repair - the two landscapes where `y = 0.0` happens to be nearly true of the
+        # parent, as opposed to merely near the label distribution's centre.
+        parent_measured_fitness=0.0853165629238418,
+        parent_fitness_source=(
+            "downloads/combingym/Data/DMS/Clean/eqFP611_clean.xlsx, the n_mut == 0 row's "
+            "`red` column; label-vector join against the prepared CSV exact (max abs "
+            "diff 8.3e-17, n=8,191) and bracketed by DMS_score_bin"
+        ),
         label="eqFP611/mTagBFP2 13-site, red endpoint (Poelwijk et al. 2019)",
         dataset=REPO_ROOT / "scripts" / "data" / "EQFP611_RED_Poelwijk_2019.csv",
         # No accession: positions come from this spec and the parent sequence from
@@ -3087,6 +3200,7 @@ class PanoptesSelector(Selector):
         exploration_xi: Optional[float] = None,
         candidate_source: str = "generate",
         arm_name: Optional[str] = None,
+        wt_anchor_mode: Optional[str] = None,
     ) -> None:
         super().__init__(seed)
         # Ablation arm. 'none' is the shipped configuration; the others restore one
@@ -3143,6 +3257,59 @@ class PanoptesSelector(Selector):
                 f"ARM, not a corrected version of panoptes_default: every figure in "
                 f"docs/HANDOFF.md was measured on engine_biophysical. The prior, the "
                 f"assay-adapted head and the k-DPP kernel are unchanged."
+            )
+        # How the wild-type anchor row is labelled. Resolved HERE, once, against the
+        # library's own recorded parent label - never deeper in, where a missing label
+        # would surface as a per-round exception half way through a seed.
+        #
+        # The requested mode and the mode that ACTUALLY ran are kept as separate fields.
+        # Rule 2.12 exists because `component_states()` reported the request and the
+        # engine obeyed a module global, so two differently-configured runs recorded the
+        # same state; `wt_anchor_effective` below is written from what the ENGINE returns
+        # on `SelectedBatch.wt_anchor_state`, round by round, and a disagreement with the
+        # request raises rather than being recorded.
+        from workers.math_worker import WT_ANCHOR_MODES as _ANCHOR_MODES
+        requested = wt_anchor_mode or "zero"
+        if "wt_anchor" in self.ablate_components:
+            if wt_anchor_mode not in (None, "zero"):
+                raise BenchmarkError(
+                    "--ablate-components wt_anchor removes the wild-type row that "
+                    f"--wt-anchor-mode {wt_anchor_mode!r} would set. Choose one: the "
+                    "ablated arm and the measured-label arm are different arms."
+                )
+            requested = "ablated"
+        if requested not in _ANCHOR_MODES:
+            raise BenchmarkError(
+                f"unknown --wt-anchor-mode {requested!r}; recognised: "
+                f"{', '.join(sorted(_ANCHOR_MODES))}"
+            )
+        self.wt_anchor_mode = requested
+        self.wt_anchor_label: Optional[float] = None
+        #: Set from the engine's own return value on every round. None until round 1
+        #: completes; a set of size > 1 would mean the mode changed mid-campaign.
+        self.wt_anchor_effective: Set[str] = set()
+        self.wt_anchor_observed: List[Dict[str, Any]] = []
+        if requested == "measured":
+            label = library.parent_measured_fitness
+            if label is None or not math.isfinite(float(label)):
+                raise BenchmarkError(
+                    f"--wt-anchor-mode measured needs library {library.key!r}'s wild-type "
+                    "measured label, and LIBRARIES records none "
+                    f"(parent_measured_fitness={label!r}). Establish it with "
+                    "scripts/analysis/wt_label_availability.py and record it with its "
+                    "provenance; this arm will not invent one, because a fabricated "
+                    "label is the defect it repairs."
+                )
+            self.wt_anchor_label = float(label)
+            self.notes.append(
+                f"WT_ANCHOR=measured label={self.wt_anchor_label:.9g} "
+                f"source={library.parent_fitness_source or 'UNRECORDED'}"
+            )
+        elif requested == "ablated":
+            self.notes.append("WT_ANCHOR=ablated (no wild-type training row)")
+        else:
+            self.notes.append(
+                "WT_ANCHOR=zero (the literal y=0.0 at variance 1e-4, today's default)"
             )
         if arm_name is not None:
             # A named arm that differs from `panoptes_default` only in a selector
@@ -3794,7 +3961,37 @@ class PanoptesSelector(Selector):
             # picks plus harness rejections only, which cannot separate a narrow
             # generator from acquisition re-ranking the same shallow candidates.
             candidate_trace=self.candidate_trace,
+            # Omitted entirely on the default arm, so the flag-absent path reaches the
+            # engine with the identical argument set it had before these parameters
+            # existed. `wt_anchor_mode="zero"` and omission are the same behaviour, but
+            # only omission is provably the same CALL.
+            **({} if self.wt_anchor_mode == "zero" else {
+                "wt_anchor_mode": (None if self.wt_anchor_mode == "ablated"
+                                   else self.wt_anchor_mode),
+                "wt_anchor_label": self.wt_anchor_label,
+            }),
         )
+        # Rule 2.12, enforced rather than recorded: the mode the ENGINE took is read off
+        # its own return value and checked against what this arm asked for. A mismatch
+        # means the run is measuring something other than its label, so it stops here
+        # instead of producing a manifest that misdescribes it.
+        observed = dict(batch.wt_anchor_state or {})
+        observed_mode = observed.get("mode")
+        if observed_mode != self.wt_anchor_mode:
+            raise BenchmarkError(
+                f"wt_anchor mode mismatch in round {round_index}: this arm is configured "
+                f"as {self.wt_anchor_mode!r} but the engine reports {observed_mode!r} "
+                f"(state={observed!r}). The run is not measuring its own label."
+            )
+        if (self.wt_anchor_mode == "measured"
+                and abs(float(observed.get("label", float("nan")))
+                        - float(self.wt_anchor_label or 0.0)) > 1e-12):
+            raise BenchmarkError(
+                f"wt_anchor label mismatch in round {round_index}: configured "
+                f"{self.wt_anchor_label!r}, engine fitted {observed.get('label')!r}"
+            )
+        self.wt_anchor_effective.add(str(observed_mode))
+        self.wt_anchor_observed.append({"round": round_index, **observed})
         self.last_batch_predictions = {}
         proposals: List[str] = []
         for variant, mean in zip(batch.variants, batch.predicted_means or [0.0] * len(batch.variants)):
@@ -3878,6 +4075,11 @@ class RunOutcome:
     notes: List[str] = field(default_factory=list)
     model_calls: int = 0
     token_usage: Optional[int] = None
+    #: The wild-type anchor state the ENGINE reported, per round, read off
+    #: `SelectedBatch.wt_anchor_state` rather than from any flag. Empty for every arm
+    #: that does not call `select_next_micro_batch` (ridge, random, the panel baselines).
+    #: Rule 2.12: a manifest's component state is only as honest as what it reads.
+    wt_anchor_observed: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def run_single(
@@ -4149,6 +4351,9 @@ def run_single(
     outcome.model_calls = selector.model_calls
     outcome.token_usage = selector.token_usage
     outcome.notes.extend(selector.notes)
+    # Engine-sourced, not flag-sourced. `getattr` because only the production selector
+    # calls the engine; a baseline arm legitimately reports nothing.
+    outcome.wt_anchor_observed = list(getattr(selector, "wt_anchor_observed", ()) or ())
     return outcome
 
 
@@ -4353,6 +4558,15 @@ MANIFEST_REQUIRED_PATHS: Tuple[str, ...] = (
     "configuration.components.disabled",
     "configuration.components.states",
     "configuration.components.requested_spec",
+    "configuration.components.wt_anchor",
+    "configuration.components.wt_anchor.mode_requested",
+    "configuration.components.wt_anchor.label",
+    "configuration.components.wt_anchor.variance",
+    "configuration.components.wt_anchor.label_source",
+    "run.wt_anchor_verified",
+    "run.wt_anchor_verified.modes_observed",
+    "run.wt_anchor_verified.agrees_with_configuration",
+    "run.wt_anchor_verified.vacuous",
     "configuration.model.surrogate",
     # Required, because the feature space the surrogate is fitted on is a first-class arm
     # distinction: the same engine on one-hot and on the biophysical encoding are two
@@ -5151,6 +5365,90 @@ def _per_arm_results(
     return per_arm
 
 
+def _wt_anchor_configuration(
+    args: argparse.Namespace, universe: "Universe"
+) -> Dict[str, Any]:
+    """The wild-type anchor row's configuration, as REQUESTED, for the manifest.
+
+    Three mutually exclusive modes; see `workers.math_worker.WT_ANCHOR_MODES`. This is
+    the request, and it is deliberately labelled as such: `run.wt_anchor_verified` holds
+    what the engine reported actually doing, read off its own return value. Both are
+    recorded because rule 2.12's failure was a manifest that recorded one and trusted it
+    to mean the other.
+    """
+    from workers.math_worker import WT_ANCHOR_MEASURED_VARIANCE
+
+    disabled = set(resolve_ablate_components(args))
+    requested = getattr(args, "wt_anchor_mode", None) or "zero"
+    if "wt_anchor" in disabled:
+        requested = "ablated"
+    library = universe.library
+    block: Dict[str, Any] = {
+        "mode_requested": requested,
+        "default_mode": "zero",
+        "label": None,
+        "variance": None,
+        "label_source": None,
+        "library_parent_measured_fitness": library.parent_measured_fitness,
+        "library_parent_fitness_source": library.parent_fitness_source,
+    }
+    if requested == "zero":
+        block["label"] = 0.0
+        block["variance"] = 1e-4
+        block["label_source"] = (
+            "FABRICATED: the literal 0.0, on whatever scale the assay uses, at a "
+            "variance asserting 100x the precision of a real unreplicated reading"
+        )
+    elif requested == "measured":
+        block["label"] = (None if library.parent_measured_fitness is None
+                          else float(library.parent_measured_fitness))
+        block["variance"] = WT_ANCHOR_MEASURED_VARIANCE
+        block["label_source"] = library.parent_fitness_source
+    else:
+        block["label_source"] = "no wild-type training row is added"
+    return block
+
+
+def _wt_anchor_verification(
+    configuration_mode: str, outcomes: Sequence["RunOutcome"]
+) -> Dict[str, Any]:
+    """What the ENGINE reported doing with the anchor row, aggregated over every round.
+
+    This is the rule-2.12 record: `component_states()` read `--ablate-components` and
+    therefore reported `dpp` and `dkl` as enabled in every run where module globals had
+    them off, and the configuration fingerprint - whose documented job is telling two
+    configurations apart - was blind to the change. The cure is a record sourced from the
+    code path, so this reads `SelectedBatch.wt_anchor_state`, which is written by the
+    branch of `select_next_micro_batch` that actually executed.
+
+    `vacuous` is reported explicitly and is TRUE when no arm in this run called the
+    engine at all (a ridge-plus-random run, say). A check that cannot fail must say so;
+    see rule 2.10, where a threshold check passed the exact defect it was written for.
+    """
+    rounds = [r for o in outcomes for r in o.wt_anchor_observed]
+    modes = sorted({str(r.get("mode")) for r in rounds})
+    labels = sorted({
+        (None if r.get("label") is None else round(float(r["label"]), 12))
+        for r in rounds
+    }, key=lambda v: (v is not None, v))
+    engine_arms = sorted({o.method for o in outcomes if o.wt_anchor_observed})
+    return {
+        "source": "workers.math_worker.SelectedBatch.wt_anchor_state, per round",
+        "configuration_mode_requested": configuration_mode,
+        "modes_observed": modes,
+        "labels_observed": labels,
+        "rounds_observed": len(rounds),
+        "arms_calling_the_engine": engine_arms,
+        "vacuous": not rounds,
+        "agrees_with_configuration": bool(rounds) and modes == [configuration_mode],
+        "note": (
+            "VACUOUS: no arm in this run called select_next_micro_batch, so this check "
+            "proves nothing about the engine." if not rounds else
+            "Verified against the executed code path, not against the CLI flag."
+        ),
+    }
+
+
 def build_manifest(
     *,
     run_id: str,
@@ -5225,6 +5523,12 @@ def build_manifest(
             "disabled": [name for name in ABLATABLE_COMPONENTS if not states[name]],
             "states": states,
             "requested_spec": getattr(args, "ablate_components", ""),
+            # The wild-type anchor row's configuration, inside `configuration` so it
+            # reaches the fingerprint: a zero-anchor and a measured-anchor run of one
+            # library at one budget must not hash identically, which is exactly the
+            # failure rule 2.12 records for dpp/dkl. `mode` here is what was REQUESTED;
+            # `run.wt_anchor_verified` below carries what the engine reported doing.
+            "wt_anchor": _wt_anchor_configuration(args, universe),
             "prior_ablation_arm": str(getattr(args, "ablation", "none")),
             "prior_spread_override": getattr(args, "prior_spread", None),
             # The qualification bar, in full. A run whose manifest does not state its
@@ -5544,6 +5848,13 @@ def build_manifest(
             # Runs that completed but did not search. Kept as structured records, not only
             # as a warning string, so a reader or a script can exclude them from a
             # comparison without re-deriving them from round_metrics.csv.
+            # Read from the engine's own return value, round by round - NOT from the CLI
+            # flag that `configuration.components.wt_anchor.mode_requested` records. If
+            # the two ever disagree the run has already raised; this is the artifact that
+            # lets a reader confirm it without re-running anything.
+            "wt_anchor_verified": _wt_anchor_verification(
+                str(configuration["components"]["wt_anchor"]["mode_requested"]), outcomes
+            ),
             "degenerate_runs": degenerate_runs,
             "degenerate_run_budget_fraction": DEGENERATE_RUN_BUDGET_FRACTION,
             "degenerate_proposal_rounds": degenerate_rounds,
@@ -6406,6 +6717,7 @@ def build_selector_factories(
                                  acquisition_mode=args.acquisition_mode,
                                  exploration_xi=args.exploration_xi,
                                  candidate_source=args.production_candidate_source,
+                                 wt_anchor_mode=getattr(args, "wt_anchor_mode", None),
                                  qualify_threshold=q, probe_after_qualify=pr,
                                  arm_name=an)
             )
@@ -6920,6 +7232,19 @@ examples:
             f"as a paired arm beside the default rather than in place of it, add "
             f"'{PANOPTES_ONEHOT_SURROGATE}' to --methods instead - both then share one "
             "starting sample per seed and can be paired within seed."
+        ),
+    )
+    parser.add_argument(
+        "--wt-anchor-mode", choices=("zero", "measured"), default=None,
+        help=(
+            "How the production arm labels its wild-type training row. 'zero' (and "
+            "omitting the flag) is today's default and the defect: the literal y=0.0 at "
+            "variance 1e-4 whatever the assay's scale, which on CreiLOV sits 16.74 label "
+            "standard deviations from the parent's real measurement. 'measured' anchors "
+            "at the library's recorded parent label at a real measurement's variance "
+            "(1e-2) and REFUSES to start if that label is not recorded. The third "
+            "behaviour - no anchor row at all - is '--ablate-components wt_anchor', and "
+            "combining it with this flag is rejected. See docs/prereg-wt-anchor-fix.md."
         ),
     )
     parser.add_argument(

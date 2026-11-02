@@ -112,11 +112,29 @@ advance and so cannot be re-narrated now.
 > | --- | --- | --- | --- | --- |
 > | default | 9.083 | — | — | — |
 > | `prior` | 13.333 | +4.250 | 2.30 | 11/1/0 |
-> | `physchem_features` | 9.250 | +0.167 | 0.19 (**p=0.74**) | 4/5/3 |
-> | `prior,physchem_features` | 17.000 | +7.917 | 3.75 | 10/0/2 |
+> | ~~`physchem_features`~~ | ~~9.250~~ | ~~+0.167~~ | ~~0.19 (p=0.74)~~ | ~~4/5/3~~ |
+> | ~~`prior,physchem_features`~~ | ~~17.000~~ | ~~+7.917~~ | ~~3.75~~ | ~~10/0/2~~ |
 > | **`wt_anchor`** | **38.833** | **+29.750** | **12.17** | **12/0/0** |
 > | `wt_anchor,prior` | 43.083 | +34.000 | 12.44 | 12/0/0 |
-> | **`wt_anchor,prior,physchem_features`** | **50.167** | **+41.083** | **19.48** | **12/0/0** |
+> | ~~`wt_anchor,prior,physchem_features`~~ | ~~50.167~~ | ~~+41.083~~ | ~~19.48~~ | ~~12/0/0~~ |
+>
+> > **The three `physchem_features` rows are VOID as of the integration merge,
+> > 2026-11-01, and are struck rather than deleted so they cannot be re-quoted from an
+> > older copy of this file.** The component no longer exists on `main`. It was a parallel
+> > implementation of the one-hot surrogate arm, developed on this branch at the same time
+> > as `biophysical_features` was developed on another, and when the two met at the merge
+> > only one could survive. `physchem_features` bound a single featuriser for all five
+> > call sites, so it also moved the structural prior, the k-DPP similarity kernel and
+> > `AssayAdaptedHead` onto one-hot — a wider arm than its name says, and one that cannot
+> > distinguish "one-hot helps the GP" from "one-hot helps the assay-adapted head".
+> > `biophysical_features` moves the GP's fit and predict inputs only, and
+> > `tests/test_surrogate_feature_arm.py` pins the three consumers it must not touch.
+> >
+> > **These numbers are not transferable to `biophysical_features`.** It is a different,
+> > narrower intervention; the arms are not the same arm under two names. Nothing here is
+> > evidence about it, in either direction. The wider arm is a legitimate experiment and
+> > may be rebuilt, but it needs its own name, its own pre-registration and its own seed
+> > block.
 >
 > **CONFIRMED AT 48 PAIRED SEEDS, 2026-11-01.** Branch `confirm-wt-anchor-48`
 > (`90472c2`), merged cleanly against `main` `b5f090b`. Pre-registration `5474ea5`
@@ -135,9 +153,11 @@ advance and so cannot be re-narrated now.
 >
 > The measured +31.771 lands inside the pre-registered [+24, +36], and the bootstrap's
 > **lower** bound (+30.00) clears the dominance threshold of +25.04 fixed in advance. It
-> accounts for **63.2%** of the −50.292 deficit. Three-way stack
-> `wt_anchor,prior,physchem_features` = **+42.583** (t=+46.24, 48/0/0). **The engine still
-> loses CreiLOV**: −18.521 ablated, −7.708 with all three.
+> accounts for **63.2%** of the −50.292 deficit. ~~Three-way stack
+> `wt_anchor,prior,physchem_features` = +42.583 (t=+46.24, 48/0/0)~~ — **VOID, see the
+> note above: that stack's third component is gone from `main` and the figure cannot be
+> reproduced.** **The engine still loses CreiLOV**: −18.521 with `wt_anchor` ablated. The
+> −7.708 figure belonged to the three-way stack and is void with it.
 >
 > **The negative controls HELD. Every quotable TrpB and GB1 figure survives.** One
 > precision that must travel with them: *"not separable" is not "identical"* — TrpB's
@@ -513,18 +533,34 @@ corrected qualification bar accepts the identical variant set, so none of the
 > protocol could not see. **GB1's +4.31 is confounded** (the GFlowNet reward scores
 > through this GP, and deep-enrichment moved 0.690 → 0.801); TrpB's is not pool-explained.
 >
-> **The two one-hot implementations DISAGREE, and the disagreement is named.** At 48
+> **The two one-hot implementations DISAGREED, and the disagreement was RESOLVED BY
+> DELETION, not by measurement — which is the honest description of what happened.** At 48
 > seeds with the prior ablated, the one-hot effect is **−0.19, CI [−1.04, +0.65],
 > p=0.547** — an interval that **excludes** the +3.67 measured at 12 seeds on branch
-> `worktree-agent-a83565bcde59a81f3`, so it is not an underpowered estimate of the same
-> quantity. Prime suspect is **scope**: `physchem_features` there moves all five
+> `worktree-agent-a83565bcde59a81f3`, so it was not an underpowered estimate of the same
+> quantity. Prime suspect was **scope**: `physchem_features` there moved all five
 > featurisation call sites including `AssayAdaptedHead`, while `biophysical_features` here
 > moves only the GP's fit/predict inputs. With the prior ablated `zero_shot_scores` is
 > zero and `AssayAdaptedHead` becomes the dominant non-GP term, so **"one-hot is worth
-> +7.08 once the prior is gone" may be an `AssayAdaptedHead` effect attributed to the
-> GP.** The decisive experiment is both components on one branch and one seed block. The
-> prior ablation itself **replicates**: 6.94 → 10.94, +4.00 at 48 seeds against +4.25 at
-> 12.
+> +7.08 once the prior is gone" may have been an `AssayAdaptedHead` effect attributed to
+> the GP.**
+>
+> > **Resolved 2026-11-01 at the integration merge, by a scope decision rather than the
+> > decisive experiment.** The two components collided in the same lines of the wild-type
+> > anchor block and could not both be merged without `main` carrying two overlapping
+> > switches whose interaction nobody had measured. `biophysical_features` was kept
+> > because it is the narrower arm and its three untouched consumers are pinned by tests;
+> > `physchem_features` was deleted. **The decisive experiment named above — both
+> > components, one branch, one seed block — was therefore never run, and the +3.67 is now
+> > unreproducible on `main`.** What survives is the 48-seed measurement of the narrow
+> > arm: **−0.19, CI excluding +3.67**. What is *not* established is why the wide arm read
+> > +3.67; the `AssayAdaptedHead` explanation remains a hypothesis and must be labelled
+> > one. If that matters later, rebuild the wide arm under its own name and pre-register
+> > it. Do not report this as "the one-hot question is settled" — the question that was
+> > settled is which implementation `main` carries.
+>
+> The prior ablation itself **replicates**: 6.94 → 10.94, +4.00 at 48 seeds against +4.25
+> at 12.
 >
 > **`test_regret_stopping` is FLAKY on the completely unchanged default** — 6 identical
 > pytest invocations at one commit gave **5 passed, 1 failed**, and a fresh-process probe
@@ -631,11 +667,14 @@ corrected qualification bar accepts the identical variant set, so none of the
 > suspect is the scope difference — their arm also moves `AssayAdaptedHead`, which becomes the
 > dominant non-GP ranking term once the prior is zero. So on CreiLOV the GP's column basis is
 > ruled out in *both* regimes, and that is also why the arm works on TrpB and GB1, the only
-> two landscapes where the fabricated row is nearly true (0.35 and 0.20 SDs). There are **two independent
-> implementations** of this arm, `biophysical_features` here and `physchem_features` on
-> `bb925c9`; they agree on the CreiLOV answer and differ in scope (this one moves the GP's
-> columns only; that one also moves `AssayAdaptedHead`, the linear readout where the
-> biophysical features win on GB1). §4b of the results doc compares them line by line.
+> two landscapes where the fabricated row is nearly true (0.35 and 0.20 SDs). There were **two
+> independent implementations** of this arm, `biophysical_features` here and
+> `physchem_features` on `bb925c9`; they agreed on the CreiLOV answer and differed in scope
+> (this one moves the GP's columns only; that one also moved `AssayAdaptedHead`, the linear
+> readout where the biophysical features win on GB1). §4b of the results doc compares them
+> line by line. **`physchem_features` was deleted at the integration merge on 2026-11-01**
+> and only `biophysical_features` exists on `main`; the comparison in §4b is now a record of
+> a resolved decision, not of two live options.
 
 ### What is void — do not quote these
 
@@ -645,6 +684,13 @@ corrected qualification bar accepts the identical variant set, so none of the
   baselines' 125.
 - All HER2 frontier results. The reported 3.062 against reliability's 3.125 is void.
 - Every `alde` row on the seven landscapes where ALDE cannot function.
+- **Every figure measured through the `physchem_features` ablation component**, which was
+  deleted at the integration merge on 2026-11-01 and cannot be reproduced on `main`: the
+  three struck rows in §2 (9.250 / 17.000 / 50.167 and their deltas), the three-way stack's
+  +42.583 and its −7.708, and the +3.67 one-hot/prior interaction at 12 seeds. They are
+  struck in place rather than removed so an older copy of this file cannot be used to
+  re-quote them. They are **not** evidence about `biophysical_features`, which is a
+  narrower arm measured separately at −0.19.
 
 ### What has never been done
 
