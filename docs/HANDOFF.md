@@ -5,9 +5,45 @@ rules in **§2 are load-bearing**: each one is written down because violating it
 already produced a wrong result in this project, in one case silently inverting a
 published conclusion.
 
-Suite: **674 passing, 2 skipped, 0 failures**. Everything described here is committed and
-pushed to `origin/main`; run `git log --oneline -40` for the day's work rather than
-trusting a commit hash quoted in prose, which goes stale the moment this file is edited.
+Suite: **852 passing, 352 subtests, 0 failures** (674 when this file was first written).
+Everything described here is committed and pushed to `origin/main`; run
+`git log --oneline -40` for the day's work rather than trusting a commit hash quoted in
+prose, which goes stale the moment this file is edited.
+
+> ### INTEGRATION MERGE COMPLETE, 2026-11-01. Read this before starting anything.
+>
+> **Every agent branch is now merged into `main` except one, and that one is a decision,
+> not a backlog item.** Eighteen branches merged; `worktree-agent-afcf493e565226e51`
+> (`e250c8f`) is deliberately held back — see the box at the end of §1.
+>
+> What landed, in merge order: the seven-arm baseline panel and the one-hot surrogate arm;
+> the falsified spatial-veto campaign plus `veritas.paths.corpus_dir`; the sealed
+> `sacas9_sg5` reservation; **`wt_anchor` and `wt_anchor_mode="measured"`**; the 48-seed
+> confirmation; and **`panoptes_random_from_ballot`**. `ALL_METHODS` now holds fourteen
+> keys; `DEFAULT_METHODS` is unchanged and verified unchanged.
+>
+> **Two components were DELETED rather than merged, and three implementations were
+> discarded as duplicates.** Three separate branches had independently made the fabricated
+> wild-type row ablatable, and two had independently implemented the one-hot surrogate
+> switch. Where two implementations of one idea collided, exactly one survived and the loss
+> is recorded where the figures were, not only in a commit message: `physchem_features` is
+> gone (see the struck rows in §2 and `What is void`), and with it the +3.67 interaction
+> and the three-way `50.167` ladder row. **The decisive experiment that would have settled
+> which implementation was right was never run.** Do not report the one-hot question as
+> settled; what got settled is which code `main` carries.
+>
+> **The default path is verified inert, and this is the evidence, not an assurance.** The
+> flag-absent default of `select_next_micro_batch` was run at `b1a7bbd` (pre-merge) and
+> `e7feca8` (post-merge) on identical inputs. All **9 behavioural keys agree exactly** —
+> the fitted `X` shape and checksum, the fitted `y` (which still carries the `0.0` anchor
+> row), the chosen notations, the EIs, the predicted means and uncertainties, the Pareto
+> ranks and `max_pool_ei`. The only differences are two ADDITIVE fields that did not exist
+> before and report the defaults: `wt_anchor_state.mode == "zero"` and
+> `selection_rule_applied == "top_n_quality"`. A campaign-level identity check over
+> `round_metrics.csv` is still the right instrument for the benchmark-side plumbing and has
+> **not** been run.
+>
+> Safety tag `pre-integration-45ad91f` exists if any of this needs backing out.
 
 > **Newer than this file:** [`HANDOFF-2026-10-31-reachability.md`](HANDOFF-2026-10-31-reachability.md)
 > and its analysis [`day1-reachability.md`](day1-reachability.md). The candidate generator
@@ -697,6 +733,38 @@ corrected qualification bar accepts the identical variant set, so none of the
 **Zero independent protein validation.** HER2 is development data — the
 pool-restricted code path exists *because* that library required it. The
 cross-protein study has not run.
+
+**The campaign-level default-path identity check.** The selector-level one has run and is
+clean (nine behavioural keys exact; see the box at the top of this file). The
+`round_metrics.csv` comparison over a real paired seed block — which is what covers the
+benchmark-side plumbing the merge rewrote — has not.
+
+### THE ONE BRANCH DELIBERATELY NOT MERGED, and why it is a decision rather than a task
+
+`worktree-agent-afcf493e565226e51` (`e250c8f`, "the GP surrogate was never on one-hot, and
+the manifest said it was"). **Most of it is already on `main`** — the manifest-provenance
+fix, the single-encoder unification (`_one_hot_matrix` now delegates to
+`one_hot_encode_genotypes`) and the surrogate feature switch itself all arrived via a
+sibling branch. What is left unique to it is **one line**: `surrogate_features: str =
+"one_hot"`, which **flips the engine's default**, plus the orchestrator pin that exists
+only because of the flip.
+
+So the open question is not whether to merge a branch. It is whether the engine's GP
+should be fitted on one-hot columns BY DEFAULT. The evidence points both ways and the two
+kinds of evidence measure different things:
+
+| | finding |
+| --- | --- |
+| **For the flip** (offline, predictive) | Paired over 10 shared splits with the model held fixed, the biophysical encoding loses to one-hot on **8 of 9 landscapes, \|t\|>2 on 7**, and is never significantly better. Mechanism is identified, not guessed: `featurize_variant_on_positions` appends a 6-D global block that is a deterministic linear function of the per-site block plus the mutation count — it adds no information — yet carries **~50% of total feature variance** on all nine. `build_gp_model` uses an **isotropic** Matérn, so half the GP's notion of "nearby sequence" is "similar mutation burden". |
+| **Against the flip** (in-campaign, the endpoint) | At 48 paired seeds the narrow arm is a **null on CreiLOV**: −0.19, CI [−1.04, +0.65], p=0.547. On TrpB its raw +7.71 collapses to **+0.10 at d≥2 (t=+0.29)** — the extra hits are **redundant**, the same variants found again. And flipping the default makes **every number this project can currently quote non-comparable**, by the branch's own statement. |
+
+The honest reading: one-hot is the better *predictor* and the biophysical global block is a
+real defect, but better ranking has not been shown to convert into more **distinct** hits,
+which is the endpoint every claim here is stated on. Recommendation on file: **do not flip
+the default** — keep it as the opt-in `biophysical_features` arm it already is on `main`,
+which costs nothing and voids nothing — and if the flip is ever wanted, pre-register it on
+the d≥2 endpoint rather than on held-out rho, because rho is the metric that already
+disagrees with the campaign.
 
 ---
 
